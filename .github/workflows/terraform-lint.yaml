@@ -1,0 +1,44 @@
+name: Lint (Terraform)
+
+on:
+  workflow_call:
+
+# TODO: Add job for `terraform validate`
+jobs:
+  terraform-fmt:
+      name: terraform fmt
+      runs-on: ubuntu-latest
+
+      steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+
+      - name: terraform fmt
+        run: terraform fmt -no-color -check -diff -recursive
+  tfsec:
+      name: tfsec
+      runs-on: ubuntu-latest
+
+      permissions:
+        actions: read
+        contents: read
+        pull-requests: write
+        security-events: write
+
+      steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: tfsec
+        uses: aquasecurity/tfsec-pr-commenter-action@v1.2.0
+        with:
+          github_token: ${{ github.token }}
+          tfsec_formats: sarif
+
+      - name: Upload SARIF file
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: results.sarif.json

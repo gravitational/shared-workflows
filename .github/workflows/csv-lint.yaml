@@ -1,0 +1,42 @@
+name: Lint (CSV)
+
+on:
+  workflow_call:
+
+jobs:
+  csvlint:
+      name: csvlint
+      runs-on: ubuntu-latest
+
+      steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 2
+
+      - name: Get changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v19
+        with:
+          files: |
+            **/*.csv
+
+      - name: Setup Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: '^1.17.9'
+
+      - name: Checkout csvlint
+        uses: actions/checkout@v3
+        with:
+          repository: Clever/csvlint
+          path: csvlint
+
+      - name: csvlint
+        if: steps.changed-files.outputs.any_changed == 'true'
+        run: |
+          cd csvlint
+          for file in ${{ steps.changed-files.outputs.all_changed_files }}; do
+            echo "Validating ${file}"
+            go run cmd/csvlint/main.go ../${file}
+          done
