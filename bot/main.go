@@ -23,10 +23,10 @@ import (
 	"log"
 	"time"
 
-	"github.com/gravitational/teleport/.github/workflows/robot/internal/bot"
-	"github.com/gravitational/teleport/.github/workflows/robot/internal/env"
-	"github.com/gravitational/teleport/.github/workflows/robot/internal/github"
-	"github.com/gravitational/teleport/.github/workflows/robot/internal/review"
+	"github.com/gravitational/shared-workflows/bot/internal/bot"
+	"github.com/gravitational/shared-workflows/bot/internal/env"
+	"github.com/gravitational/shared-workflows/bot/internal/github"
+	"github.com/gravitational/shared-workflows/bot/internal/review"
 
 	"github.com/gravitational/trace"
 )

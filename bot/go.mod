@@ -1,4 +1,4 @@
-module github.com/gravitational/teleport/.github/workflows/robot
+module github.com/gravitational/shared-workflows/bot
 
 go 1.18
 

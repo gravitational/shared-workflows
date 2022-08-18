@@ -22,7 +22,7 @@ import (
 	"log"
 	"strings"
 
-	"github.com/gravitational/teleport/.github/workflows/robot/internal/review"
+	"github.com/gravitational/shared-workflows/bot/internal/review"
 	"github.com/gravitational/trace"
 )
 

@@ -22,7 +22,7 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/gravitational/teleport/.github/workflows/robot/internal/github"
+	"github.com/gravitational/shared-workflows/bot/internal/github"
 
 	"github.com/gravitational/trace"
 )
