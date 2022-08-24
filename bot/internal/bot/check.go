@@ -80,12 +80,14 @@ func (b *Bot) Check(ctx context.Context) error {
 			b.c.Environment.Number,
 		)
 		if !contains(comments, comment) {
-			b.c.GitHub.CreateComment(ctx,
+			if err := b.c.GitHub.CreateComment(ctx,
 				b.c.Environment.Organization,
 				b.c.Environment.Repository,
 				b.c.Environment.Number,
 				comment,
-			)
+			); err != nil {
+				return trace.Wrap(err)
+			}
 		}
 	}
 
