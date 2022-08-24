@@ -24,6 +24,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gravitational/shared-workflows/bot/internal/env"
 	"github.com/gravitational/shared-workflows/bot/internal/github"
 
 	"github.com/gravitational/trace"
@@ -131,8 +132,9 @@ func (r *Assignments) IsInternal(author string) bool {
 }
 
 // Get will return a list of code reviewers for a given author.
-func (r *Assignments) Get(author string, docs bool, code bool, files []github.PullRequestFile) []string {
+func (r *Assignments) Get(e env.Environment, docs bool, code bool, files []github.PullRequestFile) []string {
 	var reviewers []string
+	author := e.Author
 
 	// TODO: consider existing review assignments here
 	// https://github.com/gravitational/teleport/issues/10420
@@ -141,10 +143,10 @@ func (r *Assignments) Get(author string, docs bool, code bool, files []github.Pu
 	case docs && code:
 		log.Printf("Assign: Found docs and code changes.")
 		reviewers = append(reviewers, r.getDocsReviewers(author)...)
-		reviewers = append(reviewers, r.getCodeReviewers(author, files)...)
+		reviewers = append(reviewers, r.getCodeReviewers(e, files)...)
 	case !docs && code:
 		log.Printf("Assign: Found code changes.")
-		reviewers = append(reviewers, r.getCodeReviewers(author, files)...)
+		reviewers = append(reviewers, r.getCodeReviewers(e, files)...)
 	case docs && !code:
 		log.Printf("Assign: Found docs changes.")
 		reviewers = append(reviewers, r.getDocsReviewers(author)...)
@@ -168,9 +170,9 @@ func (r *Assignments) getDocsReviewers(author string) []string {
 	return reviewers
 }
 
-func (r *Assignments) getCodeReviewers(author string, files []github.PullRequestFile) []string {
+func (r *Assignments) getCodeReviewers(e env.Environment, files []github.PullRequestFile) []string {
 	// Obtain full sets of reviewers.
-	setA, setB := r.getCodeReviewerSets(author)
+	setA, setB := r.getCodeReviewerSets(e)
 
 	// Sort the sets to get predictable order. It doesn't matter in real use
 	// because selection is randomized but helps in tests.
@@ -237,9 +239,11 @@ func (r *Assignments) getAdminReviewers(author string) []string {
 	return reviewers
 }
 
-func (r *Assignments) getCodeReviewerSets(author string) ([]string, []string) {
+func (r *Assignments) getCodeReviewerSets(e env.Environment) ([]string, []string) {
 	// Internal non-Core contributors get assigned from the admin reviewer set.
 	// Admins will review, triage, and re-assign.
+	author := e.Author
+
 	v, ok := r.c.CodeReviewers[author]
 	if !ok || v.Team == "Internal" {
 		reviewers := r.getAdminReviewers(author)
@@ -247,10 +251,21 @@ func (r *Assignments) getCodeReviewerSets(author string) ([]string, []string) {
 		return reviewers[:n], reviewers[n:]
 	}
 
-	// Cloud gets reviewers assigned from Core.
 	team := v.Team
-	if v.Team == "Cloud" {
-		team = "Core"
+	repository := e.Repository
+
+	// Cloud gets reviewers assigned from Core in Teleport
+	if repository == teleportRepo {
+		if v.Team == "Cloud" {
+			team = "Core"
+		}
+	}
+
+	// Core gets reviewers assigned from Cloud in Cloud
+	if repository == cloudRepo {
+		if v.Team == "Core" {
+			team = "Cloud"
+		}
 	}
 
 	return getReviewerSets(author, team, r.c.CodeReviewers, r.c.CodeReviewersOmit)
@@ -271,7 +286,9 @@ func (r *Assignments) CheckExternal(author string, reviews []github.Review) erro
 // CheckInternal will verify if required reviewers have approved. Checks if
 // docs and if each set of code reviews have approved. Admin approvals bypass
 // all checks.
-func (r *Assignments) CheckInternal(author string, reviews []github.Review, docs bool, code bool, large bool) error {
+func (r *Assignments) CheckInternal(e env.Environment, reviews []github.Review, docs bool, code bool, large bool) error {
+	author := e.Author
+
 	log.Printf("Check: Found internal author %v.", author)
 
 	// Skip checks if admins have approved.
@@ -292,12 +309,12 @@ func (r *Assignments) CheckInternal(author string, reviews []github.Review, docs
 		if err := r.checkDocsReviews(author, reviews); err != nil {
 			return trace.Wrap(err)
 		}
-		if err := r.checkCodeReviews(author, reviews); err != nil {
+		if err := r.checkCodeReviews(e, reviews); err != nil {
 			return trace.Wrap(err)
 		}
 	case !docs && code:
 		log.Printf("Check: Found code changes.")
-		if err := r.checkCodeReviews(author, reviews); err != nil {
+		if err := r.checkCodeReviews(e, reviews); err != nil {
 			return trace.Wrap(err)
 		}
 	case docs && !code:
@@ -326,9 +343,10 @@ func (r *Assignments) checkDocsReviews(author string, reviews []github.Review) e
 	return trace.BadParameter("requires at least one approval from %v", reviewers)
 }
 
-func (r *Assignments) checkCodeReviews(author string, reviews []github.Review) error {
+func (r *Assignments) checkCodeReviews(e env.Environment, reviews []github.Review) error {
 	// External code reviews should never hit this path, if they do, fail and
 	// return an error.
+	author := e.Author
 	v, ok := r.c.CodeReviewers[author]
 	if !ok {
 		v, ok = r.c.DocsReviewers[author]
@@ -337,11 +355,23 @@ func (r *Assignments) checkCodeReviews(author string, reviews []github.Review) e
 		}
 	}
 
-	// Cloud and Internal get reviews from the Core team. Other teams do own
+	// Internal get reviews from the Core team. Other teams do own
 	// internal reviews.
 	team := v.Team
-	if team == "Internal" || team == "Cloud" {
+	if team == "Internal" {
+		if e.Repository == teleportRepo {
+			team = "Core"
+		} else if e.Repository == cloudRepo {
+			team = "Cloud"
+		}
+	}
+
+	// Cloud gets reviewers assigned from Core in Teleport
+	// Core gets reviewers assigned from Cloud in Cloud
+	if team == "Cloud" && e.Repository == teleportRepo {
 		team = "Core"
+	} else if team == "Core" && e.Repository == cloudRepo {
+		team = "Cloud"
 	}
 
 	setA, setB := getReviewerSets(author, team, r.c.CodeReviewers, r.c.CodeReviewersOmit)
@@ -426,4 +456,8 @@ const (
 	Approved = "APPROVED"
 	// ChangesRequested is a code review where the reviewer has requested changes.
 	ChangesRequested = "CHANGES_REQUESTED"
+
+	// Repo slugs
+	cloudRepo    = "cloud"
+	teleportRepo = "teleport"
 )

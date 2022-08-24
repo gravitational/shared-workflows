@@ -20,6 +20,7 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/gravitational/shared-workflows/bot/internal/env"
 	"github.com/gravitational/shared-workflows/bot/internal/github"
 	"github.com/stretchr/testify/require"
 )
@@ -131,6 +132,7 @@ func TestGetCodeReviewers(t *testing.T) {
 		desc        string
 		assignments *Assignments
 		author      string
+		repository  string
 		setA        []string
 		setB        []string
 	}{
@@ -153,9 +155,10 @@ func TestGetCodeReviewers(t *testing.T) {
 					},
 				},
 			},
-			author: "1",
-			setA:   []string{"2"},
-			setB:   []string{"3", "4"},
+			repository: "teleport",
+			author:     "1",
+			setA:       []string{"2"},
+			setB:       []string{"3", "4"},
 		},
 		{
 			desc: "skip-omitted-user",
@@ -179,9 +182,10 @@ func TestGetCodeReviewers(t *testing.T) {
 					},
 				},
 			},
-			author: "5",
-			setA:   []string{"1", "2"},
-			setB:   []string{"4"},
+			repository: "teleport",
+			author:     "5",
+			setA:       []string{"1", "2"},
+			setB:       []string{"4"},
 		},
 		{
 			desc: "internal-gets-defaults",
@@ -203,9 +207,10 @@ func TestGetCodeReviewers(t *testing.T) {
 					},
 				},
 			},
-			author: "5",
-			setA:   []string{"1"},
-			setB:   []string{"2"},
+			repository: "teleport",
+			author:     "5",
+			setA:       []string{"1"},
+			setB:       []string{"2"},
 		},
 		{
 			desc: "cloud-gets-core-reviewers",
@@ -236,9 +241,10 @@ func TestGetCodeReviewers(t *testing.T) {
 					},
 				},
 			},
-			author: "8",
-			setA:   []string{"1", "2", "3"},
-			setB:   []string{"4", "5"},
+			repository: "teleport",
+			author:     "8",
+			setA:       []string{"1", "2", "3"},
+			setB:       []string{"4", "5"},
 		},
 		{
 			desc: "normal",
@@ -267,9 +273,10 @@ func TestGetCodeReviewers(t *testing.T) {
 					},
 				},
 			},
-			author: "4",
-			setA:   []string{"1", "2", "3"},
-			setB:   []string{"5"},
+			repository: "teleport",
+			author:     "4",
+			setA:       []string{"1", "2", "3"},
+			setB:       []string{"5"},
 		},
 		{
 			desc: "docs reviewers submitting code changes are treated as internal authors",
@@ -285,9 +292,10 @@ func TestGetCodeReviewers(t *testing.T) {
 					Admins: []string{"code-1", "code-2"},
 				},
 			},
-			author: "docs-1",
-			setA:   []string{"code-1"},
-			setB:   []string{"code-2"},
+			repository: "teleport",
+			author:     "docs-1",
+			setA:       []string{"code-1"},
+			setB:       []string{"code-2"},
 		},
 	}
 	for _, test := range tests {
@@ -295,10 +303,15 @@ func TestGetCodeReviewers(t *testing.T) {
 			// We just want to validate that this test gets to the point where it's
 			// checking for approvals. This means the bot did not reject the PR
 			// as an external author.
-			require.ErrorContains(t, test.assignments.checkCodeReviews(test.author, nil),
+
+			e := env.Environment{
+				Repository: test.repository,
+				Author:     test.author,
+			}
+			require.ErrorContains(t, test.assignments.checkCodeReviews(e, nil),
 				"at least one approval required from each set")
 
-			setA, setB := test.assignments.getCodeReviewerSets(test.author)
+			setA, setB := test.assignments.getCodeReviewerSets(e)
 			require.ElementsMatch(t, setA, test.setA)
 			require.ElementsMatch(t, setB, test.setB)
 		})
@@ -483,6 +496,7 @@ func TestCheckInternal(t *testing.T) {
 				"10": {Team: "Cloud", Owner: false},
 				"11": {Team: "Cloud", Owner: false},
 				"12": {Team: "Cloud", Owner: false},
+				"13": {Team: "Cloud", Owner: true},
 			},
 			// Docs.
 			DocsReviewers: map[string]Reviewer{
@@ -498,31 +512,35 @@ func TestCheckInternal(t *testing.T) {
 		},
 	}
 	tests := []struct {
-		desc    string
-		author  string
-		reviews []github.Review
-		docs    bool
-		code    bool
-		large   bool
-		result  bool
+		desc       string
+		author     string
+		repository string
+		reviews    []github.Review
+		docs       bool
+		code       bool
+		large      bool
+		result     bool
 	}{
 		{
-			desc:    "no-reviews-fail",
-			author:  "4",
-			reviews: []github.Review{},
-			result:  false,
+			desc:       "no-reviews-fail",
+			repository: "teleport",
+			author:     "4",
+			reviews:    []github.Review{},
+			result:     false,
 		},
 		{
-			desc:    "docs-only-no-reviews-fail",
-			author:  "4",
-			reviews: []github.Review{},
-			docs:    true,
-			code:    false,
-			result:  false,
+			desc:       "docs-only-no-reviews-fail",
+			repository: "teleport",
+			author:     "4",
+			reviews:    []github.Review{},
+			docs:       true,
+			code:       false,
+			result:     false,
 		},
 		{
-			desc:   "docs-only-non-docs-approval-fail",
-			author: "4",
+			desc:       "docs-only-non-docs-approval-fail",
+			repository: "teleport",
+			author:     "4",
 			reviews: []github.Review{
 				{Author: "3", State: Approved},
 			},
@@ -531,8 +549,9 @@ func TestCheckInternal(t *testing.T) {
 			result: false,
 		},
 		{
-			desc:   "docs-only-docs-approval-success",
-			author: "4",
+			desc:       "docs-only-docs-approval-success",
+			repository: "teleport",
+			author:     "4",
 			reviews: []github.Review{
 				{Author: "7", State: Approved},
 			},
@@ -541,16 +560,18 @@ func TestCheckInternal(t *testing.T) {
 			result: true,
 		},
 		{
-			desc:    "code-only-no-reviews-fail",
-			author:  "4",
-			reviews: []github.Review{},
-			docs:    false,
-			code:    true,
-			result:  false,
+			desc:       "code-only-no-reviews-fail",
+			repository: "teleport",
+			author:     "4",
+			reviews:    []github.Review{},
+			docs:       false,
+			code:       true,
+			result:     false,
 		},
 		{
-			desc:   "code-only-one-approval-fail",
-			author: "4",
+			desc:       "code-only-one-approval-fail",
+			repository: "teleport",
+			author:     "4",
 			reviews: []github.Review{
 				{Author: "3", State: Approved},
 			},
@@ -559,8 +580,9 @@ func TestCheckInternal(t *testing.T) {
 			result: false,
 		},
 		{
-			desc:   "code-only-two-approval-setb-fail",
-			author: "4",
+			desc:       "code-only-two-approval-setb-fail",
+			repository: "teleport",
+			author:     "4",
 			reviews: []github.Review{
 				{Author: "5", State: Approved},
 				{Author: "6", State: Approved},
@@ -570,8 +592,9 @@ func TestCheckInternal(t *testing.T) {
 			result: false,
 		},
 		{
-			desc:   "code-only-one-changes-fail",
-			author: "4",
+			desc:       "code-only-one-changes-fail",
+			repository: "teleport",
+			author:     "4",
 			reviews: []github.Review{
 				{Author: "3", State: Approved},
 				{Author: "4", State: ChangesRequested},
@@ -581,8 +604,9 @@ func TestCheckInternal(t *testing.T) {
 			result: false,
 		},
 		{
-			desc:   "code-only-large-pr-requires-admin-fails",
-			author: "6",
+			desc:       "code-only-large-pr-requires-admin-fails",
+			repository: "teleport",
+			author:     "6",
 			reviews: []github.Review{
 				{Author: "3", State: Approved},
 				{Author: "4", State: Approved},
@@ -593,8 +617,9 @@ func TestCheckInternal(t *testing.T) {
 			result: false,
 		},
 		{
-			desc:   "code-only-large-pr-has-admin-succeeds",
-			author: "6",
+			desc:       "code-only-large-pr-has-admin-succeeds",
+			repository: "teleport",
+			author:     "6",
 			reviews: []github.Review{
 				{Author: "1", State: Approved},
 				{Author: "3", State: Approved},
@@ -606,8 +631,9 @@ func TestCheckInternal(t *testing.T) {
 			result: true,
 		},
 		{
-			desc:   "code-only-two-approvals-success",
-			author: "6",
+			desc:       "code-only-two-approvals-success",
+			repository: "teleport",
+			author:     "6",
 			reviews: []github.Review{
 				{Author: "3", State: Approved},
 				{Author: "4", State: Approved},
@@ -617,8 +643,9 @@ func TestCheckInternal(t *testing.T) {
 			result: true,
 		},
 		{
-			desc:   "docs-and-code-only-docs-approval-fail",
-			author: "6",
+			desc:       "docs-and-code-only-docs-approval-fail",
+			repository: "teleport",
+			author:     "6",
 			reviews: []github.Review{
 				{Author: "7", State: Approved},
 			},
@@ -627,8 +654,9 @@ func TestCheckInternal(t *testing.T) {
 			result: false,
 		},
 		{
-			desc:   "docs-and-code-only-code-approval-fail",
-			author: "6",
+			desc:       "docs-and-code-only-code-approval-fail",
+			repository: "teleport",
+			author:     "6",
 			reviews: []github.Review{
 				{Author: "3", State: Approved},
 				{Author: "4", State: Approved},
@@ -638,8 +666,9 @@ func TestCheckInternal(t *testing.T) {
 			result: false,
 		},
 		{
-			desc:   "docs-and-code-docs-and-code-approval-success",
-			author: "6",
+			desc:       "docs-and-code-docs-and-code-approval-success",
+			repository: "teleport",
+			author:     "6",
 			reviews: []github.Review{
 				{Author: "3", State: Approved},
 				{Author: "4", State: Approved},
@@ -650,8 +679,9 @@ func TestCheckInternal(t *testing.T) {
 			result: true,
 		},
 		{
-			desc:   "code-only-internal-on-approval-failure",
-			author: "8",
+			desc:       "code-only-internal-on-approval-failure",
+			repository: "teleport",
+			author:     "8",
 			reviews: []github.Review{
 				{Author: "3", State: Approved},
 			},
@@ -660,8 +690,9 @@ func TestCheckInternal(t *testing.T) {
 			result: false,
 		},
 		{
-			desc:   "code-only-internal-code-approval-success",
-			author: "8",
+			desc:       "code-only-internal-code-approval-success",
+			repository: "teleport",
+			author:     "8",
 			reviews: []github.Review{
 				{Author: "3", State: Approved},
 				{Author: "4", State: Approved},
@@ -671,8 +702,9 @@ func TestCheckInternal(t *testing.T) {
 			result: true,
 		},
 		{
-			desc:   "code-only-internal-two-code-owner-approval-success",
-			author: "4",
+			desc:       "code-only-internal-two-code-owner-approval-success",
+			repository: "teleport",
+			author:     "4",
 			reviews: []github.Review{
 				{Author: "3", State: Approved},
 				{Author: "9", State: Approved},
@@ -682,8 +714,9 @@ func TestCheckInternal(t *testing.T) {
 			result: true,
 		},
 		{
-			desc:   "code-only-changes-requested-after-approval-failure",
-			author: "4",
+			desc:       "code-only-changes-requested-after-approval-failure",
+			repository: "teleport",
+			author:     "4",
 			reviews: []github.Review{
 				{Author: "3", State: Approved},
 				{Author: "9", State: Approved},
@@ -694,8 +727,9 @@ func TestCheckInternal(t *testing.T) {
 			result: false,
 		},
 		{
-			desc:   "code-only-comment-after-approval-success",
-			author: "4",
+			desc:       "code-only-comment-after-approval-success",
+			repository: "teleport",
+			author:     "4",
 			reviews: []github.Review{
 				{Author: "3", State: Approved},
 				{Author: "9", State: Approved},
@@ -706,8 +740,9 @@ func TestCheckInternal(t *testing.T) {
 			result: true,
 		},
 		{
-			desc:   "cloud-with-self-approval-failure",
-			author: "10",
+			desc:       "cloud-with-self-approval-failure",
+			repository: "teleport",
+			author:     "10",
 			reviews: []github.Review{
 				{Author: "11", State: Approved},
 				{Author: "12", State: Approved},
@@ -717,8 +752,9 @@ func TestCheckInternal(t *testing.T) {
 			result: false,
 		},
 		{
-			desc:   "cloud-with-core-approval-success",
-			author: "10",
+			desc:       "cloud-with-core-approval-success",
+			repository: "teleport",
+			author:     "10",
 			reviews: []github.Review{
 				{Author: "3", State: Approved},
 				{Author: "9", State: Approved},
@@ -727,10 +763,50 @@ func TestCheckInternal(t *testing.T) {
 			code:   true,
 			result: true,
 		},
+		{
+			desc:       "cloud-only-two-approvals-success",
+			repository: "cloud",
+			author:     "10",
+			reviews: []github.Review{
+				{Author: "12", State: Approved},
+				{Author: "13", State: Approved},
+			},
+			docs:   false,
+			code:   true,
+			result: true,
+		},
+		{
+			desc:       "core-with-cloud-approval-success",
+			repository: "cloud",
+			author:     "1",
+			reviews: []github.Review{
+				{Author: "12", State: Approved},
+				{Author: "13", State: Approved},
+			},
+			docs:   false,
+			code:   true,
+			result: true,
+		},
+		{
+			desc:       "cloud-code-only-internal-code-approval-success",
+			repository: "cloud",
+			author:     "8",
+			reviews: []github.Review{
+				{Author: "12", State: Approved},
+				{Author: "13", State: Approved},
+			},
+			docs:   false,
+			code:   true,
+			result: true,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
-			err := r.CheckInternal(test.author, test.reviews, test.docs, test.code, test.large)
+			e := env.Environment{
+				Repository: test.repository,
+				Author:     test.author,
+			}
+			err := r.CheckInternal(e, test.reviews, test.docs, test.code, test.large)
 			if test.result {
 				require.NoError(t, err)
 			} else {
@@ -841,7 +917,10 @@ func TestPreferredReviewers(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.description, func(t *testing.T) {
-			actual := assignments.getCodeReviewers(test.author, test.files)
+			e := env.Environment{
+				Author: test.author,
+			}
+			actual := assignments.getCodeReviewers(e, test.files)
 			sort.Strings(actual)
 			require.ElementsMatch(t, test.expected, actual)
 		})
