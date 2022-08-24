@@ -127,7 +127,6 @@ func classifyChanges(files []github.PullRequestFile) (docs bool, code bool, err 
 		} else {
 			code = true
 		}
-
 	}
 	return docs, code, nil
 }
