@@ -1,0 +1,40 @@
+# https://go.dev/blog/vuln
+# https://vuln.go.dev/
+# https://go.dev/security/vuln/
+name: govulncheck
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_call:
+
+jobs:
+  govulncheck:
+      name: govulncheck
+      runs-on: ubuntu-latest
+
+      permissions:
+        contents: read
+
+      steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          path: repo
+          submodules: true
+
+      - name: Setup Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: '1.18'
+          check-latest: true
+
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          while IFS= read -r -d '' _mod; do
+            pushd "$(dirname "$_mod")" || exit 1
+            govulncheck ./...
+            popd || exit 1
+          done <<< "$(find . -type f -name 'go.mod' -print0)"
