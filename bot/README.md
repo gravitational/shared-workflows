@@ -16,13 +16,13 @@ jobs:
       # Checkout master branch of Teleport repository. This is to prevent an
       # attacker from submitting their own review assignment logic.
       - name: Checkout master branch
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           repository: gravitational/shared-workflows
           path: .github/workflows/robot
           ref: main
       - name: Installing the latest version of Go.
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v3
       - name: Checking reviewers
         run: cd .github/workflows/robot && go run main.go -workflow=check -token="${{
           secrets.GITHUB_TOKEN }}"
