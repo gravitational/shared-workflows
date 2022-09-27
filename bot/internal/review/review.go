@@ -242,33 +242,31 @@ func (r *Assignments) getAdminReviewers(author string) []string {
 func (r *Assignments) getCodeReviewerSets(e env.Environment) ([]string, []string) {
 	// Internal non-Core contributors get assigned from the admin reviewer set.
 	// Admins will review, triage, and re-assign.
-	author := e.Author
 
-	v, ok := r.c.CodeReviewers[author]
+	v, ok := r.c.CodeReviewers[e.Author]
 	if !ok || v.Team == "Internal" {
-		reviewers := r.getAdminReviewers(author)
+		reviewers := r.getAdminReviewers(e.Author)
 		n := len(reviewers) / 2
 		return reviewers[:n], reviewers[n:]
 	}
 
 	team := v.Team
-	repository := e.Repository
 
 	// Cloud gets reviewers assigned from Core in Teleport
-	if repository == teleportRepo {
+	if e.Repository == teleportRepo {
 		if v.Team == "Cloud" {
 			team = "Core"
 		}
 	}
 
 	// Core gets reviewers assigned from Cloud in Cloud
-	if repository == cloudRepo {
+	if e.Repository == cloudRepo {
 		if v.Team == "Core" {
 			team = "Cloud"
 		}
 	}
 
-	return getReviewerSets(author, team, r.c.CodeReviewers, r.c.CodeReviewersOmit)
+	return getReviewerSets(e.Author, team, r.c.CodeReviewers, r.c.CodeReviewersOmit)
 }
 
 // CheckExternal requires two admins have approved.
@@ -287,18 +285,16 @@ func (r *Assignments) CheckExternal(author string, reviews []github.Review) erro
 // docs and if each set of code reviews have approved. Admin approvals bypass
 // all checks.
 func (r *Assignments) CheckInternal(e env.Environment, reviews []github.Review, docs bool, code bool, large bool) error {
-	author := e.Author
-
-	log.Printf("Check: Found internal author %v.", author)
+	log.Printf("Check: Found internal author %v.", e.Author)
 
 	// Skip checks if admins have approved.
-	if check(r.getAdminReviewers(author), reviews) {
+	if check(r.getAdminReviewers(e.Author), reviews) {
 		return nil
 	}
 
 	if code && large {
 		log.Println("Check: Detected large PR, requiring admin approval")
-		if !check(r.getAdminReviewers(author), reviews) {
+		if !check(r.getAdminReviewers(e.Author), reviews) {
 			return trace.BadParameter("this PR is large and requires admin approval to merge")
 		}
 	}
@@ -306,7 +302,7 @@ func (r *Assignments) CheckInternal(e env.Environment, reviews []github.Review, 
 	switch {
 	case docs && code:
 		log.Printf("Check: Found docs and code changes.")
-		if err := r.checkDocsReviews(author, reviews); err != nil {
+		if err := r.checkDocsReviews(e.Author, reviews); err != nil {
 			return trace.Wrap(err)
 		}
 		if err := r.checkCodeReviews(e, reviews); err != nil {
@@ -319,13 +315,13 @@ func (r *Assignments) CheckInternal(e env.Environment, reviews []github.Review, 
 		}
 	case docs && !code:
 		log.Printf("Check: Found docs changes.")
-		if err := r.checkDocsReviews(author, reviews); err != nil {
+		if err := r.checkDocsReviews(e.Author, reviews); err != nil {
 			return trace.Wrap(err)
 		}
 	// Strange state, an empty commit? Check admins.
 	case !docs && !code:
 		log.Printf("Check: Found no docs or code changes.")
-		if checkN(r.getAdminReviewers(author), reviews) < 2 {
+		if checkN(r.getAdminReviewers(e.Author), reviews) < 2 {
 			return trace.BadParameter("requires two admin approvals")
 		}
 	}
