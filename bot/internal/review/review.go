@@ -252,8 +252,7 @@ func (r *Assignments) getCodeReviewerSets(e *env.Environment) ([]string, []strin
 
 	team := v.Team
 
-	// Cloud gets reviewers assigned from Core in Teleport
-	// Core gets reviewers assigned from Cloud in Cloud
+	// Teams do their own internal reviews
 	switch e.Repository {
 	case teleportRepo:
 		team = coreTeam
