@@ -18,6 +18,7 @@ package review
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"math/rand"
 	"sort"
@@ -244,7 +245,7 @@ func (r *Assignments) getCodeReviewerSets(e env.Environment) ([]string, []string
 	// Admins will review, triage, and re-assign.
 
 	v, ok := r.c.CodeReviewers[e.Author]
-	if !ok || v.Team == "Internal" {
+	if !ok || v.Team == internalTeam {
 		reviewers := r.getAdminReviewers(e.Author)
 		n := len(reviewers) / 2
 		return reviewers[:n], reviewers[n:]
@@ -253,17 +254,12 @@ func (r *Assignments) getCodeReviewerSets(e env.Environment) ([]string, []string
 	team := v.Team
 
 	// Cloud gets reviewers assigned from Core in Teleport
-	if e.Repository == teleportRepo {
-		if v.Team == "Cloud" {
-			team = "Core"
-		}
-	}
-
 	// Core gets reviewers assigned from Cloud in Cloud
-	if e.Repository == cloudRepo {
-		if v.Team == "Core" {
-			team = "Cloud"
-		}
+	switch e.Repository {
+	case teleportRepo:
+		team = coreTeam
+	case cloudRepo:
+		team = cloudTeam
 	}
 
 	return getReviewerSets(e.Author, team, r.c.CodeReviewers, r.c.CodeReviewersOmit)
@@ -313,6 +309,7 @@ func (r *Assignments) CheckInternal(e env.Environment, reviews []github.Review, 
 		if err := r.checkCodeReviews(e, reviews); err != nil {
 			return trace.Wrap(err)
 		}
+
 	case docs && !code:
 		log.Printf("Check: Found docs changes.")
 		if err := r.checkDocsReviews(e.Author, reviews); err != nil {
@@ -351,23 +348,16 @@ func (r *Assignments) checkCodeReviews(e env.Environment, reviews []github.Revie
 		}
 	}
 
-	// Internal get reviews from the Core team. Other teams do own
-	// internal reviews.
 	team := v.Team
-	if team == "Internal" {
-		if e.Repository == teleportRepo {
-			team = "Core"
-		} else if e.Repository == cloudRepo {
-			team = "Cloud"
-		}
-	}
 
-	// Cloud gets reviewers assigned from Core in Teleport
-	// Core gets reviewers assigned from Cloud in Cloud
-	if team == "Cloud" && e.Repository == teleportRepo {
-		team = "Core"
-	} else if team == "Core" && e.Repository == cloudRepo {
-		team = "Cloud"
+	// Teams do their own internal reviews
+	switch e.Repository {
+	case teleportRepo:
+		team = coreTeam
+	case cloudRepo:
+		team = cloudTeam
+	default:
+		return trace.Wrap(fmt.Errorf("unsupported repository: %s", e.Repository))
 	}
 
 	setA, setB := getReviewerSets(author, team, r.c.CodeReviewers, r.c.CodeReviewersOmit)
@@ -456,4 +446,8 @@ const (
 	// Repo slugs
 	cloudRepo    = "cloud"
 	teleportRepo = "teleport"
+
+	coreTeam     = "Core"
+	cloudTeam    = "Cloud"
+	internalTeam = "Internal"
 )
