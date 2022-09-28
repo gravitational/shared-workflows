@@ -135,7 +135,6 @@ func (r *Assignments) IsInternal(author string) bool {
 // Get will return a list of code reviewers for a given author.
 func (r *Assignments) Get(e *env.Environment, docs bool, code bool, files []github.PullRequestFile) []string {
 	var reviewers []string
-	author := e.Author
 
 	// TODO: consider existing review assignments here
 	// https://github.com/gravitational/teleport/issues/10420
@@ -143,18 +142,18 @@ func (r *Assignments) Get(e *env.Environment, docs bool, code bool, files []gith
 	switch {
 	case docs && code:
 		log.Printf("Assign: Found docs and code changes.")
-		reviewers = append(reviewers, r.getDocsReviewers(author)...)
+		reviewers = append(reviewers, r.getDocsReviewers(e.Author)...)
 		reviewers = append(reviewers, r.getCodeReviewers(e, files)...)
 	case !docs && code:
 		log.Printf("Assign: Found code changes.")
 		reviewers = append(reviewers, r.getCodeReviewers(e, files)...)
 	case docs && !code:
 		log.Printf("Assign: Found docs changes.")
-		reviewers = append(reviewers, r.getDocsReviewers(author)...)
+		reviewers = append(reviewers, r.getDocsReviewers(e.Author)...)
 	// Strange state, an empty commit? Return admin reviewers.
 	case !docs && !code:
 		log.Printf("Assign: Found no docs or code changes.")
-		reviewers = append(reviewers, r.getAdminReviewers(author)...)
+		reviewers = append(reviewers, r.getAdminReviewers(e.Author)...)
 	}
 
 	return reviewers
