@@ -304,7 +304,7 @@ func TestGetCodeReviewers(t *testing.T) {
 			// checking for approvals. This means the bot did not reject the PR
 			// as an external author.
 
-			e := env.Environment{
+			e := &env.Environment{
 				Repository: test.repository,
 				Author:     test.author,
 			}
@@ -802,7 +802,7 @@ func TestCheckInternal(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
-			e := env.Environment{
+			e := &env.Environment{
 				Repository: test.repository,
 				Author:     test.author,
 			}
@@ -917,7 +917,7 @@ func TestPreferredReviewers(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.description, func(t *testing.T) {
-			e := env.Environment{
+			e := &env.Environment{
 				Author: test.author,
 			}
 			actual := assignments.getCodeReviewers(e, test.files)

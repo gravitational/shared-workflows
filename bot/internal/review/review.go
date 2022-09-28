@@ -133,7 +133,7 @@ func (r *Assignments) IsInternal(author string) bool {
 }
 
 // Get will return a list of code reviewers for a given author.
-func (r *Assignments) Get(e env.Environment, docs bool, code bool, files []github.PullRequestFile) []string {
+func (r *Assignments) Get(e *env.Environment, docs bool, code bool, files []github.PullRequestFile) []string {
 	var reviewers []string
 	author := e.Author
 
@@ -171,7 +171,7 @@ func (r *Assignments) getDocsReviewers(author string) []string {
 	return reviewers
 }
 
-func (r *Assignments) getCodeReviewers(e env.Environment, files []github.PullRequestFile) []string {
+func (r *Assignments) getCodeReviewers(e *env.Environment, files []github.PullRequestFile) []string {
 	// Obtain full sets of reviewers.
 	setA, setB := r.getCodeReviewerSets(e)
 
@@ -240,7 +240,7 @@ func (r *Assignments) getAdminReviewers(author string) []string {
 	return reviewers
 }
 
-func (r *Assignments) getCodeReviewerSets(e env.Environment) ([]string, []string) {
+func (r *Assignments) getCodeReviewerSets(e *env.Environment) ([]string, []string) {
 	// Internal non-Core contributors get assigned from the admin reviewer set.
 	// Admins will review, triage, and re-assign.
 
@@ -280,7 +280,7 @@ func (r *Assignments) CheckExternal(author string, reviews []github.Review) erro
 // CheckInternal will verify if required reviewers have approved. Checks if
 // docs and if each set of code reviews have approved. Admin approvals bypass
 // all checks.
-func (r *Assignments) CheckInternal(e env.Environment, reviews []github.Review, docs bool, code bool, large bool) error {
+func (r *Assignments) CheckInternal(e *env.Environment, reviews []github.Review, docs bool, code bool, large bool) error {
 	log.Printf("Check: Found internal author %v.", e.Author)
 
 	// Skip checks if admins have approved.
@@ -336,7 +336,7 @@ func (r *Assignments) checkDocsReviews(author string, reviews []github.Review) e
 	return trace.BadParameter("requires at least one approval from %v", reviewers)
 }
 
-func (r *Assignments) checkCodeReviews(e env.Environment, reviews []github.Review) error {
+func (r *Assignments) checkCodeReviews(e *env.Environment, reviews []github.Review) error {
 	// External code reviews should never hit this path, if they do, fail and
 	// return an error.
 	author := e.Author

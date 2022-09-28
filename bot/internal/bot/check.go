@@ -91,7 +91,7 @@ func (b *Bot) Check(ctx context.Context) error {
 		}
 	}
 
-	if err := b.c.Review.CheckInternal(*b.c.Environment, reviews, docs, code, large); err != nil {
+	if err := b.c.Review.CheckInternal(b.c.Environment, reviews, docs, code, large); err != nil {
 		return trace.Wrap(err)
 	}
 
