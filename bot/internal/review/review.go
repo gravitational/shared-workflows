@@ -136,6 +136,12 @@ func (r *Assignments) IsInternal(author string) bool {
 func (r *Assignments) Get(e *env.Environment, docs bool, code bool, files []github.PullRequestFile) []string {
 	var reviewers []string
 
+	// Never consider cloud repo for doc reviews.
+	if e.Repository == cloudRepo {
+		log.Printf("Assign: Found cloud changes.")
+		return r.getCodeReviewers(e, files)
+	}
+
 	// TODO: consider existing review assignments here
 	// https://github.com/gravitational/teleport/issues/10420
 
