@@ -63,7 +63,7 @@ func (b *Bot) Check(ctx context.Context) error {
 		return trace.Wrap(err)
 	}
 
-	docs, code, err := classifyChanges(files)
+	docs, code, err := classifyChanges(b.c.Environment, files)
 	if err != nil {
 		return trace.Wrap(err)
 	}

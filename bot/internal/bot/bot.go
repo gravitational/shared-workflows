@@ -120,13 +120,18 @@ func New(c *Config) (*Bot, error) {
 
 // classifyChanges determines whether the PR contains code changes
 // and/or docs changes.
-func classifyChanges(files []github.PullRequestFile) (docs bool, code bool, err error) {
-	for _, file := range files {
-		if strings.HasPrefix(file.Name, "docs/") {
-			docs = true
-		} else {
-			code = true
+func classifyChanges(e *env.Environment, files []github.PullRequestFile) (docs bool, code bool, err error) {
+	switch e.Repository {
+	case env.TeleportRepo:
+		for _, file := range files {
+			if strings.HasPrefix(file.Name, "docs/") {
+				docs = true
+			} else {
+				code = true
+			}
 		}
+	default:
+		code = true
 	}
 	return docs, code, nil
 }
