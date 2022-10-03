@@ -244,7 +244,7 @@ func (r *Assignments) getCodeReviewerSets(e *env.Environment) ([]string, []strin
 	// Admins will review, triage, and re-assign.
 
 	v, ok := r.c.CodeReviewers[e.Author]
-	if !ok || v.Team == internalTeam {
+	if !ok || v.Team == env.InternalTeam {
 		reviewers := r.getAdminReviewers(e.Author)
 		n := len(reviewers) / 2
 		return reviewers[:n], reviewers[n:]
@@ -254,10 +254,10 @@ func (r *Assignments) getCodeReviewerSets(e *env.Environment) ([]string, []strin
 
 	// Teams do their own internal reviews
 	switch e.Repository {
-	case teleportRepo:
-		team = coreTeam
-	case cloudRepo:
-		team = cloudTeam
+	case env.TeleportRepo:
+		team = env.CoreTeam
+	case env.CloudRepo:
+		team = env.CloudTeam
 	}
 
 	return getReviewerSets(e.Author, team, r.c.CodeReviewers, r.c.CodeReviewersOmit)
@@ -350,10 +350,10 @@ func (r *Assignments) checkCodeReviews(e *env.Environment, reviews []github.Revi
 
 	// Teams do their own internal reviews
 	switch e.Repository {
-	case teleportRepo:
-		team = coreTeam
-	case cloudRepo:
-		team = cloudTeam
+	case env.TeleportRepo:
+		team = env.CoreTeam
+	case env.CloudRepo:
+		team = env.CloudTeam
 	default:
 		return trace.Wrap(fmt.Errorf("unsupported repository: %s", e.Repository))
 	}
@@ -440,12 +440,4 @@ const (
 	Approved = "APPROVED"
 	// ChangesRequested is a code review where the reviewer has requested changes.
 	ChangesRequested = "CHANGES_REQUESTED"
-
-	// Repo slugs
-	cloudRepo    = "cloud"
-	teleportRepo = "teleport"
-
-	coreTeam     = "Core"
-	cloudTeam    = "Cloud"
-	internalTeam = "Internal"
 )

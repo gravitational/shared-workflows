@@ -20,6 +20,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/gravitational/shared-workflows/bot/internal/env"
 	"github.com/gravitational/shared-workflows/bot/internal/github"
 
 	"github.com/stretchr/testify/require"
@@ -67,9 +68,10 @@ func TestClassifyChanges(t *testing.T) {
 			code:  false,
 		},
 	}
+	e := &env.Environment{Repository: env.TeleportRepo}
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
-			docs, code, err := classifyChanges(test.files)
+			docs, code, err := classifyChanges(e, test.files)
 			require.NoError(t, err)
 			require.Equal(t, docs, test.docs)
 			require.Equal(t, code, test.code)

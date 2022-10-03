@@ -25,6 +25,17 @@ import (
 	"github.com/gravitational/trace"
 )
 
+const (
+	// Repo slugs
+	CloudRepo    = "cloud"
+	TeleportRepo = "teleport"
+
+	// Teams
+	CoreTeam     = "Core"
+	CloudTeam    = "Cloud"
+	InternalTeam = "Internal"
+)
+
 // Environment is the execution environment the workflow is running in.
 type Environment struct {
 	// Organization is the GitHub organization (gravitational).
