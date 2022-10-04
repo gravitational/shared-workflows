@@ -33,7 +33,7 @@ import (
 
 // Dependabot is the GitHub's bot author/account name.
 // See https://github.com/dependabot.
-const Dependabot = "dependabot"
+const Dependabot = "dependabot[bot]"
 
 // Reviewer is a code reviewer.
 type Reviewer struct {
@@ -274,7 +274,7 @@ func (r *Assignments) getCodeReviewerSets(e *env.Environment) ([]string, []strin
 
 // CheckExternal requires two admins have approved.
 func (r *Assignments) CheckExternal(author string, reviews []github.Review) error {
-	log.Printf("Check: Found external author %v.", author)
+	log.Printf("Check: Found external author %q.", author)
 
 	reviewers := r.getAdminReviewers(author)
 
