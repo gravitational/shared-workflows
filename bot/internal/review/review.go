@@ -151,14 +151,14 @@ func (r *Assignments) Get(e *env.Environment, docs bool, code bool, files []gith
 	switch {
 	case docs && code:
 		log.Printf("Assign: Found docs and code changes.")
-		reviewers = append(reviewers, r.getDocsReviewers(e.Author)...)
+		reviewers = append(reviewers, r.getDocsReviewers(e)...)
 		reviewers = append(reviewers, r.getCodeReviewers(e, files)...)
 	case !docs && code:
 		log.Printf("Assign: Found code changes.")
 		reviewers = append(reviewers, r.getCodeReviewers(e, files)...)
 	case docs && !code:
 		log.Printf("Assign: Found docs changes.")
-		reviewers = append(reviewers, r.getDocsReviewers(e.Author)...)
+		reviewers = append(reviewers, r.getDocsReviewers(e)...)
 	// Strange state, an empty commit? Return admin reviewers.
 	case !docs && !code:
 		log.Printf("Assign: Found no docs or code changes.")
@@ -168,13 +168,13 @@ func (r *Assignments) Get(e *env.Environment, docs bool, code bool, files []gith
 	return reviewers
 }
 
-func (r *Assignments) getDocsReviewers(author string) []string {
-	setA, setB := getReviewerSets(author, "Core", r.c.DocsReviewers, r.c.DocsReviewersOmit)
+func (r *Assignments) getDocsReviewers(e *env.Environment) []string {
+	setA, setB := getReviewerSets(e, "Core", r.c.DocsReviewers, r.c.DocsReviewersOmit)
 	reviewers := append(setA, setB...)
 
 	// If no docs reviewers were assigned, assign admin reviews.
 	if len(reviewers) == 0 {
-		return r.getAdminReviewers(author)
+		return r.getAdminReviewers(e.Author)
 	}
 	return reviewers
 }
@@ -269,7 +269,7 @@ func (r *Assignments) getCodeReviewerSets(e *env.Environment) ([]string, []strin
 		team = env.CloudTeam
 	}
 
-	return getReviewerSets(e.Author, team, r.c.CodeReviewers, r.c.CodeReviewersOmit)
+	return getReviewerSets(e, team, r.c.CodeReviewers, r.c.CodeReviewersOmit)
 }
 
 // CheckExternal requires two admins have approved.
@@ -305,7 +305,7 @@ func (r *Assignments) CheckInternal(e *env.Environment, reviews []github.Review,
 	switch {
 	case docs && code:
 		log.Printf("Check: Found docs and code changes.")
-		if err := r.checkDocsReviews(e.Author, reviews); err != nil {
+		if err := r.checkDocsReviews(e, reviews); err != nil {
 			return trace.Wrap(err)
 		}
 		if err := r.checkCodeReviews(e, reviews); err != nil {
@@ -319,7 +319,7 @@ func (r *Assignments) CheckInternal(e *env.Environment, reviews []github.Review,
 
 	case docs && !code:
 		log.Printf("Check: Found docs changes.")
-		if err := r.checkDocsReviews(e.Author, reviews); err != nil {
+		if err := r.checkDocsReviews(e, reviews); err != nil {
 			return trace.Wrap(err)
 		}
 	// Strange state, an empty commit? Check admins.
@@ -333,8 +333,8 @@ func (r *Assignments) CheckInternal(e *env.Environment, reviews []github.Review,
 	return nil
 }
 
-func (r *Assignments) checkDocsReviews(author string, reviews []github.Review) error {
-	reviewers := r.getDocsReviewers(author)
+func (r *Assignments) checkDocsReviews(e *env.Environment, reviews []github.Review) error {
+	reviewers := r.getDocsReviewers(e)
 
 	if check(reviewers, reviews) {
 		return nil
@@ -367,7 +367,7 @@ func (r *Assignments) checkCodeReviews(e *env.Environment, reviews []github.Revi
 		return trace.Wrap(fmt.Errorf("unsupported repository: %s", e.Repository))
 	}
 
-	setA, setB := getReviewerSets(author, team, r.c.CodeReviewers, r.c.CodeReviewersOmit)
+	setA, setB := getReviewerSets(e, team, r.c.CodeReviewers, r.c.CodeReviewersOmit)
 
 	// PRs can be approved if you either have multiple code owners that approve
 	// or code owner and code reviewer.
@@ -381,7 +381,7 @@ func (r *Assignments) checkCodeReviews(e *env.Environment, reviews []github.Revi
 	return trace.BadParameter("at least one approval required from each set %v %v", setA, setB)
 }
 
-func getReviewerSets(author string, team string, reviewers map[string]Reviewer, reviewersOmit map[string]bool) ([]string, []string) {
+func getReviewerSets(e *env.Environment, team string, reviewers map[string]Reviewer, reviewersOmit map[string]bool) ([]string, []string) {
 	var setA []string
 	var setB []string
 
@@ -395,7 +395,7 @@ func getReviewerSets(author string, team string, reviewers map[string]Reviewer, 
 			continue
 		}
 		// Skip author, can't assign/review own PR.
-		if k == author {
+		if k == e.Author {
 			continue
 		}
 

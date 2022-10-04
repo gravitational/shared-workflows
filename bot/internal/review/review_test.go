@@ -399,7 +399,10 @@ func TestGetDocsReviewers(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
-			reviewers := test.assignments.getDocsReviewers(test.author)
+			e := &env.Environment{
+				Author: test.author,
+			}
+			reviewers := test.assignments.getDocsReviewers(e)
 			require.ElementsMatch(t, reviewers, test.reviewers)
 		})
 	}
