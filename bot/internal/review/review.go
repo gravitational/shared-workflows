@@ -31,6 +31,10 @@ import (
 	"github.com/gravitational/trace"
 )
 
+// Dependabot is the GitHub's bot author/account name.
+// See https://github.com/dependabot.
+const Dependabot = "dependabot"
+
 // Reviewer is a code reviewer.
 type Reviewer struct {
 	// Team the reviewer belongs to.
@@ -127,6 +131,11 @@ func New(c *Config) (*Assignments, error) {
 
 // IsInternal returns if the author of a PR is internal.
 func (r *Assignments) IsInternal(author string) bool {
+	// Dependabot is considered an internal contributor.
+	if author == Dependabot {
+		return true
+	}
+
 	_, code := r.c.CodeReviewers[author]
 	_, docs := r.c.DocsReviewers[author]
 	return code || docs

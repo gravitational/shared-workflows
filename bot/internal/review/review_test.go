@@ -117,11 +117,19 @@ func TestIsInternal(t *testing.T) {
 			author: "7",
 			expect: false,
 		},
+		{
+			desc: "dependabot is internal",
+			assignments: &Assignments{
+				c: &Config{},
+			},
+			author: Dependabot,
+			expect: true,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
-			expect := test.assignments.IsInternal(test.author)
-			require.Equal(t, expect, test.expect)
+			got := test.assignments.IsInternal(test.author)
+			require.Equal(t, test.expect, got)
 		})
 	}
 }
