@@ -807,6 +807,24 @@ func TestCheckInternal(t *testing.T) {
 			code:   true,
 			result: true,
 		},
+		{
+			desc:       "core-dependabot-code-not-approved-failure",
+			repository: "teleport",
+			author:     Dependabot,
+			code:       true,
+			result:     false,
+		},
+		{
+			desc:       "core-dependabot-code-approval-success",
+			repository: "teleport",
+			author:     Dependabot,
+			reviews: []github.Review{
+				{Author: "3", State: Approved}, // owner (not admin)
+				{Author: "4", State: Approved}, // not owner
+			},
+			code:   true,
+			result: true,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {

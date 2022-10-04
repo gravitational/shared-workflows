@@ -35,6 +35,10 @@ import (
 // See https://github.com/dependabot.
 const Dependabot = "dependabot[bot]"
 
+func isAllowedRobot(author string) bool {
+	return author == Dependabot
+}
+
 // Reviewer is a code reviewer.
 type Reviewer struct {
 	// Team the reviewer belongs to.
@@ -131,8 +135,7 @@ func New(c *Config) (*Assignments, error) {
 
 // IsInternal returns if the author of a PR is internal.
 func (r *Assignments) IsInternal(author string) bool {
-	// Dependabot is considered an internal contributor.
-	if author == Dependabot {
+	if isAllowedRobot(author) {
 		return true
 	}
 
@@ -316,7 +319,6 @@ func (r *Assignments) CheckInternal(e *env.Environment, reviews []github.Review,
 		if err := r.checkCodeReviews(e, reviews); err != nil {
 			return trace.Wrap(err)
 		}
-
 	case docs && !code:
 		log.Printf("Check: Found docs changes.")
 		if err := r.checkDocsReviews(e.Author, reviews); err != nil {
@@ -347,17 +349,15 @@ func (r *Assignments) checkCodeReviews(e *env.Environment, reviews []github.Revi
 	// External code reviews should never hit this path, if they do, fail and
 	// return an error.
 	author := e.Author
-	v, ok := r.c.CodeReviewers[author]
-	if !ok {
-		v, ok = r.c.DocsReviewers[author]
-		if !ok {
-			return trace.BadParameter("rejecting checking external review")
-		}
+
+	_, isCodeReviewer := r.c.CodeReviewers[author]
+	_, isDocReviewer := r.c.DocsReviewers[author]
+	if !isCodeReviewer && !isDocReviewer && !isAllowedRobot(author) {
+		return trace.BadParameter("rejecting checking external review")
 	}
 
-	team := v.Team
-
 	// Teams do their own internal reviews
+	var team string
 	switch e.Repository {
 	case env.TeleportRepo:
 		team = env.CoreTeam
