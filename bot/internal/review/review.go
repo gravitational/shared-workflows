@@ -399,7 +399,17 @@ func getReviewerSets(e *env.Environment, team string, reviewers map[string]Revie
 			continue
 		}
 
-		if v.Owner {
+		team := v.Team
+
+		switch e.Repository {
+		case env.TeleportRepo:
+			team = env.CoreTeam
+		case env.CloudRepo:
+			team = env.CloudTeam
+		}
+
+		// Only owners of the current repo are candidates
+		if v.Owner && v.Team == team {
 			setA = append(setA, k)
 		} else {
 			setB = append(setB, k)
