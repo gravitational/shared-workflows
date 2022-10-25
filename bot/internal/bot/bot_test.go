@@ -48,6 +48,7 @@ func TestClassifyChanges(t *testing.T) {
 			desc: "docs-only",
 			files: []github.PullRequestFile{
 				{Name: "docs/docs.md"},
+				{Name: "CHANGELOG.md"},
 			},
 			docs: true,
 			code: false,
