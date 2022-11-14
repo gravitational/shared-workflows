@@ -27,6 +27,6 @@ jobs:
         uses: actions/checkout@v3
 
       - name: 'Dependency Review'
-        uses: actions/dependency-review-action@7a42af0f2fb2fcaa5aa954358f1aac58436bedec
+        uses: actions/dependency-review-action@30d582111533d59ab793fd9f971817241654f3ec
         with:
           allow-licenses: 0BSD, Apache-2.0, BSD-2-Clause, BSD-2-Clause-FreeBSD, BSD-3-Clause, CC-BY-3.0, CC-BY-4.0, CC0-1.0, ISC, LGPL-2.1, MIT, MPL-2.0, OFL-1.1, Unicode-DFS-2016, Unlicense
