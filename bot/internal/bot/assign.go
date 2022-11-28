@@ -81,7 +81,7 @@ func (b *Bot) getReviewers(ctx context.Context, files []github.PullRequestFile) 
 
 func (b *Bot) backportReviewers(ctx context.Context) ([]string, error) {
 	// Search inside the PR to find a reference to the original PR.
-	original, err := b.findOriginal(ctx,
+	original, err := b.findOriginalPR(ctx,
 		b.c.Environment.Organization,
 		b.c.Environment.Repository,
 		b.c.Environment.Number)
@@ -99,7 +99,12 @@ func (b *Bot) backportReviewers(ctx context.Context) ([]string, error) {
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	originalReviewers = append(originalReviewers, reviewers...)
+	for _, reviewer := range reviewers {
+		// don't request reviews from bots
+		if !strings.Contains(reviewer, "[bot]") {
+			originalReviewers = append(originalReviewers, reviewer)
+		}
+	}
 
 	// Append list of reviews that have submitted a review.
 	reviews, err := b.c.GitHub.ListReviews(ctx,
@@ -116,7 +121,8 @@ func (b *Bot) backportReviewers(ctx context.Context) ([]string, error) {
 	return dedup(b.c.Environment.Author, originalReviewers), nil
 }
 
-func (b *Bot) findOriginal(ctx context.Context, organization string, repository string, number int) (int, error) {
+// findOriginalPR runs on backport PRs and attempts to extract the number of the original PR
+func (b *Bot) findOriginalPR(ctx context.Context, organization string, repository string, number int) (int, error) {
 	pull, err := b.c.GitHub.GetPullRequest(ctx,
 		organization,
 		repository,

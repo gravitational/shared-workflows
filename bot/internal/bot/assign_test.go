@@ -58,7 +58,7 @@ func TestBackportReviewers(t *testing.T) {
 				UnsafeBody:  "",
 				Fork:        false,
 			},
-			reviewers: []string{"3"},
+			reviewers: []string{"3", "this is a bot[bot]"},
 			reviews: []github.Review{
 				{Author: "4", State: review.Approved},
 			},
