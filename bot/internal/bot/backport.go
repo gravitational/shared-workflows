@@ -50,15 +50,19 @@ func (b *Bot) Backport(ctx context.Context) error {
 		return trace.Wrap(err)
 	}
 
-	// If this workflow is running on a release branch, then it means
-	// a backport was merged and there's no need to open additional
-	// backport PRs. We can safely delete the remote branch though,
-	// because we know this is an internal contributor's merged PR.
-	if isReleaseBranch(b.c.Environment.UnsafeBase) &&
-		isBotBackportBranch(b.c.Environment.UnsafeHead) &&
-		!pull.Fork {
-		log.Printf("backport merged to %v, deleting branch %v", b.c.Environment.UnsafeBase, b.c.Environment.UnsafeHead)
-		return trace.Wrap(git("push", "origin", "--delete", b.c.Environment.UnsafeHead))
+	// If this workflow is running against master or a release branch,
+	// and this is not a fork, we can safely delete the remote branch
+	// when this workflow completes.
+	if !pull.Fork {
+		defer func() {
+			if b.c.Environment.UnsafeBase == "master" || isReleaseBranch(b.c.Environment.UnsafeBase) {
+				log.Printf("PR merged to %v, deleting remote branch %v",
+					b.c.Environment.UnsafeBase, b.c.Environment.UnsafeHead)
+				if err := deleteBranch(b.c.Environment.UnsafeHead); err != nil {
+					log.Printf("Failed to delete remote: %v", err)
+				}
+			}
+		}()
 	}
 
 	// Extract backport branches names from labels attached to the Pull
@@ -137,6 +141,10 @@ func (b *Bot) Backport(ctx context.Context) error {
 			Rows:   rows,
 		})
 	return trace.Wrap(err)
+}
+
+func deleteBranch(branch string) error {
+	return git("push", "origin", "--delete", branch)
 }
 
 // findBranches looks through the labels attached to a Pull Request for all the
