@@ -85,6 +85,26 @@ func TestBackportReviewers(t *testing.T) {
 			expected: []string{"3", "4"},
 		},
 		{
+			desc: "backport-reviewed-by-bot",
+			pull: github.PullRequest{
+				Author:     "baz",
+				Repository: "bar",
+				UnsafeHead: github.Branch{
+					Ref: "baz/fix",
+				},
+				UnsafeTitle: "Fixed an issue",
+				UnsafeBody:  "https://github.com/gravitational/teleport/pull/0",
+				Fork:        false,
+			},
+			reviewers: []string{"3"},
+			reviews: []github.Review{
+				{Author: "4", State: review.Approved},
+				{Author: "espa[bot]lini", State: review.Approved},
+			},
+			err:      false,
+			expected: []string{"3", "4"},
+		},
+		{
 			desc: "backport-multiple-reviews",
 			pull: github.PullRequest{
 				Author:     "baz",
