@@ -60,6 +60,8 @@ func (b *Bot) Label(ctx context.Context) error {
 func (b *Bot) labels(ctx context.Context, files []github.PullRequestFile) ([]string, error) {
 	var labels []string
 
+	labels = append(labels, string(prSize(files)))
+
 	// The branch name is unsafe, but here we are simply adding a label.
 	if isReleaseBranch(b.c.Environment.UnsafeBase) {
 		log.Println("Label: Found backport branch.")

@@ -68,9 +68,9 @@ func (b *Bot) Check(ctx context.Context) error {
 		return trace.Wrap(err)
 	}
 
-	large := isLargePR(files)
-	if large {
-		comment := fmt.Sprintf("@%v - this PR is large and will require admin approval to merge. "+
+	tooBig := xlargeRequiresAdminApproval(files)
+	if tooBig {
+		comment := fmt.Sprintf("@%v - this PR will require admin approval to merge due to its size. "+
 			"Consider breaking it up into a series smaller changes.", b.c.Environment.Author)
 
 		// try to avoid spamming the author by checking if the specified comment already exists
@@ -91,7 +91,7 @@ func (b *Bot) Check(ctx context.Context) error {
 		}
 	}
 
-	if err := b.c.Review.CheckInternal(b.c.Environment, reviews, docs, code, large); err != nil {
+	if err := b.c.Review.CheckInternal(b.c.Environment, reviews, docs, code, tooBig); err != nil {
 		return trace.Wrap(err)
 	}
 

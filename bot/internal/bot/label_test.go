@@ -41,23 +41,30 @@ func TestLabel(t *testing.T) {
 				{Name: "file.go"},
 				{Name: "examples/README.md"},
 			},
-			labels: []string{},
+			labels: []string{string(small)},
 		},
 		{
 			desc:   "docs",
 			branch: "foo",
 			files: []github.PullRequestFile{
-				{Name: "docs/docs.md"},
+				{
+					Name:      "docs/docs.md",
+					Additions: 105,
+					Deletions: 10,
+				},
 			},
-			labels: []string{"documentation"},
+			labels: []string{"documentation", string(small)},
 		},
 		{
 			desc:   "helm",
 			branch: "foo",
 			files: []github.PullRequestFile{
-				{Name: "examples/chart/index.html"},
+				{
+					Name:      "examples/chart/index.html",
+					Additions: 500,
+				},
 			},
-			labels: []string{"helm"},
+			labels: []string{"helm", string(medium)},
 		},
 		{
 			desc:   "docs-and-helm",
@@ -66,15 +73,19 @@ func TestLabel(t *testing.T) {
 				{Name: "docs/docs.md"},
 				{Name: "examples/chart/index.html"},
 			},
-			labels: []string{"documentation", "helm"},
+			labels: []string{"documentation", "helm", string(small)},
 		},
 		{
 			desc:   "docs-and-backport",
 			branch: "branch/foo",
 			files: []github.PullRequestFile{
-				{Name: "docs/docs.md"},
+				{
+					Name:      "docs/docs.md",
+					Additions: 5555,
+					Deletions: 1000,
+				},
 			},
-			labels: []string{"backport", "documentation"},
+			labels: []string{"backport", "documentation", string(xlarge)},
 		},
 	}
 	for _, test := range tests {
