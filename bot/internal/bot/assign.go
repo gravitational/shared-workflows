@@ -115,7 +115,10 @@ func (b *Bot) backportReviewers(ctx context.Context) ([]string, error) {
 		return nil, trace.Wrap(err)
 	}
 	for _, review := range reviews {
-		originalReviewers = append(originalReviewers, review.Author)
+		// don't request reviews from bots
+		if !strings.Contains(review.Author, "[bot]") {
+			originalReviewers = append(originalReviewers, review.Author)
+		}
 	}
 
 	return dedup(b.c.Environment.Author, originalReviewers), nil
