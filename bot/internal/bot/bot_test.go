@@ -80,36 +80,36 @@ func TestClassifyChanges(t *testing.T) {
 	}
 }
 
-func TestIsLargePR(t *testing.T) {
+func TestXLargePRs(t *testing.T) {
 	tests := []struct {
-		desc    string
-		files   []github.PullRequestFile
-		isLarge bool
+		desc  string
+		files []github.PullRequestFile
+		isXL  bool
 	}{
 		{
-			desc: "single file large",
+			desc: "single file xlarge",
 			files: []github.PullRequestFile{
 				{Name: "file.go", Additions: 5555},
 			},
-			isLarge: true,
+			isXL: true,
 		},
 		{
-			desc: "single file not large",
+			desc: "single file not xlarge",
 			files: []github.PullRequestFile{
 				{Name: "file.go", Additions: 5, Deletions: 2},
 			},
-			isLarge: false,
+			isXL: false,
 		},
 		{
-			desc: "multiple files large",
+			desc: "multiple files xlarge",
 			files: []github.PullRequestFile{
 				{Name: "file.go", Additions: 502, Deletions: 2},
 				{Name: "file2.go", Additions: 10000, Deletions: 2000},
 			},
-			isLarge: true,
+			isXL: true,
 		},
 		{
-			desc: "with autogen, not large",
+			desc: "with autogen, not xlarge",
 			files: []github.PullRequestFile{
 				{Name: "file.go", Additions: 502, Deletions: 2},
 				{Name: "file2.pb.go", Additions: 10000, Deletions: 2000},
@@ -118,12 +118,12 @@ func TestIsLargePR(t *testing.T) {
 				{Name: "webassets/12345/app.js", Additions: 10000, Deletions: 2000},
 				{Name: "vendor/golang.org/x/sys", Additions: 10000, Deletions: 2000},
 			},
-			isLarge: false,
+			isXL: false,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
-			require.Equal(t, test.isLarge, isLargePR(test.files))
+			require.Equal(t, test.isXL, xlargeRequiresAdminApproval(test.files))
 		})
 	}
 }
