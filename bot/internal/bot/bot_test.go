@@ -22,6 +22,7 @@ import (
 
 	"github.com/gravitational/shared-workflows/bot/internal/env"
 	"github.com/gravitational/shared-workflows/bot/internal/github"
+	"github.com/gravitational/shared-workflows/bot/internal/review"
 
 	"github.com/stretchr/testify/require"
 )
@@ -128,11 +129,89 @@ func TestXLargePRs(t *testing.T) {
 	}
 }
 
+func TestIsInternal(t *testing.T) {
+	for _, test := range []struct {
+		desc          string
+		codeReviewers []string
+		docsReviewers []string
+		orgMembers    []string
+		author        string
+		isInternal    bool
+	}{
+		{
+			desc:          "code reviewer",
+			codeReviewers: []string{"foo", "bar"},
+			docsReviewers: []string{"baz", "quux"},
+			author:        "foo",
+			isInternal:    true,
+		},
+		{
+			desc:          "docs reviewer",
+			codeReviewers: []string{"foo", "bar"},
+			docsReviewers: []string{"baz", "quux"},
+			author:        "quux",
+			isInternal:    true,
+		},
+		{
+			desc:          "org member reviewer",
+			codeReviewers: []string{"foo", "bar"},
+			docsReviewers: []string{"baz", "quux"},
+			orgMembers:    []string{"russjones"},
+			author:        "russjones",
+			isInternal:    true,
+		},
+		{
+			desc:          "rando",
+			codeReviewers: []string{"foo", "bar"},
+			docsReviewers: []string{"baz", "quux"},
+			orgMembers:    []string{"russjones"},
+			author:        "hacker",
+			isInternal:    false,
+		},
+	} {
+		t.Run(test.desc, func(t *testing.T) {
+			gh := &fakeGithub{orgMembers: make(map[string]struct{})}
+			for _, member := range test.orgMembers {
+				gh.orgMembers[member] = struct{}{}
+			}
+			rc := &review.Config{
+				Admins:            []string{},
+				CodeReviewers:     make(map[string]review.Reviewer),
+				CodeReviewersOmit: map[string]bool{},
+				DocsReviewers:     make(map[string]review.Reviewer),
+				DocsReviewersOmit: make(map[string]bool),
+			}
+			for _, cr := range test.codeReviewers {
+				rc.CodeReviewers[cr] = review.Reviewer{}
+			}
+			for _, dr := range test.docsReviewers {
+				rc.DocsReviewers[dr] = review.Reviewer{}
+			}
+
+			r, err := review.New(rc)
+			require.NoError(t, err)
+
+			b := Bot{
+				c: &Config{
+					GitHub:      gh,
+					Review:      r,
+					Environment: &env.Environment{Author: test.author},
+				},
+			}
+
+			internal, err := b.isInternal(context.Background())
+			require.NoError(t, err)
+			require.Equal(t, test.isInternal, internal)
+		})
+	}
+}
+
 type fakeGithub struct {
-	files     []github.PullRequestFile
-	pull      github.PullRequest
-	reviewers []string
-	reviews   []github.Review
+	files      []github.PullRequestFile
+	pull       github.PullRequest
+	reviewers  []string
+	reviews    []github.Review
+	orgMembers map[string]struct{}
 }
 
 func (f *fakeGithub) RequestReviewers(ctx context.Context, organization string, repository string, number int, reviewers []string) error {
@@ -181,6 +260,11 @@ func (f *fakeGithub) ListWorkflowJobs(ctx context.Context, organization string, 
 
 func (f *fakeGithub) DeleteWorkflowRun(ctx context.Context, organization string, repository string, runID int64) error {
 	return nil
+}
+
+func (f *fakeGithub) IsOrgMember(ctx context.Context, user string, org string) (bool, error) {
+	_, member := f.orgMembers[user]
+	return member, nil
 }
 
 func (f *fakeGithub) CreateComment(ctx context.Context, organization string, repository string, number int, comment string) error {

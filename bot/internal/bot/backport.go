@@ -38,7 +38,11 @@ import (
 // Backport will create backport Pull Requests (if requested) when a Pull
 // Request is merged.
 func (b *Bot) Backport(ctx context.Context) error {
-	if !b.c.Review.IsInternal(b.c.Environment.Author) {
+	internal, err := b.isInternal(ctx)
+	if err != nil {
+		return trace.Wrap(err, "checking for internal author")
+	}
+	if !internal {
 		return trace.BadParameter("automatic backports are only supported for internal contributors")
 	}
 

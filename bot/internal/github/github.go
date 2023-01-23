@@ -489,6 +489,27 @@ func (c *Client) DeleteWorkflowRun(ctx context.Context, organization string, rep
 	return nil
 }
 
+// IsOrgMember checks whether [user] is a member of [org].
+//
+// https://docs.github.com/en/rest/orgs/members?apiVersion=2022-11-28#check-organization-membership-for-a-user
+func (c *Client) IsOrgMember(ctx context.Context, user string, org string) (bool, error) {
+	url := url.URL{
+		Scheme: "https",
+		Host:   "api.github.com",
+		Path:   path.Join("orgs", org, "members", user),
+	}
+	req, err := c.client.NewRequest(http.MethodGet, url.String(), nil)
+	if err != nil {
+		return false, trace.Wrap(err)
+	}
+	resp, err := c.client.Do(ctx, req, nil)
+	if err != nil {
+		return false, trace.Wrap(err)
+	}
+
+	return resp.StatusCode == http.StatusNoContent, nil
+}
+
 // CreateComment will leave a comment on an Issue or Pull Request.
 func (c *Client) CreateComment(ctx context.Context, organization string, repository string, number int, comment string) error {
 	_, _, err := c.client.Issues.CreateComment(ctx,
