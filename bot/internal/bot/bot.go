@@ -73,6 +73,9 @@ type Client interface {
 
 	// DeleteWorkflowRun is used to delete a workflow run.
 	DeleteWorkflowRun(ctx context.Context, organization string, repository string, runID int64) error
+
+	// IsOrgMember checks whether [user] is a member of GitHub orgainzation [org].
+	IsOrgMember(ctx context.Context, user string, org string) (bool, error)
 }
 
 // Config contains configuration for the bot.
@@ -187,4 +190,14 @@ func isReleaseBranch(branch string) bool {
 
 func isBotBackportBranch(branch string) bool {
 	return strings.HasPrefix(branch, "bot/backport")
+}
+
+func (b *Bot) isInternal(ctx context.Context) (bool, error) {
+	// check fast-path first - if the author is explicitly listed as
+	// an internal reviewer then we don't need to make a network call
+	if b.c.Review.IsInternal(b.c.Environment.Author) {
+		return true, nil
+	}
+
+	return b.c.GitHub.IsOrgMember(ctx, b.c.Environment.Author, "gravitational")
 }

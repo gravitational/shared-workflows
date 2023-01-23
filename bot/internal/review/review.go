@@ -133,7 +133,8 @@ func New(c *Config) (*Assignments, error) {
 	}, nil
 }
 
-// IsInternal returns if the author of a PR is internal.
+// IsInternal checks whether the author of a PR is explicitly
+// listed as an internal code or docs reviewer.
 func (r *Assignments) IsInternal(author string) bool {
 	if isAllowedRobot(author) {
 		return true

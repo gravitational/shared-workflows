@@ -39,7 +39,11 @@ func (b *Bot) Check(ctx context.Context) error {
 		return trace.Wrap(err)
 	}
 
-	if !b.c.Review.IsInternal(b.c.Environment.Author) {
+	internal, err := b.isInternal(ctx)
+	if err != nil {
+		return trace.Wrap(err, "checking for internal author")
+	}
+	if !internal {
 		if err := b.c.Review.CheckExternal(b.c.Environment.Author, reviews); err != nil {
 			return trace.Wrap(err)
 		}
