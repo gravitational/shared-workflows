@@ -502,7 +502,15 @@ func (c *Client) IsOrgMember(ctx context.Context, user string, org string) (bool
 	if err != nil {
 		return false, trace.Wrap(err)
 	}
+
 	resp, err := c.client.Do(ctx, req, nil)
+	// the go-github API returns an error if the request completed
+	// succesfully but returned a non-200 response code, so we attempt
+	// to check the response before checking the error
+	if resp != nil && resp.StatusCode != 0 {
+		return resp.StatusCode == http.StatusNoContent, nil
+	}
+
 	if err != nil {
 		return false, trace.Wrap(err)
 	}
