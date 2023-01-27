@@ -309,20 +309,20 @@ func (r *Assignments) CheckInternal(e *env.Environment, reviews []github.Review,
 	switch {
 	case docs && code:
 		log.Printf("Check: Found docs and code changes.")
-		if err := r.checkDocsReviews(e.Author, reviews); err != nil {
+		if err := r.checkInternalDocsReviews(e.Author, reviews); err != nil {
 			return trace.Wrap(err)
 		}
-		if err := r.checkCodeReviews(e, reviews); err != nil {
+		if err := r.checkInternalCodeReviews(e, reviews); err != nil {
 			return trace.Wrap(err)
 		}
 	case !docs && code:
 		log.Printf("Check: Found code changes.")
-		if err := r.checkCodeReviews(e, reviews); err != nil {
+		if err := r.checkInternalCodeReviews(e, reviews); err != nil {
 			return trace.Wrap(err)
 		}
 	case docs && !code:
 		log.Printf("Check: Found docs changes.")
-		if err := r.checkDocsReviews(e.Author, reviews); err != nil {
+		if err := r.checkInternalDocsReviews(e.Author, reviews); err != nil {
 			return trace.Wrap(err)
 		}
 	// Strange state, an empty commit? Check admins.
@@ -336,7 +336,9 @@ func (r *Assignments) CheckInternal(e *env.Environment, reviews []github.Review,
 	return nil
 }
 
-func (r *Assignments) checkDocsReviews(author string, reviews []github.Review) error {
+// checkInternalDocsReviews checks whether docs review requirements are satisfied
+// for a PR authored by an internal employee
+func (r *Assignments) checkInternalDocsReviews(author string, reviews []github.Review) error {
 	reviewers := r.getDocsReviewers(author)
 
 	if check(reviewers, reviews) {
@@ -346,17 +348,9 @@ func (r *Assignments) checkDocsReviews(author string, reviews []github.Review) e
 	return trace.BadParameter("requires at least one approval from %v", reviewers)
 }
 
-func (r *Assignments) checkCodeReviews(e *env.Environment, reviews []github.Review) error {
-	// External code reviews should never hit this path, if they do, fail and
-	// return an error.
-	author := e.Author
-
-	_, isCodeReviewer := r.c.CodeReviewers[author]
-	_, isDocReviewer := r.c.DocsReviewers[author]
-	if !isCodeReviewer && !isDocReviewer && !isAllowedRobot(author) {
-		return trace.BadParameter("rejecting checking external review")
-	}
-
+// checkInternalCodeReviews checks whether code review requirements are satisfied
+// for a PR authored by an internal employee
+func (r *Assignments) checkInternalCodeReviews(e *env.Environment, reviews []github.Review) error {
 	// Teams do their own internal reviews
 	var team string
 	switch e.Repository {
@@ -368,7 +362,7 @@ func (r *Assignments) checkCodeReviews(e *env.Environment, reviews []github.Revi
 		return trace.Wrap(fmt.Errorf("unsupported repository: %s", e.Repository))
 	}
 
-	setA, setB := getReviewerSets(author, team, r.c.CodeReviewers, r.c.CodeReviewersOmit)
+	setA, setB := getReviewerSets(e.Author, team, r.c.CodeReviewers, r.c.CodeReviewersOmit)
 
 	// PRs can be approved if you either have multiple code owners that approve
 	// or code owner and code reviewer.

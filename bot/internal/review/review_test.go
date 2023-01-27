@@ -316,7 +316,7 @@ func TestGetCodeReviewers(t *testing.T) {
 				Repository: test.repository,
 				Author:     test.author,
 			}
-			require.ErrorContains(t, test.assignments.checkCodeReviews(e, nil),
+			require.ErrorContains(t, test.assignments.checkInternalCodeReviews(e, nil),
 				"at least one approval required from each set")
 
 			setA, setB := test.assignments.getCodeReviewerSets(e)
