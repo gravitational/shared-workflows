@@ -31,12 +31,17 @@ import (
 	"github.com/gravitational/trace"
 )
 
-// Dependabot is the GitHub's bot author/account name.
-// See https://github.com/dependabot.
-const Dependabot = "dependabot[bot]"
+const (
+	// Dependabot is the GitHub's bot author/account name.
+	// See https://github.com/dependabot.
+	Dependabot = "dependabot[bot]"
+	// DependabotBatcher is the name of the batcher that groups Dependabot PRs.
+	// See https://github.com/Legal-and-General/dependabot-batcher.
+	DependabotBatcher = "dependabot-batcher[bot]"
+)
 
 func isAllowedRobot(author string) bool {
-	return author == Dependabot
+	return author == Dependabot || author == DependabotBatcher
 }
 
 // Reviewer is a code reviewer.
