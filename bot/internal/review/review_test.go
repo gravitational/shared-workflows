@@ -916,8 +916,8 @@ func TestPreferredReviewers(t *testing.T) {
 		c: &Config{
 			Rand: &randStatic{},
 			CodeReviewers: map[string]Reviewer{
-				"1": {Team: "Core", Owner: true, PreferredReviewerFor: []string{"lib/srv/db"}},
-				"2": {Team: "Core", Owner: true, PreferredReviewerFor: []string{"lib/srv/db", "lib/alpn"}},
+				"1": {Team: "Core", Owner: true, PreferredReviewerFor: []string{"lib/srv/db", "lib/srv/app"}},
+				"2": {Team: "Core", Owner: true, PreferredReviewerFor: []string{"lib/srv/db", "lib/src/app", "lib/alpn"}},
 				"3": {Team: "Core", Owner: true},
 				"4": {Team: "Core", Owner: false, PreferredReviewerFor: []string{"lib/srv/app"}},
 				"5": {Team: "Core", Owner: false, PreferredReviewerFor: []string{"lib/srv/db"}},
@@ -953,9 +953,9 @@ func TestPreferredReviewers(t *testing.T) {
 			author:      "3",
 			files: []github.PullRequestFile{
 				{Name: "lib/alpn/proxy.go"},
-				{Name: "lib/srv/db/engine.go"},
+				{Name: "lib/srv/app.go"},
 			},
-			expected: []string{"1", "2", "5"},
+			expected: []string{"1", "2", "4"},
 		},
 		{
 			description: "no preferred reviewers",
@@ -964,6 +964,15 @@ func TestPreferredReviewers(t *testing.T) {
 				{Name: "lib/service/service.go"},
 			},
 			expected: []string{"1", "4"},
+		},
+		{
+			description: "covered paths: don't add new or duplicate reviewers for paths already covered",
+			author:      "3",
+			files: []github.PullRequestFile{
+				{Name: "lib/srv/app.go"},
+				{Name: "lib/srv/db/engine.go"},
+			},
+			expected: []string{"1", "4", "5"},
 		},
 	}
 

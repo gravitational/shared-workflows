@@ -220,12 +220,19 @@ func (r *Assignments) getCodeReviewers(e *env.Environment, files []github.PullRe
 func (r *Assignments) getPreferredReviewers(set []string, files []github.PullRequestFile) (preferredReviewers []string) {
 	// To avoid assigning too many reviewers iterate over paths that we have
 	// preferred reviewers for and see if any of them are among the changeset.
+	coveredPaths := make(map[string]struct{})
 	for path, reviewers := range r.getPreferredReviewersMap(set) {
+		if _, ok := coveredPaths[path]; ok {
+			continue
+		}
 		for _, file := range files {
 			if strings.HasPrefix(file.Name, path) {
 				reviewer := reviewers[r.c.Rand.Intn(len(reviewers))]
 				log.Printf("Picking %v as preferred reviewer for %v which matches %v.", reviewer, file.Name, path)
 				preferredReviewers = append(preferredReviewers, reviewer)
+				for _, path := range r.c.CodeReviewers[reviewer].PreferredReviewerFor {
+					coveredPaths[path] = struct{}{}
+				}
 				break
 			}
 		}
