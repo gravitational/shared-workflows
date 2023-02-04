@@ -917,7 +917,7 @@ func TestPreferredReviewers(t *testing.T) {
 			Rand: &randStatic{},
 			CodeReviewers: map[string]Reviewer{
 				"1": {Team: "Core", Owner: true, PreferredReviewerFor: []string{"lib/srv/db", "lib/srv/app"}},
-				"2": {Team: "Core", Owner: true, PreferredReviewerFor: []string{"lib/srv/db", "lib/src/app", "lib/alpn"}},
+				"2": {Team: "Core", Owner: true, PreferredReviewerFor: []string{"lib/srv/db", "lib/alpn"}},
 				"3": {Team: "Core", Owner: true},
 				"4": {Team: "Core", Owner: false, PreferredReviewerFor: []string{"lib/srv/app"}},
 				"5": {Team: "Core", Owner: false, PreferredReviewerFor: []string{"lib/srv/db"}},
