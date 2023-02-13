@@ -54,6 +54,11 @@ func (b *Bot) Backport(ctx context.Context) error {
 		return trace.Wrap(err)
 	}
 
+	log.Printf("backporting %v/%v#%v",
+		b.c.Environment.Organization,
+		b.c.Environment.Repository,
+		b.c.Environment.Number)
+
 	// If this workflow is running on a release branch, then it means
 	// a backport was merged and there's no need to open additional
 	// backport PRs. We can safely delete the remote branch though,
@@ -71,6 +76,8 @@ func (b *Bot) Backport(ctx context.Context) error {
 	if len(branches) == 0 {
 		return nil
 	}
+
+	log.Printf("target branches: %v", strings.Join(branches, ", "))
 
 	// Get workflow logs URL, will be attached to any backport failure.
 	u, err := b.workflowLogsURL(ctx,
@@ -98,7 +105,7 @@ func (b *Bot) Backport(ctx context.Context) error {
 			head,
 		)
 		if err != nil {
-			log.Printf("Failed to create backport branch: %v.", err)
+			log.Printf("Failed to create backport branch:\n%v\n", trace.DebugReport(err))
 			rows = append(rows, row{
 				Branch: base,
 				Failed: true,
@@ -179,6 +186,7 @@ func (b *Bot) createBackportBranch(ctx context.Context, organization string, rep
 	}
 
 	// Download base and head from origin (GitHub).
+	log.Println("Running:", "git fetch origin", base, pull.UnsafeHead.Ref)
 	if err := git("fetch", "origin", base, pull.UnsafeHead.Ref); err != nil {
 		return trace.Wrap(err)
 	}
@@ -191,6 +199,8 @@ func (b *Bot) createBackportBranch(ctx context.Context, organization string, rep
 	if err := git("checkout", base); err != nil {
 		return trace.Wrap(err)
 	}
+
+	log.Println("Running: git rebase --onto", newParent, oldParent, until)
 	if err := git("rebase", "--onto", newParent, oldParent, until); err != nil {
 		if er := git("rebase", "--abort"); er != nil {
 			return trace.NewAggregate(err, er)
