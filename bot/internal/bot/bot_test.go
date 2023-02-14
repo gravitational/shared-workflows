@@ -206,6 +206,27 @@ func TestIsInternal(t *testing.T) {
 	}
 }
 
+// TestDoNotMerge verifies that PRs with do-not-merge label fail the
+// reviewers check.
+func TestDoNotMerge(t *testing.T) {
+	gh := &fakeGithub{
+		pull: github.PullRequest{
+			UnsafeLabels: []string{doNotMergeLabel},
+		},
+	}
+	bot := Bot{
+		c: &Config{
+			GitHub: gh,
+			Environment: &env.Environment{
+				Organization: "gravitational",
+				Repository:   "teleport",
+				Number:       42,
+			},
+		},
+	}
+	require.Error(t, bot.checkDoNotMerge(context.Background()))
+}
+
 type fakeGithub struct {
 	files      []github.PullRequestFile
 	pull       github.PullRequest

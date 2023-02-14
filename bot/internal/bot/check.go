@@ -31,6 +31,12 @@ import (
 // Team specific reviews require an approval from both sets of reviews.
 // External reviews require approval from admins.
 func (b *Bot) Check(ctx context.Context) error {
+	// First check whether the PR was explicitly marked as "do not merge".
+	err := b.checkDoNotMerge(ctx)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
 	reviews, err := b.c.GitHub.ListReviews(ctx,
 		b.c.Environment.Organization,
 		b.c.Environment.Repository,
@@ -116,6 +122,23 @@ func contains(ss []string, s string) bool {
 	return false
 }
 
+// checkDoNotMerge checks if the PR has "do-not-merge" label on it.
+func (b *Bot) checkDoNotMerge(ctx context.Context) error {
+	pull, err := b.c.GitHub.GetPullRequest(ctx,
+		b.c.Environment.Organization,
+		b.c.Environment.Repository,
+		b.c.Environment.Number)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	if contains(pull.UnsafeLabels, doNotMergeLabel) {
+		return trace.BadParameter("the pull request is marked as %v", doNotMergeLabel)
+	}
+
+	return nil
+}
+
 // dismissReviewers removes stale review requests from an approved pull request.
 func (b *Bot) dismissReviewers(ctx context.Context) error {
 	r, err := b.reviewersToDismiss(ctx)
@@ -191,3 +214,9 @@ func (b *Bot) reviewersToDismiss(ctx context.Context) ([]string, error) {
 
 	return reviewersToDismiss, nil
 }
+
+const (
+	// doNotMergeLabel is the name of the Github label that is put on PRs
+	// to prevent them from merging.
+	doNotMergeLabel = "do-not-merge"
+)
