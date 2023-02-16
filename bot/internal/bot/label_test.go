@@ -87,6 +87,17 @@ func TestLabel(t *testing.T) {
 			},
 			labels: []string{"backport", "documentation", string(xlarge)},
 		},
+		{
+			desc:   "web only",
+			branch: "foo",
+			files: []github.PullRequestFile{
+				{
+					Name:      "web/packages/design/package.json",
+					Additions: 1,
+				},
+			},
+			labels: []string{"ui", string(small)},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
