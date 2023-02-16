@@ -115,4 +115,5 @@ var prefixes = map[string][]string{
 	"tool/tctl/":          {"tctl"},
 	"tool/tsh/":           {"tsh"},
 	"tool/tbot/":          {"machine-id"},
+	"web/":                {"ui"},
 }
