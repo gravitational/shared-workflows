@@ -313,6 +313,29 @@ func TestGetCodeReviewers(t *testing.T) {
 			setA:       []string{"code-1"},
 			setB:       []string{"code-2"},
 		},
+		{
+			desc: "admins can be omitted from code reviews",
+			assignments: &Assignments{
+				c: &Config{
+					CodeReviewers: map[string]Reviewer{
+						"code-1": {Team: "Core", Owner: true},
+						"code-2": {Team: "Core", Owner: false},
+					},
+					Admins: []string{
+						"code-1",
+						"code-2",
+						"code-3",
+					},
+					CodeReviewersOmit: map[string]bool{
+						"code-1": true,
+					},
+				},
+			},
+			repository: "teleport",
+			author:     "external-1",
+			setA:       []string{"code-2"},
+			setB:       []string{"code-3"},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
@@ -426,11 +449,14 @@ func TestCheckExternal(t *testing.T) {
 				"5": {Team: "Core", Owner: false},
 				"6": {Team: "Core", Owner: false},
 			},
-			CodeReviewersOmit: map[string]bool{},
+			CodeReviewersOmit: map[string]bool{
+				"3": true,
+			},
 			// Default.
 			Admins: []string{
 				"1",
 				"2",
+				"3",
 			},
 		},
 	}
@@ -479,6 +505,15 @@ func TestCheckExternal(t *testing.T) {
 			reviews: []github.Review{
 				{Author: "1", State: Approved},
 				{Author: "2", State: Approved},
+			},
+			result: true,
+		},
+		{
+			desc:   "two-admin-one-non-reviewer-success",
+			author: "5",
+			reviews: []github.Review{
+				{Author: "1", State: Approved},
+				{Author: "3", State: Approved},
 			},
 			result: true,
 		},
