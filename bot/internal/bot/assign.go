@@ -100,7 +100,7 @@ func (b *Bot) backportReviewers(ctx context.Context) ([]string, error) {
 		return nil, trace.Wrap(err)
 	}
 	for _, reviewer := range reviewers {
-		// don't request reviews from bots
+		// Don't request reviews from bots.
 		if !strings.Contains(reviewer, "[bot]") {
 			originalReviewers = append(originalReviewers, reviewer)
 		}
@@ -115,7 +115,7 @@ func (b *Bot) backportReviewers(ctx context.Context) ([]string, error) {
 		return nil, trace.Wrap(err)
 	}
 	for _, review := range reviews {
-		// don't request reviews from bots
+		// Don't request reviews from bots.
 		if !strings.Contains(review.Author, "[bot]") {
 			originalReviewers = append(originalReviewers, review.Author)
 		}

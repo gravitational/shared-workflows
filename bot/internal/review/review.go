@@ -267,7 +267,6 @@ func (r *Assignments) getAdminReviewers(author string) []string {
 func (r *Assignments) getCodeReviewerSets(e *env.Environment) ([]string, []string) {
 	// Internal non-Core contributors get assigned from the admin reviewer set.
 	// Admins will review, triage, and re-assign.
-
 	v, ok := r.c.CodeReviewers[e.Author]
 	if !ok || v.Team == env.InternalTeam {
 		reviewers := r.getAdminReviewers(e.Author)

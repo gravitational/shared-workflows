@@ -83,7 +83,8 @@ func (b *Bot) Check(ctx context.Context) error {
 		comment := fmt.Sprintf("@%v - this PR will require admin approval to merge due to its size. "+
 			"Consider breaking it up into a series smaller changes.", b.c.Environment.Author)
 
-		// try to avoid spamming the author by checking if the specified comment already exists
+		// Try to avoid spamming the author by checking if the specified
+		// comment already exists.
 		comments, _ := b.c.GitHub.ListComments(ctx,
 			b.c.Environment.Organization,
 			b.c.Environment.Repository,
@@ -105,7 +106,8 @@ func (b *Bot) Check(ctx context.Context) error {
 		return trace.Wrap(err)
 	}
 
-	// if we have passed our checks we can try to dismiss other requested reviews
+	// If we have passed our checks we can try to dismiss other requested
+	// reviews.
 	if err := b.dismissReviewers(ctx); err != nil {
 		log.Printf("Check: Failed to dismiss reviews: %v", err)
 	}
@@ -159,9 +161,11 @@ func (b *Bot) dismissReviewers(ctx context.Context) error {
 	))
 }
 
-// reviewersToDismiss determines which (if any) reviewers can be removed
-// from an *already approved* pull request.
-// Precondition: the pull request must already pass required approvers checks.
+// reviewersToDismiss determines which (if any) reviewers can be removed from
+// an *already approved* pull request.
+//
+// Note, the precondition is that the pull request must already pass required
+// approvers checks.
 func (b *Bot) reviewersToDismiss(ctx context.Context) ([]string, error) {
 	reviewers, err := b.c.GitHub.ListReviewers(ctx,
 		b.c.Environment.Organization,
@@ -184,11 +188,12 @@ func (b *Bot) reviewersToDismiss(ctx context.Context) ([]string, error) {
 	internalApprovals := 0
 	reviewedBy := make(map[string]struct{})
 
-	// only count each reviewer's latest review (so we start from the end)
+	// Only count each reviewer's latest review (so we start from the end).
 	for i := len(reviews) - 1; i >= 0; i-- {
 		r := reviews[i]
 
-		// if we've already seen this reviewer then we're looking at an older review - skip it
+		// If we've already seen this reviewer then we're looking at an older
+		// review - skip it.
 		if _, ok := reviewedBy[r.Author]; ok {
 			continue
 		}
@@ -198,9 +203,9 @@ func (b *Bot) reviewersToDismiss(ctx context.Context) ([]string, error) {
 		}
 	}
 
-	// Our internal checks could have passed with an admin approval, even though
-	// we only have a single approval. Ensure we have at least two internal approvals
-	// before we decide to dismiss reviewers.
+	// Our internal checks could have passed with an admin approval, even
+	// though we only have a single approval. Ensure we have at least two
+	// internal approvals before we decide to dismiss reviewers.
 	if internalApprovals < 2 {
 		return nil, nil
 	}
