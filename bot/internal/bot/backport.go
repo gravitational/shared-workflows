@@ -133,10 +133,6 @@ func (b *Bot) Backport(ctx context.Context) error {
 		})
 	}
 
-	for _, r := range rows {
-		fmt.Printf("--> %v\n", r.Link.String())
-	}
-
 	// Leave a comment on the Pull Request with a table that outlines the
 	// requested backports and outcome.
 	err = b.updatePullRequest(ctx,
