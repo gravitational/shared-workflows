@@ -32,7 +32,7 @@ import (
 )
 
 func main() {
-	workflow, token, reviewers, err := parseFlags()
+	flags, err := parseFlags()
 	if err != nil {
 		log.Fatalf("Failed to parse flags: %v.", err)
 	}
@@ -44,14 +44,14 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	defer cancel()
 
-	b, err := createBot(ctx, token, reviewers)
+	b, err := createBot(ctx, flags)
 	if err != nil {
 		log.Fatalf("Failed to create bot: %v.", err)
 	}
 
-	log.Printf("Running %v.", workflow)
+	log.Printf("Running %v.", flags.workflow)
 
-	switch workflow {
+	switch flags.workflow {
 	case "assign":
 		err = b.Assign(ctx)
 	case "check":
@@ -61,45 +61,85 @@ func main() {
 	case "label":
 		err = b.Label(ctx)
 	case "backport":
-		err = b.Backport(ctx)
+		if flags.local {
+			err = b.BackportLocal(ctx, flags.branch)
+		} else {
+			err = b.Backport(ctx)
+		}
 	default:
-		err = trace.BadParameter("unknown workflow: %v", workflow)
+		err = trace.BadParameter("unknown workflow: %v", flags.workflow)
 	}
 	if err != nil {
-		log.Fatalf("Workflow %v failed: %v.", workflow, err)
+		log.Fatalf("Workflow %v failed: %v.", flags.workflow, err)
 	}
 
-	log.Printf("Workflow %v complete.", workflow)
+	log.Printf("Workflow %v complete.", flags.workflow)
 }
 
-func parseFlags() (string, string, string, error) {
+type flags struct {
+	// workflow is the name of workflow to run.
+	workflow string
+	// token is the Github auth token.
+	token string
+	// reviewers is the code reviewers map.
+	reviewers string
+	// local is whether workflow runs locally or in Github Actions context.
+	local bool
+	// org is the Github organization for the local mode.
+	org string
+	// repo is the Github repository for the local mode.
+	repo string
+	// prNumber is the Github pull request number for the local mode.
+	prNumber int
+	// branch is the Github backport branch name for the local mode.
+	branch string
+}
+
+func parseFlags() (flags, error) {
 	var (
-		workflow  = flag.String("workflow", "", "specific workflow to run [assign, check, dismiss]")
+		workflow  = flag.String("workflow", "", "specific workflow to run [assign, check, dismiss, backport]")
 		token     = flag.String("token", "", "GitHub authentication token")
 		reviewers = flag.String("reviewers", "", "reviewer assignments")
+		local     = flag.Bool("local", false, "local workflow dry run")
+		org       = flag.String("org", "", "Github organization (local mode only)")
+		repo      = flag.String("repo", "", "Github repository (local mode only)")
+		prNumber  = flag.Int("pr", 0, "Github pull request number (local mode only)")
+		branch    = flag.String("branch", "", "Github backport branch name (local mode only)")
 	)
 	flag.Parse()
 
 	if *workflow == "" {
-		return "", "", "", trace.BadParameter("workflow missing")
+		return flags{}, trace.BadParameter("workflow missing")
 	}
 	if *token == "" {
-		return "", "", "", trace.BadParameter("token missing")
+		return flags{}, trace.BadParameter("token missing")
 	}
-	if *reviewers == "" {
-		return "", "", "", trace.BadParameter("reviewers required for assign and check")
+	if *reviewers == "" && !*local {
+		return flags{}, trace.BadParameter("reviewers required for assign and check")
 	}
 
 	data, err := base64.StdEncoding.DecodeString(*reviewers)
 	if err != nil {
-		return "", "", "", trace.Wrap(err)
+		return flags{}, trace.Wrap(err)
 	}
 
-	return *workflow, *token, string(data), nil
+	return flags{
+		workflow:  *workflow,
+		token:     *token,
+		reviewers: string(data),
+		local:     *local,
+		org:       *org,
+		repo:      *repo,
+		prNumber:  *prNumber,
+		branch:    *branch,
+	}, nil
 }
 
-func createBot(ctx context.Context, token string, reviewers string) (*bot.Bot, error) {
-	gh, err := github.New(ctx, token)
+func createBot(ctx context.Context, flags flags) (*bot.Bot, error) {
+	if flags.local {
+		return createBotLocal(ctx, flags)
+	}
+	gh, err := github.New(ctx, flags.token)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -107,7 +147,7 @@ func createBot(ctx context.Context, token string, reviewers string) (*bot.Bot, e
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	reviewer, err := review.FromString(reviewers)
+	reviewer, err := review.FromString(flags.reviewers)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -119,6 +159,22 @@ func createBot(ctx context.Context, token string, reviewers string) (*bot.Bot, e
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-
 	return b, nil
+}
+
+// createBotLocal creates a local instance of the bot that can be run locally
+// instead of inside Github Actions environment.
+func createBotLocal(ctx context.Context, flags flags) (*bot.Bot, error) {
+	gh, err := github.New(ctx, flags.token)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return bot.New(&bot.Config{
+		GitHub: gh,
+		Environment: &env.Environment{
+			Organization: flags.org,
+			Repository:   flags.repo,
+			Number:       flags.prNumber,
+		},
+	})
 }

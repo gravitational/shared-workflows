@@ -255,6 +255,10 @@ func (f *fakeGithub) GetPullRequest(ctx context.Context, organization string, re
 	return f.pull, nil
 }
 
+func (f *fakeGithub) GetPullRequestWithCommits(ctx context.Context, organization string, repository string, number int) (github.PullRequest, error) {
+	return f.pull, nil
+}
+
 func (f *fakeGithub) ListPullRequests(ctx context.Context, organization string, repository string, state string) ([]github.PullRequest, error) {
 	return nil, nil
 }
