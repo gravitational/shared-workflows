@@ -23,6 +23,7 @@ import (
 	"github.com/gravitational/shared-workflows/bot/internal/env"
 	"github.com/gravitational/shared-workflows/bot/internal/github"
 	"github.com/gravitational/shared-workflows/bot/internal/review"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/stretchr/testify/require"
 )
@@ -227,12 +228,92 @@ func TestDoNotMerge(t *testing.T) {
 	require.Error(t, bot.checkDoNotMerge(context.Background()))
 }
 
+func TestBotLabel(t *testing.T) {
+	testCases := []struct {
+		description    string
+		files          []github.PullRequestFile
+		expectedLabels []string
+	}{
+		{
+			description: "code-only with a release version",
+			files: []github.PullRequestFile{
+				{Name: "file.go"},
+				{Name: "examples/README.md"},
+			},
+			expectedLabels: []string{string(small)},
+		},
+		{
+			description: "docs with a release version",
+			files: []github.PullRequestFile{
+				{
+					Name:      "docs/docs.md",
+					Additions: 105,
+					Deletions: 10,
+				},
+			},
+			expectedLabels: []string{
+				"documentation",
+				string(small),
+				"backport/branch/v12",
+				"backport/branch/v11",
+				"backport/branch/v10",
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.description, func(t *testing.T) {
+
+			rc, _ := review.New(&review.Config{
+				Admins: []string{},
+				CodeReviewers: map[string]review.Reviewer{
+					"bar": {},
+				},
+				CodeReviewersOmit: map[string]bool{},
+				DocsReviewers: map[string]review.Reviewer{
+					"bar": {},
+				},
+				DocsReviewersOmit: make(map[string]bool),
+			})
+
+			b := Bot{
+				c: &Config{
+					GitHub: &fakeGithub{
+						files: tc.files,
+						pull: github.PullRequest{
+							Author: "foo",
+						},
+						orgMembers: map[string]struct{}{
+							"foo": struct{}{},
+							"bar": struct{}{},
+						},
+					},
+					Environment: &env.Environment{
+						Organization: "gravitational",
+						Repository:   "teleport",
+						Number:       42,
+					},
+					Review: rc,
+				},
+			}
+
+			err := b.Label(context.Background())
+			assert.NoError(t, err)
+
+			gh := b.c.GitHub.(*fakeGithub)
+
+			assert.ElementsMatch(t, gh.labels, tc.expectedLabels)
+		})
+	}
+}
+
 type fakeGithub struct {
 	files      []github.PullRequestFile
 	pull       github.PullRequest
 	reviewers  []string
 	reviews    []github.Review
 	orgMembers map[string]struct{}
+	labels     []string
 }
 
 func (f *fakeGithub) RequestReviewers(ctx context.Context, organization string, repository string, number int, reviewers []string) error {
@@ -268,6 +349,7 @@ func (f *fakeGithub) ListFiles(ctx context.Context, organization string, reposit
 }
 
 func (f *fakeGithub) AddLabels(ctx context.Context, organization string, repository string, number int, labels []string) error {
+	f.labels = append(f.labels, labels...)
 	return nil
 }
 
@@ -302,4 +384,8 @@ func (f *fakeGithub) ListComments(ctx context.Context, organization string, repo
 
 func (f *fakeGithub) CreatePullRequest(ctx context.Context, organization string, repository string, title string, head string, base string, body string, draft bool) (int, error) {
 	return 0, nil
+}
+
+func (f *fakeGithub) GetLatestReleaseMajorVersion(ctx context.Context, organization string, repository string) (int, error) {
+	return 12, nil
 }

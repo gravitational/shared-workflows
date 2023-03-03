@@ -29,10 +29,11 @@ import (
 // TestLabel checks that labels are correctly applied to a Pull Request.
 func TestLabel(t *testing.T) {
 	tests := []struct {
-		desc   string
-		branch string
-		files  []github.PullRequestFile
-		labels []string
+		desc               string
+		branch             string
+		files              []github.PullRequestFile
+		latestMajorVersion int
+		labels             []string
 	}{
 		{
 			desc:   "code-only",
@@ -98,20 +99,49 @@ func TestLabel(t *testing.T) {
 			},
 			labels: []string{"ui", string(small)},
 		},
+		{
+			desc:   "code-only with a release version",
+			branch: "foo",
+			files: []github.PullRequestFile{
+				{Name: "file.go"},
+				{Name: "examples/README.md"},
+			},
+			latestMajorVersion: 12,
+			labels:             []string{string(small)},
+		},
+		{
+			desc:   "docs with a release version",
+			branch: "foo",
+			files: []github.PullRequestFile{
+				{
+					Name:      "docs/docs.md",
+					Additions: 105,
+					Deletions: 10,
+				},
+			},
+			latestMajorVersion: 12,
+			labels: []string{
+				"documentation",
+				string(small),
+				"backport/branch/v12",
+				"backport/branch/v11",
+				"backport/branch/v10",
+			},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
 			b := &Bot{
 				c: &Config{
 					Environment: &env.Environment{
-						Organization: "foo",
-						Repository:   "bar",
+						Organization: "gravitational",
+						Repository:   "teleport",
 						Number:       0,
 						UnsafeBase:   test.branch,
 					},
 				},
 			}
-			labels, err := b.labels(context.Background(), test.files)
+			labels, err := b.labels(context.Background(), test.files, test.latestMajorVersion)
 			require.NoError(t, err)
 			require.ElementsMatch(t, labels, test.labels)
 		})

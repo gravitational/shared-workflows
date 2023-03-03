@@ -79,6 +79,10 @@ type Client interface {
 
 	// IsOrgMember checks whether [user] is a member of GitHub orgainzation [org].
 	IsOrgMember(ctx context.Context, user string, org string) (bool, error)
+
+	// GetLatestReleaseMajorVersion gets the major version of the latest release tag of
+	// the provided repo, e.g., 12 for "v12.0.0".
+	GetLatestReleaseMajorVersion(ctx context.Context, organization string, repository string) (int, error)
 }
 
 // Config contains configuration for the bot.

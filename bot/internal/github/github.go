@@ -13,22 +13,24 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-
 package github
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"net/url"
 	"path"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gravitational/trace"
 
 	go_github "github.com/google/go-github/v37/github"
+	"golang.org/x/mod/semver"
 	"golang.org/x/oauth2"
 )
 
@@ -642,6 +644,34 @@ type Job struct {
 
 	// ID of the job.
 	ID int64
+}
+
+// extractMajorVersionFromTagName takes a extracts the major version segment of
+// a Semantic Versioning version string.
+func extractMajorVersionFromTagName(tag string) (int, error) {
+	s := semver.Major(tag)
+	if s == "" {
+		return 0, trace.Wrap(fmt.Errorf("cannot find a major version within tag name %v, which must be formatted using semantic versioning", tag))
+	}
+
+	ret, err := strconv.Atoi(strings.TrimPrefix(s, "v"))
+	if err != nil {
+		return 0, trace.Wrap(err)
+	}
+
+	return ret, nil
+}
+
+// GetLatestReleaseMajorVersion gets the major version of the latest release tag of
+// the provided repo, e.g., 12 for "v12.0.0".
+func (c *Client) GetLatestReleaseMajorVersion(ctx context.Context, organization string, repository string) (int, error) {
+	r, _, err := c.client.Repositories.GetLatestRelease(ctx, organization, repository)
+
+	if err != nil {
+		return 0, trace.Wrap(err)
+	}
+
+	return extractMajorVersionFromTagName(r.GetTagName())
 }
 
 const (

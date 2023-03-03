@@ -18,12 +18,16 @@ package bot
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"strings"
 
 	"github.com/gravitational/shared-workflows/bot/internal/github"
 	"github.com/gravitational/trace"
 )
+
+const backportLabelFormat = "backport/branch/v%v"
+const supportedPreviousVersions = 3 // Includes the current major release
 
 // Label parses the content of the PR (branch name, files, etc) and sets
 // appropriate labels.
@@ -36,7 +40,14 @@ func (b *Bot) Label(ctx context.Context) error {
 		return trace.Wrap(err)
 	}
 
-	labels, err := b.labels(ctx, files)
+	v, err := b.c.GitHub.GetLatestReleaseMajorVersion(ctx,
+		b.c.Environment.Organization,
+		b.c.Environment.Repository)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	labels, err := b.labels(ctx, files, v)
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -56,8 +67,9 @@ func (b *Bot) Label(ctx context.Context) error {
 	return nil
 }
 
-// labels determines which labels should be applied to a PR
-func (b *Bot) labels(ctx context.Context, files []github.PullRequestFile) ([]string, error) {
+// labels determines which labels should be applied to a PR given the current PR
+// files and major version of the latest Teleport release.
+func (b *Bot) labels(ctx context.Context, files []github.PullRequestFile, majorVersion int) ([]string, error) {
 	var labels []string
 
 	labels = append(labels, string(prSize(files)))
@@ -71,6 +83,23 @@ func (b *Bot) labels(ctx context.Context, files []github.PullRequestFile) ([]str
 	for _, file := range files {
 		if strings.HasPrefix(file.Name, "vendor/") {
 			continue
+		}
+
+		docs, _, err := classifyChanges(b.c.Environment, files)
+		if err != nil {
+			return nil, trace.Wrap(err)
+		}
+
+		if docs {
+			labels = append(labels, "documentation")
+
+			// For docs PRs, attach backport labels for the current
+			// major version and the versions we currently support.
+			// This way, we can always remember to backport relevant
+			// docs changes.
+			for i := 0; i < supportedPreviousVersions && majorVersion-i > 0; i++ {
+				labels = append(labels, fmt.Sprintf(backportLabelFormat, majorVersion-i))
+			}
 		}
 
 		for k, v := range prefixes {
@@ -100,7 +129,6 @@ func deduplicate(s []string) []string {
 
 var prefixes = map[string][]string{
 	"bpf/":                {"bpf"},
-	"docs/":               {"documentation"},
 	"rfd/":                {"rfd"},
 	"examples/chart":      {"helm"},
 	"lib/bpf/":            {"bpf"},
