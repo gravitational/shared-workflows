@@ -183,7 +183,7 @@ type PullRequest struct {
 	UnsafeLabels []string
 	// Fork determines if the pull request is from a fork.
 	Fork bool
-	// Commits is a list of commit SHA's for the pull request.
+	// Commits is a list of commit SHAs for the pull request.
 	//
 	// It is only populated if the pull request was fetched using
 	// GetPullRequestWithCommits method.
