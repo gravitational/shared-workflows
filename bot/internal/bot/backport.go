@@ -217,6 +217,11 @@ func (b *Bot) createBackportBranch(ctx context.Context, organization string, rep
 		return trace.Wrap(err)
 	}
 
+	// Checkout the base branch.
+	if err := git("checkout", base); err != nil {
+		return trace.Wrap(err)
+	}
+
 	// Checkout the new backport branch.
 	if err := git("checkout", "-b", newHead); err != nil {
 		return trace.Wrap(err)
@@ -278,7 +283,7 @@ func (b *Bot) workflowLogsURL(ctx context.Context, organization string, reposito
 
 // git will execute the "git" program on disk.
 func git(args ...string) error {
-	log.Println("Running: git", "git", strings.Join(args, " "))
+	log.Println("Running:", "git", strings.Join(args, " "))
 	cmd := exec.Command("git", args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
