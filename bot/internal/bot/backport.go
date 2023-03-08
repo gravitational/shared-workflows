@@ -205,6 +205,8 @@ func findBranches(labels []string) []string {
 // TODO(russjones): Refactor to use go-git (so similar git library) instead of
 // executing git from disk.
 func (b *Bot) createBackportBranch(ctx context.Context, organization string, repository string, number int, base string, pull github.PullRequest, newHead string, git func(...string) error) error {
+	log.Println("--> Backporting to", base, "<--")
+
 	if err := git("config", "--global", "user.name", "github-actions"); err != nil {
 		log.Printf("Failed to set user.name: %v.", err)
 	}
@@ -230,6 +232,11 @@ func (b *Bot) createBackportBranch(ctx context.Context, organization string, rep
 	// Cherry-pick all commits from the PR to the backport branch.
 	for _, commit := range pull.Commits {
 		if err := git("cherry-pick", commit); err != nil {
+			// If cherry-pick fails with conflict, abort it, otherwise we
+			// won't be able to switch branch for the next backport.
+			if errAbrt := git("cherry-pick", "--abort"); errAbrt != nil {
+				return trace.NewAggregate(err, errAbrt)
+			}
 			return trace.Wrap(err)
 		}
 	}
