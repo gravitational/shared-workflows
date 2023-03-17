@@ -214,8 +214,8 @@ func (b *Bot) createBackportBranch(ctx context.Context, organization string, rep
 		log.Printf("Failed to set user.email: %v.", err)
 	}
 
-	// Download base and head from origin (GitHub).
-	if err := git("fetch", "origin", base, pull.UnsafeHead.Ref); err != nil {
+	// Fetch the refs for the base branch and the Github PR.
+	if err := git("fetch", "origin", base, fmt.Sprintf("pull/%d/head", number)); err != nil {
 		return trace.Wrap(err)
 	}
 
