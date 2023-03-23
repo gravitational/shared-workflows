@@ -183,6 +183,11 @@ type PullRequest struct {
 	UnsafeLabels []string
 	// Fork determines if the pull request is from a fork.
 	Fork bool
+	// Commits is a list of commit SHAs for the pull request.
+	//
+	// It is only populated if the pull request was fetched using
+	// GetPullRequestWithCommits method.
+	Commits []string
 }
 
 // Branch is a git Branch.
@@ -232,6 +237,27 @@ type PullRequestFile struct {
 	Additions int
 	// Deletions is the number of lines removed from the file
 	Deletions int
+}
+
+// GetPullRequestWithCommits returns the specified pull request with commits.
+func (c *Client) GetPullRequestWithCommits(ctx context.Context, organization string, repository string, number int) (PullRequest, error) {
+	pull, err := c.GetPullRequest(ctx, organization, repository, number)
+	if err != nil {
+		return PullRequest{}, trace.Wrap(err)
+	}
+
+	commits, _, err := c.client.PullRequests.ListCommits(ctx, organization, repository, number, &go_github.ListOptions{})
+	if err != nil {
+		return PullRequest{}, trace.Wrap(err)
+	}
+
+	for _, commit := range commits {
+		if len(commit.Parents) <= 1 { // Skip merge commits.
+			pull.Commits = append(pull.Commits, *commit.SHA)
+		}
+	}
+
+	return pull, nil
 }
 
 // GetPullRequest returns a specific Pull Request.

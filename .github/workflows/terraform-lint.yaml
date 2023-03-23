@@ -45,3 +45,31 @@ jobs:
         uses: github/codeql-action/upload-sarif@v2
         with:
           sarif_file: results.sarif.json
+  tflint:
+      name: TFLint
+      runs-on: ubuntu-latest
+
+      permissions:
+        contents: read
+
+      steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Cache plugin dir
+        uses: actions/cache@v3
+        with:
+          path: ~/.tflint.d/plugins
+          key: tflint-${{ hashFiles('.tflint.hcl') }}
+
+      - name: Setup TFLint
+        uses: terraform-linters/setup-tflint@v3
+
+      - name: Show version
+        run: tflint --version
+
+      - name: Init TFLint
+        run: tflint --init
+
+      - name: Run TFLint
+        run: tflint -f compact
