@@ -78,7 +78,10 @@ func (b *Bot) Check(ctx context.Context) error {
 		return trace.Wrap(err)
 	}
 
-	tooBig := xlargeRequiresAdminApproval(files)
+	var tooBig bool
+	if !b.c.Environment.IsCloudDeployBranch() {
+		tooBig = xlargeRequiresAdminApproval(files)
+	}
 	if tooBig {
 		comment := fmt.Sprintf("@%v - this PR will require admin approval to merge due to its size. "+
 			"Consider breaking it up into a series smaller changes.", b.c.Environment.Author)

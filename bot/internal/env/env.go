@@ -34,6 +34,10 @@ const (
 	CoreTeam     = "Core"
 	CloudTeam    = "Cloud"
 	InternalTeam = "Internal"
+
+	// Cloud Deploy Branches
+	CloudProdBranch    = "prod"
+	CloudStagingBranch = "staging"
 )
 
 // Environment is the execution environment the workflow is running in.
@@ -117,6 +121,13 @@ func New() (*Environment, error) {
 		UnsafeHead:   event.PullRequest.UnsafeHead.UnsafeRef,
 		UnsafeBase:   event.PullRequest.UnsafeBase.UnsafeRef,
 	}, nil
+}
+
+// IsCloudDeployBranch returns true when the environment's repository is cloud
+// and the base branch is a deploy branch (e.g. staging or prod).
+func (e *Environment) IsCloudDeployBranch() bool {
+	return e.Repository == CloudRepo &&
+		(e.UnsafeBase == CloudProdBranch || e.UnsafeBase == CloudStagingBranch)
 }
 
 func readEvent() (*Event, error) {
