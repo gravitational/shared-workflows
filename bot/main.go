@@ -37,11 +37,11 @@ func main() {
 		log.Fatalf("Failed to parse flags: %v.", err)
 	}
 
-	// Cancel run if it takes longer than 1 minute.
+	// Cancel run if it takes longer than 5 minutes.
 	//
 	// To re-run a job go to the Actions tab in the Github repo, go to the run
 	// that failed, and click the "Re-run all jobs" button in the top right corner.
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
 	b, err := createBot(ctx, flags)
