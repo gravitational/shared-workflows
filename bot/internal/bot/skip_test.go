@@ -96,8 +96,12 @@ func TestSkipItems(t *testing.T) {
 			b := &Bot{
 				c: &Config{
 					Environment: &env.Environment{},
-					GitHub:      &fakeGithub{comments: test.comments},
-					Review:      r,
+					GitHub: &fakeGithub{
+						comments: map[int][]github.Comment{
+							0: test.comments,
+						},
+					},
+					Review: r,
 				},
 			}
 			skip, err := b.skipItems(context.Background(), "/testPrefix")

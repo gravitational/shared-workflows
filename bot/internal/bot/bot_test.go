@@ -316,7 +316,9 @@ type fakeGithub struct {
 	orgMembers  map[string]struct{}
 	ref         github.Reference
 	commitFiles []string
-	comments    []github.Comment
+
+	// Associates a slice of comment texts with a PR number
+	comments map[int][]github.Comment
 }
 
 func (f *fakeGithub) RequestReviewers(ctx context.Context, organization string, repository string, number int, reviewers []string) error {
@@ -376,12 +378,23 @@ func (f *fakeGithub) IsOrgMember(ctx context.Context, user string, org string) (
 	return member, nil
 }
 
-func (f *fakeGithub) CreateComment(ctx context.Context, organization string, repository string, number int, comment string) error {
+func (f *fakeGithub) CreateComment(ctx context.Context, organization string, repository string, number int, commentMsg string) error {
+	if f.comments == nil {
+		f.comments = make(map[int][]github.Comment)
+	}
+	if _, ok := f.comments[number]; !ok {
+		f.comments[number] = []github.Comment{}
+	}
+	f.comments[number] = append(f.comments[number], comment("bot", commentMsg))
 	return nil
 }
 
 func (f *fakeGithub) ListComments(ctx context.Context, organization string, repository string, number int) ([]github.Comment, error) {
-	return f.comments, nil
+	c, ok := f.comments[number]
+	if ok {
+		return c, nil
+	}
+	return nil, nil
 }
 
 func (f *fakeGithub) CreatePullRequest(ctx context.Context, organization string, repository string, title string, head string, base string, body string, draft bool) (int, error) {
