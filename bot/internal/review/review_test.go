@@ -295,6 +295,38 @@ func TestGetCodeReviewers(t *testing.T) {
 			setB:       []string{"5"},
 		},
 		{
+			desc: "normal (teleport.e)",
+			assignments: &Assignments{
+				c: &Config{
+					// Code.
+					CodeReviewers: map[string]Reviewer{
+						"1": {Team: "Core", Owner: true},
+						"2": {Team: "Core", Owner: true},
+						"3": {Team: "Core", Owner: true},
+						"4": {Team: "Core", Owner: false},
+						"5": {Team: "Core", Owner: false},
+						"6": {Team: "Core", Owner: false},
+						"7": {Team: "Internal", Owner: false},
+					},
+					CodeReviewersOmit: map[string]bool{
+						"6": true,
+					},
+					// Docs.
+					DocsReviewers:     map[string]Reviewer{},
+					DocsReviewersOmit: map[string]bool{},
+					// Admins.
+					Admins: []string{
+						"1",
+						"2",
+					},
+				},
+			},
+			repository: "teleport.e",
+			author:     "4",
+			setA:       []string{"1", "2", "3"},
+			setB:       []string{"5"},
+		},
+		{
 			desc: "docs reviewers submitting code changes are treated as internal authors",
 			assignments: &Assignments{
 				c: &Config{
