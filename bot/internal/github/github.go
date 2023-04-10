@@ -235,6 +235,17 @@ func (c *Client) ListReviewers(ctx context.Context, organization string, reposit
 	return reviewers, nil
 }
 
+type ChangeStatus int
+
+const (
+	StatusUnknown ChangeStatus = iota
+	StatusUnchanged
+	StatusModified
+	StatusRenamed
+	StatusAdded
+	StatusRemoved
+)
+
 // PullRequestFile is a file that was modified in a pull request.
 type PullRequestFile struct {
 	// Name is the name of the file.
@@ -243,6 +254,8 @@ type PullRequestFile struct {
 	Additions int
 	// Deletions is the number of lines removed from the file
 	Deletions int
+	// Status is the kind of change this PR makes to the file
+	Status ChangeStatus
 }
 
 // PullRequestFiles is a list of pull request files.
@@ -400,10 +413,31 @@ func (c *Client) ListFiles(ctx context.Context, organization string, repository 
 		}
 
 		for _, file := range page {
+
+			// Categorize changes to file based on the scheme used by the GitHub
+			// API.
+			// See:
+			// https://docs.github.com/en/rest/pulls/pulls?apiVersion=2022-11-28#list-pull-requests-files
+			var status ChangeStatus
+			switch file.GetStatus() {
+			case "added":
+				status = StatusAdded
+			case "unchanged":
+				status = StatusUnchanged
+			case "removed":
+				status = StatusRemoved
+			case "modified", "changed":
+				status = StatusModified
+			case "renamed":
+				status = StatusRenamed
+			default:
+				status = StatusUnknown
+			}
 			files = append(files, PullRequestFile{
 				Name:      file.GetFilename(),
 				Additions: file.GetAdditions(),
 				Deletions: file.GetDeletions(),
+				Status:    status,
 			})
 		}
 
