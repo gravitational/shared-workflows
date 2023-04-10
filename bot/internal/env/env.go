@@ -27,8 +27,9 @@ import (
 
 const (
 	// Repo slugs
-	CloudRepo    = "cloud"
-	TeleportRepo = "teleport"
+	CloudRepo     = "cloud"
+	TeleportRepo  = "teleport"
+	TeleportERepo = "teleport.e"
 
 	// Teams
 	CoreTeam     = "Core"

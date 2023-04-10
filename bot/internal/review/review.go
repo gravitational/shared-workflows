@@ -370,7 +370,7 @@ func (r *Assignments) checkInternalCodeReviews(e *env.Environment, reviews []git
 	// Teams do their own internal reviews
 	var team string
 	switch e.Repository {
-	case env.TeleportRepo:
+	case env.TeleportRepo, env.TeleportERepo:
 		team = env.CoreTeam
 	case env.CloudRepo:
 		team = env.CloudTeam
