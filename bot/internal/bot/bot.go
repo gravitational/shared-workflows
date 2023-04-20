@@ -188,10 +188,6 @@ func isReleaseBranch(branch string) bool {
 	return strings.HasPrefix(branch, "branch/")
 }
 
-func isBotBackportBranch(branch string) bool {
-	return strings.HasPrefix(branch, "bot/backport")
-}
-
 func (b *Bot) isInternal(ctx context.Context) (bool, error) {
 	// check fast-path first - if the author is explicitly listed as
 	// an internal reviewer then we don't need to make a network call

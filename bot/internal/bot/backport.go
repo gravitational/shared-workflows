@@ -59,17 +59,6 @@ func (b *Bot) Backport(ctx context.Context) error {
 		b.c.Environment.Repository,
 		b.c.Environment.Number)
 
-	// If this workflow is running on a release branch, then it means
-	// a backport was merged and there's no need to open additional
-	// backport PRs. We can safely delete the remote branch though,
-	// because we know this is an internal contributor's merged PR.
-	if isReleaseBranch(b.c.Environment.UnsafeBase) &&
-		isBotBackportBranch(b.c.Environment.UnsafeHead) &&
-		!pull.Fork {
-		log.Printf("backport merged to %v, deleting branch %v", b.c.Environment.UnsafeBase, b.c.Environment.UnsafeHead)
-		return trace.Wrap(git("push", "origin", "--delete", b.c.Environment.UnsafeHead))
-	}
-
 	// Extract backport branches names from labels attached to the Pull
 	// Request. If no backports were requested, return right away.
 	branches := findBranches(pull.UnsafeLabels)
