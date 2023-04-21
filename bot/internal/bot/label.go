@@ -73,7 +73,7 @@ func (b *Bot) labels(ctx context.Context, files []github.PullRequestFile) ([]str
 			continue
 		}
 
-		for k, v := range prefixes {
+		for k, v := range prefixes[b.c.Environment.Repository] {
 			if strings.HasPrefix(file.Name, k) {
 				log.Printf("Label: Found prefix %v, attaching labels: %v.", k, v)
 				labels = append(labels, v...)
@@ -98,22 +98,35 @@ func deduplicate(s []string) []string {
 	return out
 }
 
-var prefixes = map[string][]string{
-	"bpf/":                {"bpf"},
-	"docs/":               {"documentation"},
-	"rfd/":                {"rfd"},
-	"examples/chart":      {"helm"},
-	"lib/bpf/":            {"bpf"},
-	"lib/events":          {"audit-log"},
-	"lib/kube":            {"kubernetes-access"},
-	"lib/tbot/":           {"machine-id"},
-	"lib/srv/desktop":     {"desktop-access"},
-	"lib/srv/desktop/rdp": {"desktop-access", "rdp"},
-	"lib/srv/app/":        {"application-access"},
-	"lib/srv/db":          {"database-access"},
-	"lib/web/desktop.go":  {"desktop-access"},
-	"tool/tctl/":          {"tctl"},
-	"tool/tsh/":           {"tsh"},
-	"tool/tbot/":          {"machine-id"},
-	"web/":                {"ui"},
+var prefixes = map[string]map[string][]string{
+	"teleport": {
+		"bpf/":                {"bpf"},
+		"docs/":               {"documentation"},
+		"rfd/":                {"rfd"},
+		"examples/chart":      {"helm"},
+		"lib/bpf/":            {"bpf"},
+		"lib/events":          {"audit-log"},
+		"lib/kube":            {"kubernetes-access"},
+		"lib/tbot/":           {"machine-id"},
+		"lib/srv/desktop":     {"desktop-access"},
+		"lib/srv/desktop/rdp": {"desktop-access", "rdp"},
+		"lib/srv/app/":        {"application-access"},
+		"lib/srv/db":          {"database-access"},
+		"lib/srv/discovery":   {"discovery"},
+		"lib/web/desktop.go":  {"desktop-access"},
+		"tool/tctl/":          {"tctl"},
+		"tool/tsh/":           {"tsh"},
+		"tool/tbot/":          {"machine-id"},
+		"web/":                {"ui"},
+	},
+	"teleport.e": {
+		"rfd/":             {"rfd"},
+		"lib/devicetrust/": {"device-trust"},
+		"lib/idp/saml":     {"application-access", "idp"},
+		"lib/loginrule/":   {"login-rules"},
+		"lib/okta/":        {"application-access"},
+		"lib/plugins/":     {"plugins"},
+		"tool/tctl/":       {"tctl"},
+		"web/":             {"ui"},
+	},
 }
