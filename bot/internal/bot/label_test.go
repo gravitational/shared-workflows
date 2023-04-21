@@ -30,12 +30,14 @@ import (
 func TestLabel(t *testing.T) {
 	tests := []struct {
 		desc   string
+		repo   string
 		branch string
 		files  []github.PullRequestFile
 		labels []string
 	}{
 		{
 			desc:   "code-only",
+			repo:   "teleport",
 			branch: "foo",
 			files: []github.PullRequestFile{
 				{Name: "file.go"},
@@ -45,6 +47,7 @@ func TestLabel(t *testing.T) {
 		},
 		{
 			desc:   "docs",
+			repo:   "teleport",
 			branch: "foo",
 			files: []github.PullRequestFile{
 				{
@@ -57,6 +60,7 @@ func TestLabel(t *testing.T) {
 		},
 		{
 			desc:   "helm",
+			repo:   "teleport",
 			branch: "foo",
 			files: []github.PullRequestFile{
 				{
@@ -68,6 +72,7 @@ func TestLabel(t *testing.T) {
 		},
 		{
 			desc:   "docs-and-helm",
+			repo:   "teleport",
 			branch: "foo",
 			files: []github.PullRequestFile{
 				{Name: "docs/docs.md"},
@@ -77,6 +82,7 @@ func TestLabel(t *testing.T) {
 		},
 		{
 			desc:   "docs-and-backport",
+			repo:   "teleport",
 			branch: "branch/foo",
 			files: []github.PullRequestFile{
 				{
@@ -89,6 +95,7 @@ func TestLabel(t *testing.T) {
 		},
 		{
 			desc:   "web only",
+			repo:   "teleport",
 			branch: "foo",
 			files: []github.PullRequestFile{
 				{
@@ -98,6 +105,38 @@ func TestLabel(t *testing.T) {
 			},
 			labels: []string{"ui", string(small)},
 		},
+		{
+			desc:   "teleport.e",
+			repo:   "teleport.e",
+			branch: "foo",
+			files: []github.PullRequestFile{
+				{
+					Name:      "lib/devicetrust/file.go",
+					Additions: 1,
+				},
+				{
+					Name:      "lib/okta/file.go",
+					Additions: 1,
+				},
+			},
+			labels: []string{"device-trust", "application-access", string(small)},
+		},
+		{
+			desc:   "labels for repo don't exist",
+			repo:   "doesnt-exist",
+			branch: "foo",
+			files: []github.PullRequestFile{
+				{
+					Name:      "lib/devicetrust/file.go",
+					Additions: 1,
+				},
+				{
+					Name:      "lib/okta/file.go",
+					Additions: 1,
+				},
+			},
+			labels: []string{string(small)},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
@@ -105,7 +144,7 @@ func TestLabel(t *testing.T) {
 				c: &Config{
 					Environment: &env.Environment{
 						Organization: "foo",
-						Repository:   "bar",
+						Repository:   test.repo,
 						Number:       0,
 						UnsafeBase:   test.branch,
 					},
