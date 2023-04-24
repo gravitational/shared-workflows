@@ -20,7 +20,9 @@ import (
 	"context"
 	"encoding/base64"
 	"flag"
+	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"github.com/gravitational/shared-workflows/bot/internal/bot"
@@ -31,9 +33,22 @@ import (
 	"github.com/gravitational/trace"
 )
 
+const (
+	assignWorkflow   = "assign"
+	checkWorkflow    = "check"
+	dismissWorkflow  = "dismiss"
+	labelWorkflow    = "label"
+	backportWorkflow = "backport"
+)
+
+var allWorkflows = []string{assignWorkflow, checkWorkflow, dismissWorkflow, labelWorkflow, backportWorkflow}
+
 func main() {
-	flags, err := parseFlags()
-	if err != nil {
+	flags, err := parseFlags(os.Args[1:])
+	switch {
+	case err == flag.ErrHelp:
+		os.Exit(0)
+	case err != nil:
 		log.Fatalf("Failed to parse flags: %v.", err)
 	}
 
@@ -52,15 +67,15 @@ func main() {
 	log.Printf("Running %v.", flags.workflow)
 
 	switch flags.workflow {
-	case "assign":
+	case assignWorkflow:
 		err = b.Assign(ctx)
-	case "check":
+	case checkWorkflow:
 		err = b.Check(ctx)
-	case "dismiss":
+	case dismissWorkflow:
 		err = b.Dismiss(ctx)
-	case "label":
+	case labelWorkflow:
 		err = b.Label(ctx)
-	case "backport":
+	case backportWorkflow:
 		if flags.local {
 			err = b.BackportLocal(ctx, flags.branch)
 		} else {
@@ -95,9 +110,10 @@ type flags struct {
 	branch string
 }
 
-func parseFlags() (flags, error) {
+func parseFlags(args []string) (flags, error) {
+	var flag flag.FlagSet
 	var (
-		workflow  = flag.String("workflow", "", "specific workflow to run [assign, check, dismiss, backport]")
+		workflow  = flag.String("workflow", "", fmt.Sprintf("specific workflow to run %v", allWorkflows))
 		token     = flag.String("token", "", "GitHub authentication token")
 		reviewers = flag.String("reviewers", "", "reviewer assignments")
 		local     = flag.Bool("local", false, "local workflow dry run")
@@ -106,7 +122,11 @@ func parseFlags() (flags, error) {
 		prNumber  = flag.Int("pr", 0, "Github pull request number (local mode only)")
 		branch    = flag.String("branch", "", "Github backport branch name (local mode only)")
 	)
-	flag.Parse()
+
+	if err := flag.Parse(args); err != nil {
+		// Don't wrap this error so that we can exit appropriately in the caller.
+		return flags{}, err
+	}
 
 	if *workflow == "" {
 		return flags{}, trace.BadParameter("workflow missing")
@@ -114,13 +134,19 @@ func parseFlags() (flags, error) {
 	if *token == "" {
 		return flags{}, trace.BadParameter("token missing")
 	}
-	if *reviewers == "" && !*local {
+
+	workflowNeedsReviewers := (*workflow == assignWorkflow || *workflow == checkWorkflow) && !*local
+	if workflowNeedsReviewers && *reviewers == "" {
 		return flags{}, trace.BadParameter("reviewers required for assign and check")
 	}
 
-	data, err := base64.StdEncoding.DecodeString(*reviewers)
-	if err != nil {
-		return flags{}, trace.Wrap(err)
+	var data []byte
+	if workflowNeedsReviewers {
+		var err error
+		data, err = base64.StdEncoding.DecodeString(*reviewers)
+		if err != nil {
+			return flags{}, trace.Wrap(err)
+		}
 	}
 
 	return flags{
@@ -147,9 +173,12 @@ func createBot(ctx context.Context, flags flags) (*bot.Bot, error) {
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	reviewer, err := review.FromString(flags.reviewers)
-	if err != nil {
-		return nil, trace.Wrap(err)
+	var reviewer *review.Assignments
+	if flags.reviewers != "" {
+		reviewer, err = review.FromString(flags.reviewers)
+		if err != nil {
+			return nil, trace.Wrap(err)
+		}
 	}
 	b, err := bot.New(&bot.Config{
 		GitHub:      gh,
