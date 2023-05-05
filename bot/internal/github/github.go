@@ -18,12 +18,14 @@ package github
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/http"
 	"net/url"
 	"path"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gravitational/trace"
@@ -633,6 +635,62 @@ func (c *Client) ListWorkflowJobs(ctx context.Context, organization string, repo
 	}
 
 	return jobs, nil
+}
+
+// Reference is a Git reference (name for a SHA).
+type Reference struct {
+	Name string
+	SHA  string
+}
+
+// ErrTruncatedTree is returned when the truncated field of a
+// Github *Tree is true when returned from the GitHub API,
+// meaning the returned tree is incomplete. Although this is a
+// rare error because the GitHub API supports up wo 100K tree entries.
+var ErrTruncatedTree = errors.New("truncated tree")
+
+// GetRef returns a Reference representing the provided ref name.
+func (c *Client) GetRef(ctx context.Context, organization string, repository string, ref string) (Reference, error) {
+	r, _, err := c.client.Git.GetRef(ctx, organization, repository, ref)
+	if err != nil {
+		return Reference{}, trace.Wrap(err)
+	}
+	return Reference{Name: r.GetRef(), SHA: r.Object.GetSHA()}, nil
+}
+
+// ListCommitFiles returns all filenames recursively from the tree at a
+// given commit SHA whose prefix matches pathPrefix. All filenames are
+// returned when pathPrefix is empty. An error is returned when the commit
+// doesn't exist, and ErrTruncatedTree is returned when the response
+// from Github was truncated (tree contains more than 100,000 entries).
+// https://github.com/orgs/community/discussions/23748#discussioncomment-3241615
+func (c *Client) ListCommitFiles(ctx context.Context, organization string, repository string, commitSHA string, pathPrefix string) ([]string, error) {
+	// cloud has 4K entries and teleport 8K so we have a lot of room to pull recursively in one request.
+	tree, _, err := c.client.Git.GetTree(ctx, organization, repository, commitSHA, true)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	if tree.Truncated != nil && *tree.Truncated {
+		return nil, ErrTruncatedTree
+	}
+
+	return findTreeBlobEntries(tree, pathPrefix), nil
+}
+
+// findTreeBlobEntries returns all blob entries in tree whose path matches pathPrefix.
+// All blob entries are returned when pathPrefix is empty. Called bby GetCommitFilenames.
+func findTreeBlobEntries(tree *go_github.Tree, pathPrefix string) []string {
+	var files []string
+	for _, entry := range tree.Entries {
+		if entry.Path == nil || entry.Type == nil || *entry.Type != "blob" {
+			continue
+		}
+		if len(pathPrefix) == 0 || strings.HasPrefix(*entry.Path, pathPrefix) {
+			files = append(files, *entry.Path)
+		}
+	}
+	return files
 }
 
 // Job is a job within a workflow run.
