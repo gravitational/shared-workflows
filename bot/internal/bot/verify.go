@@ -14,15 +14,21 @@ import (
 	"github.com/gravitational/trace"
 )
 
-// migrationConfig enables the DB migration verification for a repo/path.
-//   map[repo]: [...path]
-var migrationConfig = map[string][]string{
-	env.CloudRepo: []string{"db/salescenter/migrations"},
+// Verify is a catch-all for verifying the PR doesn't have any issues.
+func (b *Bot) Verify(ctx context.Context) error {
+	switch b.c.Environment.Repository {
+	case env.CloudRepo:
+		err := b.verifyCloud(ctx)
+		if err != nil {
+			return trace.Wrap(err)
+		}
+	}
+	return nil
 }
 
-// Verify is a catch-all for verifying the PR doesn't have any issues.
+// verifyCloud runs verification checks for cloud repos.
 // E.g. it is used to verify DB migration files are ordered properly in the Cloud repo.
-func (b *Bot) Verify(ctx context.Context) error {
+func (b *Bot) verifyCloud(ctx context.Context) error {
 	// exec DB migration verification
 	for _, path := range migrationConfig[b.c.Environment.Repository] {
 		err := b.verifyDBMigration(ctx, path)
@@ -31,6 +37,12 @@ func (b *Bot) Verify(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+// migrationConfig enables the DB migration verification for a repo/path.
+//   map[repo]: [...path]
+var migrationConfig = map[string][]string{
+	env.CloudRepo: []string{"db/salescenter/migrations"},
 }
 
 // verifyDBMigration ensures the DB migration files in a PR have a timestamp
