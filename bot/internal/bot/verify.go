@@ -132,7 +132,7 @@ func parseMigrationFileIDs(pathPrefix string, files []string) ([]int, error) {
 	return ids, nil
 }
 
-// minMigrationFileID is used to valid migration file timestamps
+// minMigrationFileID is used to validate migration file timestamps
 const minMigrationFileID = 200000000000
 
 // parseMigrationFileID returns the ID portion of a Cloud DB migration file.
