@@ -229,11 +229,13 @@ func TestDoNotMerge(t *testing.T) {
 }
 
 type fakeGithub struct {
-	files      []github.PullRequestFile
-	pull       github.PullRequest
-	reviewers  []string
-	reviews    []github.Review
-	orgMembers map[string]struct{}
+	files       []github.PullRequestFile
+	pull        github.PullRequest
+	reviewers   []string
+	reviews     []github.Review
+	orgMembers  map[string]struct{}
+	ref         github.Reference
+	commitFiles []string
 }
 
 func (f *fakeGithub) RequestReviewers(ctx context.Context, organization string, repository string, number int, reviewers []string) error {
@@ -303,4 +305,12 @@ func (f *fakeGithub) ListComments(ctx context.Context, organization string, repo
 
 func (f *fakeGithub) CreatePullRequest(ctx context.Context, organization string, repository string, title string, head string, base string, body string, draft bool) (int, error) {
 	return 0, nil
+}
+
+func (f *fakeGithub) GetRef(ctx context.Context, organization string, repository string, ref string) (github.Reference, error) {
+	return f.ref, nil
+}
+
+func (f *fakeGithub) ListCommitFiles(ctx context.Context, organization string, repository string, commitSHA string, pathPrefix string) ([]string, error) {
+	return f.commitFiles, nil
 }

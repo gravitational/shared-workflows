@@ -79,6 +79,12 @@ type Client interface {
 
 	// IsOrgMember checks whether [user] is a member of GitHub orgainzation [org].
 	IsOrgMember(ctx context.Context, user string, org string) (bool, error)
+
+	// GetRef returns a Reference representing the provided ref name.
+	GetRef(ctx context.Context, organization string, repository string, ref string) (github.Reference, error)
+
+	// ListCommitFiles returns all filenames recursively from the tree at a given commit SHA whose prefix matches pathPrefix.
+	ListCommitFiles(ctx context.Context, organization string, repository string, sha string, path string) ([]string, error)
 }
 
 // Config contains configuration for the bot.

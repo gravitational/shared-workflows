@@ -66,6 +66,8 @@ func main() {
 		} else {
 			err = b.Backport(ctx)
 		}
+	case "verify":
+		err = b.Verify(ctx)
 	default:
 		err = trace.BadParameter("unknown workflow: %v", flags.workflow)
 	}
