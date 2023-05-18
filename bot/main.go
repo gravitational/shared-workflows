@@ -68,6 +68,8 @@ func main() {
 		}
 	case "verify":
 		err = b.Verify(ctx)
+	case "exclude-flakes":
+		err = b.ExcludeFlakes(ctx)
 	default:
 		err = trace.BadParameter("unknown workflow: %v", flags.workflow)
 	}

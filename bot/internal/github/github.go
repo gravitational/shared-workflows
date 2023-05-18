@@ -34,6 +34,10 @@ import (
 	"golang.org/x/oauth2"
 )
 
+// OutputEnv is the name of the environment variable for
+// output paramters in GitHubActions.
+const OutputEnv = "GITHUB_OUTPUT"
+
 type Client struct {
 	client *go_github.Client
 }
@@ -561,8 +565,15 @@ func (c *Client) CreateComment(ctx context.Context, organization string, reposit
 	return nil
 }
 
-// ListComments lists all comemnts on an issue or PR.
-func (c *Client) ListComments(ctx context.Context, organization string, repository string, number int) ([]string, error) {
+// Comment represents an "issue comment" on a GitHub issue or pull request.
+// This does not include comments that are part of reviews.
+type Comment struct {
+	Author string // the GitHub username of the author
+	Body   string // the text of the comment
+}
+
+// ListComments lists all comments on an issue or PR.
+func (c *Client) ListComments(ctx context.Context, organization string, repository string, number int) ([]Comment, error) {
 	comments, _, err := c.client.Issues.ListComments(ctx,
 		organization,
 		repository,
@@ -573,10 +584,11 @@ func (c *Client) ListComments(ctx context.Context, organization string, reposito
 		return nil, trace.Wrap(err)
 	}
 
-	s := make([]string, len(comments))
+	s := make([]Comment, len(comments))
 	for i, c := range comments {
-		if c.Body != nil {
-			s[i] = *c.Body
+		s[i].Body = c.GetBody()
+		if u := c.GetUser(); u != nil {
+			s[i].Author = u.GetLogin()
 		}
 	}
 
