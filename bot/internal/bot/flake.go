@@ -50,6 +50,7 @@ func (b *Bot) testsToSkip(ctx context.Context) ([]string, error) {
 	admins := b.c.Review.GetAdminCheckers(b.c.Environment.Author)
 	for _, c := range comments {
 		if !contains(admins, c.Author) {
+			log.Printf("ignoring comment from non-admin %v", c.Author)
 			continue
 		}
 		if strings.HasPrefix(c.Body, skipPrefix) {
