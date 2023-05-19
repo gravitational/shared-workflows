@@ -236,6 +236,7 @@ type fakeGithub struct {
 	orgMembers  map[string]struct{}
 	ref         github.Reference
 	commitFiles []string
+	comments    []github.Comment
 }
 
 func (f *fakeGithub) RequestReviewers(ctx context.Context, organization string, repository string, number int, reviewers []string) error {
@@ -299,8 +300,8 @@ func (f *fakeGithub) CreateComment(ctx context.Context, organization string, rep
 	return nil
 }
 
-func (f *fakeGithub) ListComments(ctx context.Context, organization string, repository string, number int) ([]string, error) {
-	return nil, nil
+func (f *fakeGithub) ListComments(ctx context.Context, organization string, repository string, number int) ([]github.Comment, error) {
+	return f.comments, nil
 }
 
 func (f *fakeGithub) CreatePullRequest(ctx context.Context, organization string, repository string, title string, head string, base string, body string, draft bool) (int, error) {

@@ -72,3 +72,14 @@ See [internal/bot/label.go#L99](internal/bot/label.go#L99) for the complete list
 Will create backport Pull Requests (if requested) when a Pull Request is merged.
 
 The branches targeted by the backports are controlled by the `backport/*` labels
+
+### verify
+
+Checks that the PR meets specific requirements.
+
+For example, ensures that cloud migrations have a valid timestamp.
+
+### exclude-flakes
+
+Looks at PR comments to determine which Go tests can be omitted from flaky
+test detection for the specified PR.

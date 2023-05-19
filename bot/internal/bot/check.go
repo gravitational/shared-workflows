@@ -93,7 +93,14 @@ func (b *Bot) Check(ctx context.Context) error {
 			b.c.Environment.Repository,
 			b.c.Environment.Number,
 		)
-		if !contains(comments, comment) {
+		commentExists := false
+		for _, c := range comments {
+			if c.Body == comment {
+				commentExists = true
+				break
+			}
+		}
+		if !commentExists {
 			if err := b.c.GitHub.CreateComment(ctx,
 				b.c.Environment.Organization,
 				b.c.Environment.Repository,

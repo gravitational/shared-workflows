@@ -296,7 +296,7 @@ func (r *Assignments) getCodeReviewerSets(e *env.Environment) ([]string, []strin
 func (r *Assignments) CheckExternal(author string, reviews []github.Review) error {
 	log.Printf("Check: Found external author %q.", author)
 
-	reviewers := r.getAdminCheckers(author)
+	reviewers := r.GetAdminCheckers(author)
 
 	if checkN(reviewers, reviews) > 1 {
 		return nil
@@ -311,13 +311,13 @@ func (r *Assignments) CheckInternal(e *env.Environment, reviews []github.Review,
 	log.Printf("Check: Found internal author %v.", e.Author)
 
 	// Skip checks if admins have approved.
-	if check(r.getAdminCheckers(e.Author), reviews) {
+	if check(r.GetAdminCheckers(e.Author), reviews) {
 		return nil
 	}
 
 	if code && large {
 		log.Println("Check: Detected large PR, requiring admin approval")
-		if !check(r.getAdminCheckers(e.Author), reviews) {
+		if !check(r.GetAdminCheckers(e.Author), reviews) {
 			return trace.BadParameter("this PR is large and requires admin approval to merge")
 		}
 	}
@@ -344,7 +344,7 @@ func (r *Assignments) CheckInternal(e *env.Environment, reviews []github.Review,
 	// Strange state, an empty commit? Check admins.
 	case !docs && !code:
 		log.Printf("Check: Found no docs or code changes.")
-		if checkN(r.getAdminCheckers(e.Author), reviews) < 2 {
+		if checkN(r.GetAdminCheckers(e.Author), reviews) < 2 {
 			return trace.BadParameter("requires two admin approvals")
 		}
 	}
@@ -392,8 +392,8 @@ func (r *Assignments) checkInternalCodeReviews(e *env.Environment, reviews []git
 	return trace.BadParameter("at least one approval required from each set %v %v", setA, setB)
 }
 
-// getAdminCheckers returns list of admins approvers.
-func (r *Assignments) getAdminCheckers(author string) []string {
+// GetAdminCheckers returns list of admins approvers.
+func (r *Assignments) GetAdminCheckers(author string) []string {
 	var reviewers []string
 	for _, v := range r.c.Admins {
 		if v == author {
