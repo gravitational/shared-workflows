@@ -574,25 +574,41 @@ type Comment struct {
 
 // ListComments lists all comments on an issue or PR.
 func (c *Client) ListComments(ctx context.Context, organization string, repository string, number int) ([]Comment, error) {
-	comments, _, err := c.client.Issues.ListComments(ctx,
-		organization,
-		repository,
-		number,
-		&go_github.IssueListCommentsOptions{},
-	)
-	if err != nil {
-		return nil, trace.Wrap(err)
+	var result []Comment
+
+	opts := &go_github.IssueListOptions{
+		ListOptions: go_github.ListOptions{
+			Page:    0,
+			PerPage: perPage,
+		},
 	}
 
-	s := make([]Comment, len(comments))
-	for i, c := range comments {
-		s[i].Body = c.GetBody()
-		if u := c.GetUser(); u != nil {
-			s[i].Author = u.GetLogin()
+	for {
+		comments, resp, err := c.client.Issues.ListComments(ctx,
+			organization,
+			repository,
+			number,
+			&go_github.IssueListCommentsOptions{},
+		)
+		if err != nil {
+			return nil, trace.Wrap(err)
 		}
+
+		for _, comment := range comments {
+			result = append(result, Comment{
+				Body:   comment.GetBody(),
+				Author: comment.GetUser().GetLogin(),
+			})
+		}
+
+		if resp.NextPage == 0 {
+			break
+		}
+
+		opts.Page = resp.NextPage
 	}
 
-	return s, nil
+	return result, nil
 }
 
 // CreatePullRequest will create a Pull Request.
