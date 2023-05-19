@@ -2,6 +2,7 @@ package bot
 
 import (
 	"context"
+	"log"
 	"os"
 	"strings"
 
@@ -24,8 +25,14 @@ func (b *Bot) ExcludeFlakes(ctx context.Context) error {
 		return trace.Wrap(err)
 	}
 
+	log.Printf("tests to skip: %v", strings.Join(skip, " "))
+
+	output := "FLAKE_SKIP=" + strings.Join(skip, " ")
 	outfile := os.Getenv(github.OutputEnv)
-	err = os.WriteFile(outfile, []byte("FLAKE_SKIP="+strings.Join(skip, " ")), 0644)
+	err = os.WriteFile(outfile, []byte(output), 0644)
+
+	log.Printf("wrote %q to %v", output, outfile)
+
 	return trace.Wrap(err)
 }
 
