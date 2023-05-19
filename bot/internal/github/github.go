@@ -570,6 +570,9 @@ func (c *Client) CreateComment(ctx context.Context, organization string, reposit
 type Comment struct {
 	Author string // the GitHub username of the author
 	Body   string // the text of the comment
+
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // ListComments lists all comments on an issue or PR.
@@ -596,8 +599,10 @@ func (c *Client) ListComments(ctx context.Context, organization string, reposito
 
 		for _, comment := range comments {
 			result = append(result, Comment{
-				Body:   comment.GetBody(),
-				Author: comment.GetUser().GetLogin(),
+				Body:      comment.GetBody(),
+				Author:    comment.GetUser().GetLogin(),
+				CreatedAt: comment.GetCreatedAt(),
+				UpdatedAt: comment.GetUpdatedAt(),
 			})
 		}
 

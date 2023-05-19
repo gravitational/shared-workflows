@@ -53,6 +53,12 @@ func (b *Bot) testsToSkip(ctx context.Context) ([]string, error) {
 			log.Printf("ignoring comment from non-admin %v", c.Author)
 			continue
 		}
+		// non-admins can edit comments from admins, so we only
+		// consider comments that have not been updated
+		if !c.CreatedAt.IsZero() && c.CreatedAt != c.UpdatedAt {
+			log.Printf("ignoring edited comment from %v", c.Author)
+			continue
+		}
 		if strings.HasPrefix(c.Body, skipPrefix) {
 			for _, testName := range strings.Fields(c.Body)[1:] {
 				testsToSkip = append(testsToSkip, testName)
