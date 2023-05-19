@@ -3,6 +3,7 @@ package bot
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/gravitational/shared-workflows/bot/internal/env"
 	"github.com/gravitational/shared-workflows/bot/internal/github"
@@ -33,49 +34,62 @@ func TestSkipFlakes(t *testing.T) {
 		{
 			desc: "simple",
 			comments: []github.Comment{
-				{Author: "admin1", Body: "/excludeflake TestFoo"},
+				comment("admin1", "/excludeflake TestFoo"),
 			},
 			skip: []string{"TestFoo"},
 		},
 		{
 			desc: "missing test",
 			comments: []github.Comment{
-				{Author: "admin1", Body: "/excludeflake  "},
+				comment("admin1", "/excludeflake  "),
 			},
 			skip: nil,
 		},
 		{
 			desc: "missing prefix",
 			comments: []github.Comment{
-				{Author: "admin1", Body: "TestFoo TestBar"},
+				comment("admin1", "TestFoo TestBar"),
 			},
 			skip: nil,
 		},
 		{
 			desc: "missing test",
 			comments: []github.Comment{
-				{Author: "admin1", Body: "abc"},
-				{Author: "admin2", Body: "def"},
-				{Author: "bob", Body: "ghi"},
-				{Author: "alice", Body: "jkl"},
+				comment("admin1", "abc"),
+				comment("admin2", "def"),
+				comment("bob", "ghi"),
+				comment("alice", "jkl"),
 			},
 			skip: nil,
 		},
 		{
 			desc: "multiple",
 			comments: []github.Comment{
-				{Author: "admin1", Body: "/excludeflake TestFoo TestBar"},
+				comment("admin1", "/excludeflake TestFoo TestBar"),
 			},
 			skip: []string{"TestFoo", "TestBar"},
 		},
 		{
 			desc: "complex",
 			comments: []github.Comment{
-				{Author: "admin1", Body: "/excludeflake TestFoo TestBar"},
-				{Author: "nonadmin", Body: "/excludeflake TestBaz"},
-				{Author: "admin2", Body: "/excludeflake TestQuux"},
+				comment("admin1", "/excludeflake TestFoo TestBar"),
+				comment("nonadmin", "/excludeflake TestBaz"),
+				comment("admin2", "/excludeflake TestQuux"),
 			},
 			skip: []string{"TestFoo", "TestBar", "TestQuux"},
+		},
+		{
+			desc: "comment updated",
+			comments: []github.Comment{
+				comment("admin1", "/excludeflake TestFoo"),
+				{
+					Author:    "admin2",
+					Body:      "/excludeflake TestBar",
+					CreatedAt: time.Now().Add(-10 * time.Minute),
+					UpdatedAt: time.Now(),
+				},
+			},
+			skip: []string{"TestFoo"},
 		},
 	} {
 		t.Run(test.desc, func(t *testing.T) {
@@ -90,5 +104,15 @@ func TestSkipFlakes(t *testing.T) {
 			require.NoError(t, err)
 			require.ElementsMatch(t, skip, test.skip)
 		})
+	}
+}
+
+func comment(author, body string) github.Comment {
+	now := time.Now()
+	return github.Comment{
+		Author:    author,
+		Body:      body,
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
 }
