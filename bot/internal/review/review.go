@@ -38,10 +38,16 @@ const (
 	// DependabotBatcher is the name of the batcher that groups Dependabot PRs.
 	// See https://github.com/Legal-and-General/dependabot-batcher.
 	DependabotBatcher = "dependabot-batcher[bot]"
+	// RenovateBotPrivate is the name of the app that runs the Renovate action in
+	// private repos(teleport.e).
+	RenovateBotPrivate = "private-renovate-gha[bot]"
+	// RenovateBotPublic is the name of the app that runs the Renovate action in
+	// public repos(teleport).
+	RenovateBotPublic = "renovate-gha[bot]"
 )
 
 func isAllowedRobot(author string) bool {
-	return author == Dependabot || author == DependabotBatcher
+	return author == Dependabot || author == DependabotBatcher || author == RenovateBotPrivate || author == RenovateBotPublic
 }
 
 // Reviewer is a code reviewer.
