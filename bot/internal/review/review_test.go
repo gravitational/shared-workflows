@@ -133,6 +133,22 @@ func TestIsInternal(t *testing.T) {
 			author: DependabotBatcher,
 			expect: true,
 		},
+		{
+			desc: "renovate public is internal",
+			assignments: &Assignments{
+				c: &Config{},
+			},
+			author: RenovateBotPublic,
+			expect: true,
+		},
+		{
+			desc: "renovate private is internal",
+			assignments: &Assignments{
+				c: &Config{},
+			},
+			author: RenovateBotPrivate,
+			expect: true,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
