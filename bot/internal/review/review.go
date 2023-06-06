@@ -43,7 +43,7 @@ const (
 	RenovateBotPrivate = "private-renovate-gha[bot]"
 	// RenovateBotPublic is the name of the app that runs the Renovate action in
 	// public repos(teleport).
-	RenovateBotPublic = "renovate-gha[bot]"
+	RenovateBotPublic = "public-renovate-gha[bot]"
 )
 
 func isAllowedRobot(author string) bool {
