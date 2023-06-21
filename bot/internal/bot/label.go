@@ -21,6 +21,7 @@ import (
 	"log"
 	"strings"
 
+	"github.com/gravitational/shared-workflows/bot/internal/env"
 	"github.com/gravitational/shared-workflows/bot/internal/github"
 	"github.com/gravitational/trace"
 )
@@ -60,10 +61,13 @@ func (b *Bot) Label(ctx context.Context) error {
 func (b *Bot) labels(ctx context.Context, files []github.PullRequestFile) ([]string, error) {
 	var labels []string
 
-	labels = append(labels, string(prSize(files)))
+	// don't add a size label to cloud deploy PRs since they are always xl
+	if !b.c.Environment.IsCloudDeployBranch() {
+		labels = append(labels, string(prSize(files)))
+	}
 
 	// The branch name is unsafe, but here we are simply adding a label.
-	if isReleaseBranch(b.c.Environment.UnsafeBase) {
+	if b.c.Environment.Repository != env.CloudRepo && isReleaseBranch(b.c.Environment.UnsafeBase) {
 		log.Println("Label: Found backport branch.")
 		labels = append(labels, "backport")
 	}
@@ -99,7 +103,7 @@ func deduplicate(s []string) []string {
 }
 
 var prefixes = map[string]map[string][]string{
-	"teleport": {
+	env.TeleportRepo: {
 		"bpf/":                {"bpf"},
 		"docs/":               {"documentation"},
 		"rfd/":                {"rfd"},
@@ -119,7 +123,7 @@ var prefixes = map[string]map[string][]string{
 		"tool/tbot/":          {"machine-id"},
 		"web/":                {"ui"},
 	},
-	"teleport.e": {
+	env.TeleportERepo: {
 		"rfd/":             {"rfd"},
 		"lib/devicetrust/": {"device-trust"},
 		"lib/idp/saml":     {"application-access", "idp"},
@@ -128,5 +132,41 @@ var prefixes = map[string]map[string][]string{
 		"lib/plugins/":     {"plugins"},
 		"tool/tctl/":       {"tctl"},
 		"web/":             {"ui"},
+	},
+	env.CloudRepo: {
+		"api/":                         {"salescenter"},
+		"db/salescenter":               {"salescenter", "db-migration"},
+		"deploy/fluxcd/":               {"CICD"},
+		"deploy/fluxcd/src/platform":   {"platform"},
+		"deploy/specs":                 {"CICD"},
+		"deploy/specs/sales-center":    {"salescenter"},
+		"deploy/specs/tenant-operator": {"tenant-operator"},
+		"deploy/specs/prehog":          {"prehog"},
+		"deploy/teleport":              {"upgrade"},
+		"deploy/terraform":             {"terraform"},
+		"pkg/billing":                  {"salescenter"},
+		"pkg/db/":                      {"salescenter"},
+		"pkg/ga-controller":            {"ga-controller"},
+		"pkg/internalserver":           {"internal-server"},
+		"pkg/jobs/":                    {"salescenter-job"},
+		"pkg/onboarding/":              {"salescenter"},
+		"pkg/onboardingserver":         {"salescenter"},
+		"pkg/sales/":                   {"salescenter"},
+		"pkg/salesserver":              {"salescenter"},
+		"pkg/stripegateway":            {"salescenter"},
+		"pkg/stripewebhook":            {"salescenter"},
+		"pkg/synccontroller":           {"tenant-operator"},
+		"pkg/teleportcontroller":       {"tenant-operator"},
+		"pkg/tenantoperator":           {"tenant-operator"},
+		"pkg/tenants/":                 {"tenant-operator"},
+		"pkg/tenantsserver":            {"tenant-operator"},
+		"tools/ga-controller":          {"ga-controller"},
+		"tools/jobs":                   {"salescenter-job"},
+		"tools/prehog":                 {"prehog"},
+		"tools/salescenter":            {"salescenter"},
+		"tools/tenantoperator":         {"tenant-operator"},
+		"tools/tenantsync":             {"tenant-operator"},
+		"rfd/":                         {"rfd"},
+		"web/":                         {"salescenter"},
 	},
 }
