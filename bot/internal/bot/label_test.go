@@ -137,6 +137,38 @@ func TestLabel(t *testing.T) {
 			},
 			labels: []string{string(small)},
 		},
+		{
+			desc:   "labels for the cloud repo",
+			repo:   "cloud",
+			branch: "master",
+			files: []github.PullRequestFile{
+				{
+					Name:      "rfd/0000_foo.md",
+					Additions: 1,
+				},
+				{
+					Name:      "db/salescenter/migrations/218390213.down.sql",
+					Additions: 1,
+				},
+				{
+					Name:      "deploy/fluxcd/src/platform/values.yaml",
+					Additions: 1,
+				},
+			},
+			labels: []string{string(small), "rfd", "salescenter", "db-migration", "CICD", "platform"},
+		},
+		{
+			desc:   "labels for a cloud deploy branch",
+			repo:   "cloud",
+			branch: "staging",
+			files: []github.PullRequestFile{
+				{
+					Name:      "rfd/0000_foo.md",
+					Additions: 1,
+				},
+			},
+			labels: []string{"rfd"},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
