@@ -80,7 +80,7 @@ func (b *Bot) verifyDBMigration(ctx context.Context, pathPrefix string) error {
 	branchRef, err := b.c.GitHub.GetRef(ctx,
 		b.c.Environment.Organization,
 		b.c.Environment.Repository,
-		b.c.Environment.UnsafeBase)
+		"heads/"+b.c.Environment.UnsafeBase)
 	if err != nil {
 		return trace.Wrap(err)
 	}
