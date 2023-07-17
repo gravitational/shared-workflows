@@ -13,4 +13,6 @@ jobs:
         contents: read
         security-events: write
 
-      steps: []
+      steps:
+      - name: Disabled
+        run: "echo 'Trivy disabled: gravitational/SecOps#358'"
