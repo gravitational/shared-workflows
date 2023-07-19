@@ -245,6 +245,32 @@ type PullRequestFile struct {
 	Deletions int
 }
 
+// PullRequestFiles is a list of pull request files.
+type PullRequestFiles []PullRequestFile
+
+// HasFile returns true if the file list contains the specified file.
+func (f PullRequestFiles) HasFile(name string) bool {
+	for _, file := range f {
+		if file.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+// SourceFiles returns a list of code source files.
+func (f PullRequestFiles) SourceFiles() (files PullRequestFiles) {
+	sourceSuffixes := []string{".go", ".rs", ".js", ".ts", ".tsx"}
+	for _, file := range f {
+		for _, suffix := range sourceSuffixes {
+			if strings.HasSuffix(file.Name, suffix) {
+				files = append(files, file)
+			}
+		}
+	}
+	return files
+}
+
 // GetPullRequestWithCommits returns the specified pull request with commits.
 func (c *Client) GetPullRequestWithCommits(ctx context.Context, organization string, repository string, number int) (PullRequest, error) {
 	pull, err := c.GetPullRequest(ctx, organization, repository, number)

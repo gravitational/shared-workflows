@@ -82,6 +82,9 @@ type Config struct {
 	DocsReviewers     map[string]Reviewer `json:"docsReviewers"`
 	DocsReviewersOmit map[string]bool     `json:"docsReviewersOmit"`
 
+	// ReleaseReviewers is a list of reviewers for release PRs.
+	ReleaseReviewers []string `json:"releaseReviewers"`
+
 	// Admins are assigned reviews when no others match.
 	Admins []string `json:"admins"`
 }
@@ -157,30 +160,34 @@ func (r *Assignments) IsInternal(author string) bool {
 }
 
 // Get will return a list of code reviewers for a given author.
-func (r *Assignments) Get(e *env.Environment, docs bool, code bool, files []github.PullRequestFile) []string {
+func (r *Assignments) Get(e *env.Environment, changes env.Changes, files []github.PullRequestFile) []string {
 	var reviewers []string
 
 	// TODO: consider existing review assignments here
 	// https://github.com/gravitational/teleport/issues/10420
 
 	switch {
-	case docs && code:
+	case changes.Docs && changes.Code:
 		log.Printf("Assign: Found docs and code changes.")
 		reviewers = append(reviewers, r.getDocsReviewers(e.Author)...)
 		reviewers = append(reviewers, r.getCodeReviewers(e, files)...)
-	case !docs && code:
+	case !changes.Docs && changes.Code:
 		log.Printf("Assign: Found code changes.")
 		reviewers = append(reviewers, r.getCodeReviewers(e, files)...)
-	case docs && !code:
+	case changes.Docs && !changes.Code:
 		log.Printf("Assign: Found docs changes.")
 		reviewers = append(reviewers, r.getDocsReviewers(e.Author)...)
 	// Strange state, an empty commit? Return admin reviewers.
-	case !docs && !code:
+	case !changes.Docs && !changes.Code:
 		log.Printf("Assign: Found no docs or code changes.")
 		reviewers = append(reviewers, r.getAdminReviewers(e.Author)...)
 	}
 
 	return reviewers
+}
+
+func (r *Assignments) getReleaseReviewers() []string {
+	return r.c.ReleaseReviewers
 }
 
 func (r *Assignments) getDocsReviewers(author string) []string {
@@ -313,23 +320,32 @@ func (r *Assignments) CheckExternal(author string, reviews []github.Review) erro
 // CheckInternal will verify if required reviewers have approved. Checks if
 // docs and if each set of code reviews have approved. Admin approvals bypass
 // all checks.
-func (r *Assignments) CheckInternal(e *env.Environment, reviews []github.Review, docs bool, code bool, large bool) error {
+func (r *Assignments) CheckInternal(e *env.Environment, reviews []github.Review, changes env.Changes) error {
 	log.Printf("Check: Found internal author %v.", e.Author)
 
 	// Skip checks if admins have approved.
 	if check(r.GetAdminCheckers(e.Author), reviews) {
+		log.Println("Check: Detected admin approval, skipping the rest of checks.")
 		return nil
 	}
 
-	if code && large {
+	if changes.Code && changes.Large {
 		log.Println("Check: Detected large PR, requiring admin approval")
 		if !check(r.GetAdminCheckers(e.Author), reviews) {
 			return trace.BadParameter("this PR is large and requires admin approval to merge")
 		}
 	}
 
+	if changes.Release {
+		log.Println("Check: Detected release PR.")
+		if err := r.checkInternalReleaseReviews(reviews); err != nil {
+			return trace.Wrap(err)
+		}
+		return nil
+	}
+
 	switch {
-	case docs && code:
+	case changes.Docs && changes.Code:
 		log.Printf("Check: Found docs and code changes.")
 		if err := r.checkInternalDocsReviews(e.Author, reviews); err != nil {
 			return trace.Wrap(err)
@@ -337,18 +353,18 @@ func (r *Assignments) CheckInternal(e *env.Environment, reviews []github.Review,
 		if err := r.checkInternalCodeReviews(e, reviews); err != nil {
 			return trace.Wrap(err)
 		}
-	case !docs && code:
+	case !changes.Docs && changes.Code:
 		log.Printf("Check: Found code changes.")
 		if err := r.checkInternalCodeReviews(e, reviews); err != nil {
 			return trace.Wrap(err)
 		}
-	case docs && !code:
+	case changes.Docs && !changes.Code:
 		log.Printf("Check: Found docs changes.")
 		if err := r.checkInternalDocsReviews(e.Author, reviews); err != nil {
 			return trace.Wrap(err)
 		}
 	// Strange state, an empty commit? Check admins.
-	case !docs && !code:
+	case !changes.Docs && !changes.Code:
 		log.Printf("Check: Found no docs or code changes.")
 		if checkN(r.GetAdminCheckers(e.Author), reviews) < 2 {
 			return trace.BadParameter("requires two admin approvals")
@@ -356,6 +372,19 @@ func (r *Assignments) CheckInternal(e *env.Environment, reviews []github.Review,
 	}
 
 	return nil
+}
+
+func (r *Assignments) checkInternalReleaseReviews(reviews []github.Review) error {
+	reviewers := r.getReleaseReviewers()
+	if len(reviewers) == 0 {
+		return trace.BadParameter("list of release reviewers is empty, check releaseReviewers field in the reviewers map")
+	}
+
+	if check(reviewers, reviews) {
+		return nil
+	}
+
+	return trace.BadParameter("requires at least one approval from %v", reviewers)
 }
 
 // checkInternalDocsReviews checks whether docs review requirements are satisfied

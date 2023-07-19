@@ -73,10 +73,90 @@ func TestClassifyChanges(t *testing.T) {
 	e := &env.Environment{Repository: env.TeleportRepo}
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
-			docs, code, err := classifyChanges(e, test.files)
-			require.NoError(t, err)
-			require.Equal(t, docs, test.docs)
-			require.Equal(t, code, test.code)
+			changes := classifyChanges(e, test.files)
+			require.Equal(t, changes.Docs, test.docs)
+			require.Equal(t, changes.Code, test.code)
+		})
+	}
+}
+
+func TestIsReleasePR(t *testing.T) {
+	tests := []struct {
+		desc      string
+		env       *env.Environment
+		files     []github.PullRequestFile
+		isRelease bool
+	}{
+		{
+			desc: "release-pr",
+			env: &env.Environment{
+				UnsafeHead: "release/14.0.0",
+			},
+			files: []github.PullRequestFile{
+				{Name: "CHANGELOG.md"},
+				{Name: "Makefile"},
+				{Name: "version.go"},
+				{Name: "api/version.go"},
+				{Name: "integrations/kube-agent-updater/version.go"},
+			},
+			isRelease: true,
+		},
+		{
+			desc: "non-release-pr-invalid-branch",
+			env: &env.Environment{
+				UnsafeHead: "roman/14.0.0",
+			},
+			files: []github.PullRequestFile{
+				{Name: "CHANGELOG.md"},
+				{Name: "Makefile"},
+				{Name: "version.go"},
+				{Name: "api/version.go"},
+				{Name: "integrations/kube-agent-updater/version.go"},
+			},
+			isRelease: false,
+		},
+		{
+			desc: "non-release-pr-missing-release-file",
+			env: &env.Environment{
+				UnsafeHead: "release/14.0.0",
+			},
+			files: []github.PullRequestFile{
+				{Name: "CHANGELOG.md"},
+				{Name: "Makefile"},
+				{Name: "version.go"},
+				{Name: "api/version.go"},
+			},
+			isRelease: false,
+		},
+		{
+			desc: "non-release-pr-invalid-files",
+			env: &env.Environment{
+				UnsafeHead: "release/14.0.0",
+			},
+			files: []github.PullRequestFile{
+				{Name: "lib/auth/auth.go"},
+			},
+			isRelease: false,
+		},
+		{
+			desc: "non-release-pr-extra-source-files",
+			env: &env.Environment{
+				UnsafeHead: "release/14.0.0",
+			},
+			files: []github.PullRequestFile{
+				{Name: "CHANGELOG.md"},
+				{Name: "Makefile"},
+				{Name: "version.go"},
+				{Name: "api/version.go"},
+				{Name: "integrations/kube-agent-updater/version.go"},
+				{Name: "lib/auth/auth.go"},
+			},
+			isRelease: false,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			require.Equal(t, test.isRelease, isReleasePR(test.env, test.files))
 		})
 	}
 }

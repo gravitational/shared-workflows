@@ -73,16 +73,9 @@ func (b *Bot) Check(ctx context.Context) error {
 		return trace.Wrap(err)
 	}
 
-	docs, code, err := classifyChanges(b.c.Environment, files)
-	if err != nil {
-		return trace.Wrap(err)
-	}
+	changes := classifyChanges(b.c.Environment, files)
 
-	var tooBig bool
-	if !b.c.Environment.IsCloudDeployBranch() {
-		tooBig = xlargeRequiresAdminApproval(files)
-	}
-	if tooBig {
+	if changes.Large {
 		comment := fmt.Sprintf("@%v - this PR will require admin approval to merge due to its size. "+
 			"Consider breaking it up into a series smaller changes.", b.c.Environment.Author)
 
@@ -112,7 +105,7 @@ func (b *Bot) Check(ctx context.Context) error {
 		}
 	}
 
-	if err := b.c.Review.CheckInternal(b.c.Environment, reviews, docs, code, tooBig); err != nil {
+	if err := b.c.Review.CheckInternal(b.c.Environment, reviews, changes); err != nil {
 		return trace.Wrap(err)
 	}
 
