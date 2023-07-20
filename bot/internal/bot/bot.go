@@ -129,21 +129,59 @@ func New(c *Config) (*Bot, error) {
 
 // classifyChanges determines whether the PR contains code changes
 // and/or docs changes.
-func classifyChanges(e *env.Environment, files []github.PullRequestFile) (docs bool, code bool, err error) {
+func classifyChanges(e *env.Environment, files []github.PullRequestFile) env.Changes {
+	ch := env.Changes{
+		Large:   !e.IsCloudDeployBranch() && xlargeRequiresAdminApproval(files),
+		Release: isReleasePR(e, files),
+	}
 	switch e.Repository {
 	case env.TeleportRepo:
 		for _, file := range files {
 			if strings.HasPrefix(file.Name, "docs/") ||
 				file.Name == "CHANGELOG.md" {
-				docs = true
+				ch.Docs = true
 			} else {
-				code = true
+				ch.Code = true
 			}
 		}
 	default:
-		code = true
+		ch.Code = true
 	}
-	return docs, code, nil
+	return ch
+}
+
+// isReleasePR applies a number of heuristics to the PR changeset to determine
+// whether it's a release PR.
+func isReleasePR(e *env.Environment, files github.PullRequestFiles) bool {
+	// Check if the branch name starts with release/ prefix.
+	if !strings.HasPrefix(e.UnsafeHead, "release/") {
+		return false
+	}
+	// Check that the files that typically change in a release PR are there.
+	for _, releasePRFile := range releasePRFiles {
+		if !files.HasFile(releasePRFile.Name) {
+			return false
+		}
+	}
+	// Check that the PR doesn't contain any other code changes.
+	for _, sourceFile := range files.SourceFiles() {
+		if !releasePRFiles.HasFile(sourceFile.Name) {
+			return false
+		}
+	}
+	return true
+}
+
+// releasePRFiles is a list of files that change when making a new release.
+//
+// This is not an exhaustive list but should be a good enough indicator that
+// the changeset is a release PR.
+var releasePRFiles = github.PullRequestFiles{
+	{Name: "CHANGELOG.md"},
+	{Name: "Makefile"},
+	{Name: "version.go"},
+	{Name: "api/version.go"},
+	{Name: "integrations/kube-agent-updater/version.go"},
 }
 
 func xlargeRequiresAdminApproval(files []github.PullRequestFile) bool {

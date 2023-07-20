@@ -603,6 +603,10 @@ func TestCheckInternal(t *testing.T) {
 			},
 			DocsReviewersOmit: map[string]bool{},
 			CodeReviewersOmit: map[string]bool{},
+			ReleaseReviewers: []string{
+				"3",
+				"4",
+			},
 			// Default.
 			Admins: []string{
 				"1",
@@ -618,6 +622,7 @@ func TestCheckInternal(t *testing.T) {
 		docs       bool
 		code       bool
 		large      bool
+		release    bool
 		result     bool
 	}{
 		{
@@ -934,6 +939,26 @@ func TestCheckInternal(t *testing.T) {
 			code:   true,
 			result: true,
 		},
+		{
+			desc:       "release-pr-fail",
+			repository: "teleport",
+			author:     "1",
+			reviews: []github.Review{
+				{Author: "5", State: Approved},
+			},
+			release: true,
+			result:  false,
+		},
+		{
+			desc:       "release-pr-success",
+			repository: "teleport",
+			author:     "1",
+			reviews: []github.Review{
+				{Author: "3", State: Approved},
+			},
+			release: true,
+			result:  true,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
@@ -941,7 +966,12 @@ func TestCheckInternal(t *testing.T) {
 				Repository: test.repository,
 				Author:     test.author,
 			}
-			err := r.CheckInternal(e, test.reviews, test.docs, test.code, test.large)
+			err := r.CheckInternal(e, test.reviews, env.Changes{
+				Docs:    test.docs,
+				Code:    test.code,
+				Large:   test.large,
+				Release: test.release,
+			})
 			if test.result {
 				require.NoError(t, err)
 			} else {
