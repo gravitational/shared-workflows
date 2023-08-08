@@ -21,6 +21,8 @@ import (
 	"encoding/base64"
 	"flag"
 	"log"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/gravitational/shared-workflows/bot/internal/bot"
@@ -39,7 +41,7 @@ func main() {
 
 	// Cancel run if it takes longer than 5 minutes.
 	//
-	// To re-run a job go to the Actions tab in the Github repo, go to the run
+	// To re-run a job go to the Actions tab in the GitHub repo, go to the run
 	// that failed, and click the "Re-run all jobs" button in the top right corner.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
@@ -70,6 +72,8 @@ func main() {
 		err = b.Verify(ctx)
 	case "exclude-flakes":
 		err = b.ExcludeFlakes(ctx)
+	case "bloat":
+		err = b.BloatCheck(ctx, flags.base, flags.current, flags.artifacts, os.Stdout)
 	default:
 		err = trace.BadParameter("unknown workflow: %v", flags.workflow)
 	}
@@ -83,20 +87,26 @@ func main() {
 type flags struct {
 	// workflow is the name of workflow to run.
 	workflow string
-	// token is the Github auth token.
+	// token is the GitHub auth token.
 	token string
 	// reviewers is the code reviewers map.
 	reviewers string
-	// local is whether workflow runs locally or in Github Actions context.
+	// local is whether workflow runs locally or in GitHub Actions context.
 	local bool
-	// org is the Github organization for the local mode.
+	// org is the GitHub organization for the local mode.
 	org string
-	// repo is the Github repository for the local mode.
+	// repo is the GitHub repository for the local mode.
 	repo string
-	// prNumber is the Github pull request number for the local mode.
+	// prNumber is the GitHub pull request number for the local mode.
 	prNumber int
-	// branch is the Github backport branch name for the local mode.
+	// branch is the GitHub backport branch name for the local mode.
 	branch string
+	// artifacts are the binaries to analyze for bloat.
+	artifacts []string
+	// base is the absolute path to a directory containing the base artifacts to bloat check.
+	base string
+	// current is the absolute path to a directory containing the current artifacts to bloat check.
+	current string
 }
 
 func parseFlags() (flags, error) {
@@ -105,10 +115,13 @@ func parseFlags() (flags, error) {
 		token     = flag.String("token", "", "GitHub authentication token")
 		reviewers = flag.String("reviewers", "", "reviewer assignments")
 		local     = flag.Bool("local", false, "local workflow dry run")
-		org       = flag.String("org", "", "Github organization (local mode only)")
-		repo      = flag.String("repo", "", "Github repository (local mode only)")
-		prNumber  = flag.Int("pr", 0, "Github pull request number (local mode only)")
-		branch    = flag.String("branch", "", "Github backport branch name (local mode only)")
+		org       = flag.String("org", "", "GitHub organization (local mode only)")
+		repo      = flag.String("repo", "", "GitHub repository (local mode only)")
+		prNumber  = flag.Int("pr", 0, "GitHub pull request number (local mode only)")
+		branch    = flag.String("branch", "", "GitHub backport branch name (local mode only)")
+		base      = flag.String("base", "", "an absolute path to a base directory containing artifacts to be checked for bloat")
+		current   = flag.String("current", "", "an absolute path to a branch directory containing artifacts to be checked for bloat")
+		artifacts = flag.String("artifacts", "", "a comma separated list of compile artifacts to analyze for bloat")
 	)
 	flag.Parse()
 
@@ -136,6 +149,9 @@ func parseFlags() (flags, error) {
 		repo:      *repo,
 		prNumber:  *prNumber,
 		branch:    *branch,
+		artifacts: strings.Split(*artifacts, ","),
+		base:      *base,
+		current:   *current,
 	}, nil
 }
 
@@ -167,7 +183,7 @@ func createBot(ctx context.Context, flags flags) (*bot.Bot, error) {
 }
 
 // createBotLocal creates a local instance of the bot that can be run locally
-// instead of inside Github Actions environment.
+// instead of inside GitHub Actions environment.
 func createBotLocal(ctx context.Context, flags flags) (*bot.Bot, error) {
 	gh, err := github.New(ctx, flags.token)
 	if err != nil {
