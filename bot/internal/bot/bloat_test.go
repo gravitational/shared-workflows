@@ -34,15 +34,17 @@ func TestBloat(t *testing.T) {
 
 	cases := []struct {
 		name            string
-		comments        []github.Comment
+		comments        map[int][]github.Comment
 		createArtifacts func(t *testing.T, base, current string)
 		errAssertion    require.ErrorAssertionFunc
 		outAssertion    func(t *testing.T, out string)
 	}{
 		{
 			name: "bloat skipped by admin",
-			comments: []github.Comment{
-				comment("admin1", "/excludebloat three"),
+			comments: map[int][]github.Comment{
+				0: {
+					comment("admin1", "/excludebloat three"),
+				},
 			},
 			createArtifacts: func(t *testing.T, base, current string) {
 				createFileWithSize(t, filepath.Join(base, "one"), 1)
@@ -65,8 +67,10 @@ func TestBloat(t *testing.T) {
 		},
 		{
 			name: "bloat detected",
-			comments: []github.Comment{
-				comment("nonadmin", "/excludebloat three"),
+			comments: map[int][]github.Comment{
+				0: {
+					comment("nonadmin", "/excludebloat three"),
+				},
 			},
 			createArtifacts: func(t *testing.T, base, current string) {
 				createFileWithSize(t, filepath.Join(base, "one"), 1)

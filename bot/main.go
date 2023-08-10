@@ -74,6 +74,8 @@ func main() {
 		err = b.ExcludeFlakes(ctx)
 	case "bloat":
 		err = b.BloatCheck(ctx, flags.base, flags.current, flags.artifacts, os.Stdout)
+	case "remind":
+		err = b.Remind(ctx)
 	default:
 		err = trace.BadParameter("unknown workflow: %v", flags.workflow)
 	}
