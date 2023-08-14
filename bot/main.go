@@ -73,7 +73,13 @@ func main() {
 	case "exclude-flakes":
 		err = b.ExcludeFlakes(ctx)
 	case "bloat":
-		err = b.BloatCheck(ctx, flags.base, flags.current, flags.artifacts, os.Stdout)
+		if flags.baseStats != "" {
+			err = b.BloatCheck(ctx, flags.baseStats, flags.current, flags.artifacts, os.Stdout)
+		} else {
+			err = b.BloatCheckDirectories(ctx, flags.base, flags.current, flags.artifacts, os.Stdout)
+		}
+	case "save-stats":
+		err = b.SaveBaseStats(ctx, flags.base, flags.artifacts, os.Stdout)
 	default:
 		err = trace.BadParameter("unknown workflow: %v", flags.workflow)
 	}
@@ -105,6 +111,8 @@ type flags struct {
 	artifacts []string
 	// base is the absolute path to a directory containing the base artifacts to bloat check.
 	base string
+	// baseStats is the absolute path to a file containing the base build artifacts sizes to bloat check.
+	baseStats string
 	// current is the absolute path to a directory containing the current artifacts to bloat check.
 	current string
 }
@@ -120,6 +128,7 @@ func parseFlags() (flags, error) {
 		prNumber  = flag.Int("pr", 0, "GitHub pull request number (local mode only)")
 		branch    = flag.String("branch", "", "GitHub backport branch name (local mode only)")
 		base      = flag.String("base", "", "an absolute path to a base directory containing artifacts to be checked for bloat")
+		baseStats = flag.String("base-stats", "", "an absolute path to a file containing stats for the base build")
 		current   = flag.String("current", "", "an absolute path to a branch directory containing artifacts to be checked for bloat")
 		artifacts = flag.String("artifacts", "", "a comma separated list of compile artifacts to analyze for bloat")
 	)
@@ -140,6 +149,11 @@ func parseFlags() (flags, error) {
 		return flags{}, trace.Wrap(err)
 	}
 
+	stats, err := base64.StdEncoding.DecodeString(*baseStats)
+	if err != nil {
+		return flags{}, trace.Wrap(err)
+	}
+
 	return flags{
 		workflow:  *workflow,
 		token:     *token,
@@ -151,6 +165,7 @@ func parseFlags() (flags, error) {
 		branch:    *branch,
 		artifacts: strings.Split(*artifacts, ","),
 		base:      *base,
+		baseStats: string(stats),
 		current:   *current,
 	}, nil
 }

@@ -3,12 +3,16 @@ package bot
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/gravitational/trace"
@@ -26,14 +30,88 @@ const (
 	errorThreshold = 3
 )
 
-// BloatCheck determines if any of the provided artifacts have increased. An error
-// is returned if the artifacts in the current directory exceed the same artifact in
-// the base directory by more than the errorThreshold.
-func (b *Bot) BloatCheck(ctx context.Context, base, current string, artifacts []string, out io.Writer) error {
+type results struct {
+	Binaries map[string]int64 `json:"binaries"`
+}
+
+// SaveBaseStats persists the sizes of artifacts in the build directory to the given
+// output. The output file can be used as the base stats file when using BloatCheck. An
+// error is returned if one of the provided artifacts does not exist in the build directory.
+func (b *Bot) SaveBaseStats(ctx context.Context, build string, artifacts []string, out io.Writer) error {
+	stats := results{Binaries: make(map[string]int64, len(artifacts))}
+
+	for _, artifact := range artifacts {
+		info, err := os.Stat(filepath.Join(build, artifact))
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		stats.Binaries[artifact] = info.Size()
+	}
+
+	return trace.Wrap(json.NewEncoder(base64.NewEncoder(base64.StdEncoding, out)).Encode(stats))
+}
+
+// BloatCheckDirectories determines if any of the provided artifacts have increased by comparing
+// artifacts from a base build with artifacts from the current branch build. An error is returned if
+// the artifacts in the current directory exceed the same artifact in the base directory
+// by more than the errorThreshold.
+func (b *Bot) BloatCheckDirectories(ctx context.Context, base, current string, artifacts []string, out io.Writer) error {
+	baseCheck := func(artifact string) (int64, error) {
+		info, err := os.Stat(filepath.Join(base, artifact))
+		if err != nil {
+			return 0, trace.Wrap(err)
+		}
+
+		return info.Size(), nil
+	}
+
+	return trace.Wrap(b.bloatCheck(ctx, baseCheck, current, artifacts, out))
+}
+
+// BloatCheck determines if any of the provided artifacts have increased by comparing
+// the built artifacts from the current branch against the artifact sizes of the base
+// branch. An error is returned if the artifacts in the current directory exceed the
+// artifact size present in the base statistics by more than the errorThreshold.
+//
+// The input file should be a map of artifact names to their sizes similar to the following:
+//
+//	{
+//	 "tbot": 123,
+//	 "tctl": 456,
+//	 "teleport": 789,
+//	 "tsh": 543,
+//	}
+func (b *Bot) BloatCheck(ctx context.Context, baseStats, current string, artifacts []string, out io.Writer) error {
+	var stats results
+	if err := json.Unmarshal([]byte(baseStats), &stats); err != nil {
+		return trace.Wrap(err)
+	}
+
+	log.Printf("Base stats received: %v.", stats.Binaries)
+
+	baseCheck := func(artifact string) (int64, error) {
+		size, ok := stats.Binaries[artifact]
+		if !ok {
+			return 0, trace.NotFound("no size provided %s found", artifact)
+		}
+
+		return size, nil
+	}
+
+	return trace.Wrap(b.bloatCheck(ctx, baseCheck, current, artifacts, out))
+}
+
+// baseSizeFn is an abstraction that allows the base artifact
+// size to be retrieved from a variety of locations.
+type baseSizeFn = func(artifact string) (int64, error)
+
+func (b *Bot) bloatCheck(ctx context.Context, base baseSizeFn, current string, artifacts []string, out io.Writer) error {
 	output := make(map[string]result, len(artifacts))
 
-	skip, err := b.skipItems(ctx, skipBloatCheckPrefix)
-	if err != nil {
+	skipCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	skip, err := b.skipItems(skipCtx, skipBloatCheckPrefix)
+	if err != nil && !errors.Is(err, context.DeadlineExceeded) {
 		return trace.Wrap(err)
 	}
 
@@ -154,8 +232,8 @@ type stats struct {
 	diff        int64
 }
 
-func calculateChange(base, current, binary string) (stats, error) {
-	baseInfo, err := os.Stat(filepath.Join(base, binary))
+func calculateChange(base baseSizeFn, current, binary string) (stats, error) {
+	baseSize, err := base(binary)
 	if err != nil {
 		return stats{}, trace.Wrap(err)
 	}
@@ -166,7 +244,7 @@ func calculateChange(base, current, binary string) (stats, error) {
 	}
 
 	// convert from bytes to MB for easier to read output
-	baseMB := baseInfo.Size() / (1 << 20)
+	baseMB := baseSize / (1 << 20)
 	currentMB := currentInfo.Size() / (1 << 20)
 
 	return stats{
