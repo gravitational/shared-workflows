@@ -3,9 +3,11 @@ package bot
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -26,18 +28,60 @@ const (
 	errorThreshold = 3
 )
 
-// BloatCheck determines if any of the provided artifacts have increased. An error
-// is returned if the artifacts in the current directory exceed the same artifact in
-// the base directory by more than the errorThreshold.
-func (b *Bot) BloatCheck(ctx context.Context, base, current string, artifacts []string, out io.Writer) error {
-	output := make(map[string]result, len(artifacts))
+// CalculateBinarySizes determines the size of provided artifacts and outputs a map of
+// artifacts to size in JSON like the following. The sizes emitted are in MB.
+//
+//	{
+//	    "one": 123,
+//	    "two": 456,
+//	    "three": 789
+//	}
+func (b *Bot) CalculateBinarySizes(ctx context.Context, build string, artifacts []string, out io.Writer) error {
+	stats := make(map[string]int64, len(artifacts))
+	for _, artifact := range artifacts {
+		if ctx.Err() != nil {
+			return trace.Wrap(ctx.Err())
+		}
+
+		info, err := os.Stat(filepath.Join(build, artifact))
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		stats[artifact] = info.Size()
+	}
+
+	return trace.Wrap(json.NewEncoder(out).Encode(stats))
+}
+
+// BloatCheck determines if any of the provided artifacts have increased by comparing
+// the built artifacts from the current branch against the artifact sizes of the base
+// branch. An error is returned if the artifacts in the current directory exceed the
+// artifact size present in the base statistics by more than the errorThreshold. The
+// baseStats should in form of the JSON map emitted from CalculateBinarySizes.
+func (b *Bot) BloatCheck(ctx context.Context, baseStats, current string, artifacts []string, out io.Writer) error {
+	var stats map[string]int64
+	if err := json.Unmarshal([]byte(baseStats), &stats); err != nil {
+		return trace.Wrap(err)
+	}
+
+	log.Printf("Base stats provided: %v", stats)
 
 	skip, err := b.skipItems(ctx, skipBloatCheckPrefix)
 	if err != nil {
 		return trace.Wrap(err)
 	}
 
+	baseLookup := func(artifact string) (int64, error) {
+		size, ok := stats[artifact]
+		if !ok {
+			return 0, trace.NotFound("no size provided %s found", artifact)
+		}
+
+		return size, nil
+	}
+
 	var failure bool
+	output := make(map[string]result, len(artifacts))
 	for _, artifact := range artifacts {
 		select {
 		case <-ctx.Done():
@@ -53,10 +97,12 @@ func (b *Bot) BloatCheck(ctx context.Context, base, current string, artifacts []
 			}
 		}
 
-		stats, err := calculateChange(base, current, artifact)
+		stats, err := calculateChange(baseLookup, current, artifact)
 		if err != nil {
 			return err
 		}
+
+		log.Printf("artifact %s has a current size of %d", artifact, stats.currentSize)
 
 		status := "✅"
 		if skipped {
@@ -154,8 +200,12 @@ type stats struct {
 	diff        int64
 }
 
-func calculateChange(base, current, binary string) (stats, error) {
-	baseInfo, err := os.Stat(filepath.Join(base, binary))
+// baseSizeFn is an abstraction that allows the base artifact
+// size to be retrieved from a variety of locations.
+type baseSizeFn = func(artifact string) (int64, error)
+
+func calculateChange(base baseSizeFn, current, binary string) (stats, error) {
+	baseSize, err := base(binary)
 	if err != nil {
 		return stats{}, trace.Wrap(err)
 	}
@@ -166,7 +216,7 @@ func calculateChange(base, current, binary string) (stats, error) {
 	}
 
 	// convert from bytes to MB for easier to read output
-	baseMB := baseInfo.Size() / (1 << 20)
+	baseMB := baseSize / (1 << 20)
 	currentMB := currentInfo.Size() / (1 << 20)
 
 	return stats{

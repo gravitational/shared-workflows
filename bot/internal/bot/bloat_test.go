@@ -3,6 +3,7 @@ package bot
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -19,7 +20,7 @@ func createFileWithSize(t *testing.T, path string, sizeInMB int64) {
 	require.NoError(t, f.Truncate(sizeInMB<<20))
 }
 
-func TestBloat(t *testing.T) {
+func TestBloatCheck(t *testing.T) {
 	r, err := review.New(&review.Config{
 		Admins:            []string{"admin1", "admin2"},
 		CodeReviewers:     make(map[string]review.Reviewer),
@@ -29,13 +30,14 @@ func TestBloat(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	base := t.TempDir()
+	const baseStats = `{"one": 1,"two": 1,"three": 1}`
+
 	current := t.TempDir()
 
 	cases := []struct {
 		name            string
 		comments        []github.Comment
-		createArtifacts func(t *testing.T, base, current string)
+		createArtifacts func(t *testing.T, current string)
 		errAssertion    require.ErrorAssertionFunc
 		outAssertion    func(t *testing.T, out string)
 	}{
@@ -44,14 +46,9 @@ func TestBloat(t *testing.T) {
 			comments: []github.Comment{
 				comment("admin1", "/excludebloat three"),
 			},
-			createArtifacts: func(t *testing.T, base, current string) {
-				createFileWithSize(t, filepath.Join(base, "one"), 1)
+			createArtifacts: func(t *testing.T, current string) {
 				createFileWithSize(t, filepath.Join(current, "one"), 1)
-
-				createFileWithSize(t, filepath.Join(base, "two"), 1)
 				createFileWithSize(t, filepath.Join(current, "two"), 2)
-
-				createFileWithSize(t, filepath.Join(base, "three"), 1)
 				createFileWithSize(t, filepath.Join(current, "three"), 5)
 			},
 			errAssertion: require.NoError,
@@ -68,14 +65,9 @@ func TestBloat(t *testing.T) {
 			comments: []github.Comment{
 				comment("nonadmin", "/excludebloat three"),
 			},
-			createArtifacts: func(t *testing.T, base, current string) {
-				createFileWithSize(t, filepath.Join(base, "one"), 1)
+			createArtifacts: func(t *testing.T, current string) {
 				createFileWithSize(t, filepath.Join(current, "one"), 1)
-
-				createFileWithSize(t, filepath.Join(base, "two"), 1)
 				createFileWithSize(t, filepath.Join(current, "two"), 2)
-
-				createFileWithSize(t, filepath.Join(base, "three"), 1)
 				createFileWithSize(t, filepath.Join(current, "three"), 5)
 			},
 			errAssertion: require.Error,
@@ -89,11 +81,8 @@ func TestBloat(t *testing.T) {
 		},
 		{
 			name: "artifact not found",
-			createArtifacts: func(t *testing.T, base, current string) {
-				createFileWithSize(t, filepath.Join(base, "one"), 1)
+			createArtifacts: func(t *testing.T, current string) {
 				createFileWithSize(t, filepath.Join(current, "one"), 1)
-
-				createFileWithSize(t, filepath.Join(base, "two"), 1)
 				createFileWithSize(t, filepath.Join(current, "two"), 2)
 			},
 			errAssertion: require.Error,
@@ -103,14 +92,9 @@ func TestBloat(t *testing.T) {
 		},
 		{
 			name: "no bloat",
-			createArtifacts: func(t *testing.T, base, current string) {
-				createFileWithSize(t, filepath.Join(base, "one"), 1)
+			createArtifacts: func(t *testing.T, current string) {
 				createFileWithSize(t, filepath.Join(current, "one"), 1)
-
-				createFileWithSize(t, filepath.Join(base, "two"), 1)
 				createFileWithSize(t, filepath.Join(current, "two"), 1)
-
-				createFileWithSize(t, filepath.Join(base, "three"), 1)
 				createFileWithSize(t, filepath.Join(current, "three"), 1)
 			},
 			errAssertion: require.NoError,
@@ -134,12 +118,35 @@ func TestBloat(t *testing.T) {
 				},
 			}
 
-			test.createArtifacts(t, base, current)
+			test.createArtifacts(t, current)
 
 			// Validate that only the entries excluded by admins exist in the output
 			var out bytes.Buffer
-			test.errAssertion(t, b.BloatCheck(context.Background(), base, current, []string{"one", "two", "three"}, &out))
+			test.errAssertion(t, b.BloatCheck(context.Background(), baseStats, current, []string{"one", "two", "three"}, &out))
 		})
 	}
+}
 
+func TestCalculateBinarySizes(t *testing.T) {
+	build := t.TempDir()
+	b := &Bot{}
+	var buffer bytes.Buffer
+
+	// missing files should cause a failure
+	require.Error(t, b.CalculateBinarySizes(context.Background(), build, []string{"one", "two", "four"}, &buffer))
+
+	// create a few files with various sizes
+	for artifact, size := range map[string]int64{"one": 1, "two": 2, "four": 10} {
+		createFileWithSize(t, filepath.Join(build, artifact), size)
+	}
+
+	// stats should be successfully persisted to the output
+	require.NoError(t, b.CalculateBinarySizes(context.Background(), build, []string{"one", "two", "four"}, &buffer))
+
+	var stats map[string]int64
+	require.NoError(t, json.NewDecoder(&buffer).Decode(&stats))
+
+	expected := map[string]int64{"one": 1 << 20, "two": 2 << 20, "four": 10 << 20}
+
+	require.Equal(t, expected, stats)
 }
