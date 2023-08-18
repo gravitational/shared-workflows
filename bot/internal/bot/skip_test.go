@@ -25,14 +25,17 @@ func TestSkipItems(t *testing.T) {
 		desc     string
 		comments []github.Comment
 		skip     []string
+		num      int
 	}{
 		{
 			desc:     "empty",
+			num:      1,
 			comments: nil,
 			skip:     nil,
 		},
 		{
 			desc: "simple",
+			num:  1,
 			comments: []github.Comment{
 				comment("admin1", "/testPrefix TestFoo"),
 			},
@@ -40,6 +43,7 @@ func TestSkipItems(t *testing.T) {
 		},
 		{
 			desc: "missing test",
+			num:  1,
 			comments: []github.Comment{
 				comment("admin1", "/testPrefix  "),
 			},
@@ -47,6 +51,7 @@ func TestSkipItems(t *testing.T) {
 		},
 		{
 			desc: "missing prefix",
+			num:  1,
 			comments: []github.Comment{
 				comment("admin1", "TestFoo TestBar"),
 			},
@@ -54,6 +59,7 @@ func TestSkipItems(t *testing.T) {
 		},
 		{
 			desc: "missing test",
+			num:  1,
 			comments: []github.Comment{
 				comment("admin1", "abc"),
 				comment("admin2", "def"),
@@ -64,6 +70,7 @@ func TestSkipItems(t *testing.T) {
 		},
 		{
 			desc: "multiple",
+			num:  1,
 			comments: []github.Comment{
 				comment("admin1", "/testPrefix TestFoo TestBar"),
 			},
@@ -71,6 +78,7 @@ func TestSkipItems(t *testing.T) {
 		},
 		{
 			desc: "complex",
+			num:  1,
 			comments: []github.Comment{
 				comment("admin1", "/testPrefix TestFoo TestBar"),
 				comment("nonadmin", "/testPrefix TestBaz"),
@@ -80,6 +88,7 @@ func TestSkipItems(t *testing.T) {
 		},
 		{
 			desc: "comment updated",
+			num:  1,
 			comments: []github.Comment{
 				comment("admin1", "/testPrefix TestFoo"),
 				{
@@ -91,11 +100,20 @@ func TestSkipItems(t *testing.T) {
 			},
 			skip: []string{"TestFoo"},
 		},
+		{
+			desc: "not a pr",
+			comments: []github.Comment{
+				comment("admin1", "/testPrefix TestFoo TestBar"),
+				comment("nonadmin", "/testPrefix TestBaz"),
+				comment("admin2", "/testPrefix TestQuux"),
+			},
+			skip: nil,
+		},
 	} {
 		t.Run(test.desc, func(t *testing.T) {
 			b := &Bot{
 				c: &Config{
-					Environment: &env.Environment{},
+					Environment: &env.Environment{Number: test.num},
 					GitHub:      &fakeGithub{comments: test.comments},
 					Review:      r,
 				},

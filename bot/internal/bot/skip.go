@@ -8,13 +8,20 @@ import (
 	"github.com/gravitational/trace"
 )
 
-// skipItems finds any comments from an admin with the skipFlakePrefix
+// skipItems finds any comments from an admin with the skipPrefix
 // and returns the list of items that may be skipped.
 func (b *Bot) skipItems(ctx context.Context, skipPrefix string) ([]string, error) {
+	// If the event was not from a PullRequest then there
+	// will be no comments.
+	if b.c.Environment.Number == 0 {
+		return nil, nil
+	}
+
 	comments, err := b.c.GitHub.ListComments(ctx,
 		b.c.Environment.Organization,
 		b.c.Environment.Repository,
-		b.c.Environment.Number)
+		b.c.Environment.Number,
+	)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}

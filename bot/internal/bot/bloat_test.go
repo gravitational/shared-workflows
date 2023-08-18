@@ -112,7 +112,7 @@ func TestBloatCheck(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			b := &Bot{
 				c: &Config{
-					Environment: &env.Environment{},
+					Environment: &env.Environment{Number: 1},
 					GitHub:      &fakeGithub{comments: test.comments},
 					Review:      r,
 				},

@@ -34,9 +34,15 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// OutputEnv is the name of the environment variable for
-// output paramters in GitHubActions.
-const OutputEnv = "GITHUB_OUTPUT"
+const (
+	// OutputEnv is the name of the environment variable for
+	// output paramters in GitHubActions.
+	OutputEnv = "GITHUB_OUTPUT"
+
+	// ClientTimeout specifies a time limit for requests made by
+	// the Client.
+	ClientTimeout = 30 * time.Second
+)
 
 type Client struct {
 	client *go_github.Client
@@ -44,11 +50,12 @@ type Client struct {
 
 // New returns a new GitHub Client.
 func New(ctx context.Context, token string) (*Client, error) {
-	ts := oauth2.StaticTokenSource(
-		&oauth2.Token{AccessToken: token},
-	)
+	clt := oauth2.NewClient(ctx, oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token}))
+
+	clt.Timeout = ClientTimeout
+
 	return &Client{
-		client: go_github.NewClient(oauth2.NewClient(ctx, ts)),
+		client: go_github.NewClient(clt),
 	}, nil
 }
 
