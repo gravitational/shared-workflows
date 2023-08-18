@@ -24,7 +24,7 @@ func TestSkipFlakes(t *testing.T) {
 
 	b := &Bot{
 		c: &Config{
-			Environment: &env.Environment{},
+			Environment: &env.Environment{Number: 1},
 			GitHub: &fakeGithub{comments: []github.Comment{
 				comment("admin1", "/excludeflake TestFoo TestBar"),
 				comment("nonadmin", "/excludeflake TestBaz"),
