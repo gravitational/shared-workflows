@@ -140,7 +140,7 @@ The process for releasing a new version of a project should be as follows:
 ### Dependency management
 Historically this repo has used Dependabot to manage dependency updates. Unfortunately however, Dependabot does not support two key "languages" used by Github Actions: actions themselves (used when building composite actions), and Dockerfiles (used when building Dockerfile actions). As a result, [Renovate](https://docs.renovatebot.com/) will be used for new and migrated projects instead. Renovate is highly flexible and can be configured on a per-project basis.
 
-Renovate will self-hosted and configured to run every 12 hours. Updates for each project should be grouped as much as reasonably possible to reduce the number of PRs opened at any given time. Update PRs will be assigned to code owners for each project. Digest pinning will be used wherever supported.
+Renovate will self-hosted and configured to run daily. Updates for each project should be grouped as much as reasonably possible to reduce the number of PRs opened at any given time. Update PRs will be assigned to code owners for each project. Digest pinning will be used wherever supported.
 
 ### Security considerations
 The primary source of security concern with anything living in this repo is that the repo is public. The impact of making a mistake with one of our workflows (such as exposing a sensitive value) is much greater than if the repo was private/internal.
