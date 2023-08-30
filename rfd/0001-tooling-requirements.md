@@ -8,6 +8,7 @@ state: draft
 ## Required approvers
 
 * Engineering: (@r0mant)
+* Security: (@reedloden  || @wadells)
 
 ## What
 
