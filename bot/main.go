@@ -78,6 +78,8 @@ func main() {
 		err = b.CalculateBinarySizes(ctx, flags.buildDir, flags.artifacts, out)
 	case "bloat":
 		err = b.BloatCheck(ctx, flags.baseStats, flags.buildDir, flags.artifacts, os.Stdout)
+	case "changelog":
+		err = b.Changelog(ctx)
 	default:
 		err = trace.BadParameter("unknown workflow: %v", flags.workflow)
 	}

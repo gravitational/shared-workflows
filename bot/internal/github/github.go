@@ -19,6 +19,7 @@ package github
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"net/url"
@@ -598,11 +599,100 @@ func (c *Client) CreateComment(ctx context.Context, organization string, reposit
 	return nil
 }
 
+func (c *Client) createStateTagLine(tag string) string {
+	// Warning: changing this may break existing comments
+	return fmt.Sprintf("state-tag: %s", tag)
+}
+
+// ListStatefulComments finds comments on a given PR matching the provided tag
+func (c *Client) ListStatefulComments(ctx context.Context, organization string, repository string, number int, tag string) ([]Comment, error) {
+	comments, err := c.ListComments(ctx, organization, repository, number)
+	if err != nil {
+		return nil, trace.Wrap(err, "failed to get pull request for https://github.com/%s/%s/pull/%d", organization, repository, number)
+	}
+
+	var matchedComments []Comment
+	tagLine := c.createStateTagLine(tag)
+	for _, comment := range comments {
+		// Reject comments from other authors
+		// Warning: changing the user may break functionality with existing comments
+		if comment.Author != c.client.BaseURL.User.Username() {
+			continue
+		}
+
+		// Reject comments from the current user without a tag line
+		bodyLines := strings.Split(comment.Body, "\n")
+		lastBodyLine := bodyLines[len(bodyLines)-1:][0]
+		if lastBodyLine != tagLine {
+			continue
+		}
+
+		matchedComments = append(matchedComments, comment)
+	}
+
+	return matchedComments, nil
+}
+
+// CreateOrUpdateStatefulComment will create a comment on a Pull Request, or update a pre-existing comment if one is found with a matching tag.
+// Returns the number of created or updated comments.
+func (c *Client) CreateOrUpdateStatefulComment(ctx context.Context, organization string, repository string, number int, comment string, tag string) (int, error) {
+	matchedComments, err := c.ListStatefulComments(ctx, organization, repository, number, tag)
+	if err != nil {
+		return 0, trace.Wrap(err, "failed to get matching comments for tag %q", tag)
+	}
+
+	commentBody := fmt.Sprintf("%s\n\n%s", comment, c.createStateTagLine(tag))
+
+	updatedCommentCount := 0
+	for _, comment := range matchedComments {
+		_, _, err = c.client.Issues.EditComment(ctx, organization, repository, comment.ID, &go_github.IssueComment{Body: &commentBody})
+		if err != nil {
+			return updatedCommentCount, trace.Wrap(err, "failed to update stateful comment %d", comment.ID)
+		}
+
+		updatedCommentCount++
+	}
+
+	if updatedCommentCount > 0 {
+		return updatedCommentCount, nil
+	}
+
+	// Pre-existing comment not found, create a new one
+	err = c.CreateComment(ctx, organization, repository, number, commentBody)
+	if err != nil {
+		return 0, trace.Wrap(err, "failed to create stateful comment")
+	}
+
+	return 1, nil
+}
+
+// DeleteStatefulComment will delete all comments on a Pull Request found with a matching tag.
+// Returns the number of deleted comments.
+func (c *Client) DeleteStatefulComment(ctx context.Context, organization string, repository string, number int, tag string) (int, error) {
+	matchedComments, err := c.ListStatefulComments(ctx, organization, repository, number, tag)
+	if err != nil {
+		return 0, trace.Wrap(err, "failed to get matching comments for tag %q", tag)
+	}
+
+	deletedCommentCount := 0
+	for _, matchedComment := range matchedComments {
+		_, err = c.client.Issues.DeleteComment(ctx, organization, repository, matchedComment.ID)
+		if err != nil {
+			return deletedCommentCount, trace.Wrap(err, "failed to delete comment %d", matchedComment.ID)
+		}
+
+		deletedCommentCount++
+	}
+
+	return deletedCommentCount, nil
+}
+
 // Comment represents an "issue comment" on a GitHub issue or pull request.
 // This does not include comments that are part of reviews.
 type Comment struct {
 	Author string // the GitHub username of the author
 	Body   string // the text of the comment
+	ID     int64  // the GitHub ID of the comment
 
 	CreatedAt time.Time
 	UpdatedAt time.Time
@@ -634,6 +724,7 @@ func (c *Client) ListComments(ctx context.Context, organization string, reposito
 			result = append(result, Comment{
 				Body:      comment.GetBody(),
 				Author:    comment.GetUser().GetLogin(),
+				ID:        comment.GetID(),
 				CreatedAt: comment.GetCreatedAt(),
 				UpdatedAt: comment.GetUpdatedAt(),
 			})
