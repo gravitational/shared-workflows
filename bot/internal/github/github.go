@@ -604,8 +604,8 @@ func (c *Client) createStateTagLine(tag string) string {
 	return fmt.Sprintf("state-tag: %s", tag)
 }
 
-// ListStatefulComments finds comments on a given PR matching the provided tag
-func (c *Client) ListStatefulComments(ctx context.Context, organization string, repository string, number int, tag string) ([]Comment, error) {
+// ListCommentsByTag finds comments on a given PR matching the provided tag
+func (c *Client) ListCommentsByTag(ctx context.Context, organization string, repository string, number int, tag string) ([]Comment, error) {
 	comments, err := c.ListComments(ctx, organization, repository, number)
 	if err != nil {
 		return nil, trace.Wrap(err, "failed to get pull request for https://github.com/%s/%s/pull/%d", organization, repository, number)
@@ -633,10 +633,10 @@ func (c *Client) ListStatefulComments(ctx context.Context, organization string, 
 	return matchedComments, nil
 }
 
-// CreateOrUpdateStatefulComment will create a comment on a Pull Request, or update a pre-existing comment if one is found with a matching tag.
+// CreateOrUpdateCommentByTag will create a comment on a Pull Request, or update a pre-existing comment if one is found with a matching tag.
 // Returns the number of created or updated comments.
-func (c *Client) CreateOrUpdateStatefulComment(ctx context.Context, organization string, repository string, number int, comment string, tag string) (int, error) {
-	matchedComments, err := c.ListStatefulComments(ctx, organization, repository, number, tag)
+func (c *Client) CreateOrUpdateCommentByTag(ctx context.Context, organization string, repository string, number int, comment string, tag string) (int, error) {
+	matchedComments, err := c.ListCommentsByTag(ctx, organization, repository, number, tag)
 	if err != nil {
 		return 0, trace.Wrap(err, "failed to get matching comments for tag %q", tag)
 	}
@@ -666,10 +666,10 @@ func (c *Client) CreateOrUpdateStatefulComment(ctx context.Context, organization
 	return 1, nil
 }
 
-// DeleteStatefulComment will delete all comments on a Pull Request found with a matching tag.
+// DeleteCommentByTag will delete all comments on a Pull Request found with a matching tag.
 // Returns the number of deleted comments.
-func (c *Client) DeleteStatefulComment(ctx context.Context, organization string, repository string, number int, tag string) (int, error) {
-	matchedComments, err := c.ListStatefulComments(ctx, organization, repository, number, tag)
+func (c *Client) DeleteCommentByTag(ctx context.Context, organization string, repository string, number int, tag string) (int, error) {
+	matchedComments, err := c.ListCommentsByTag(ctx, organization, repository, number, tag)
 	if err != nil {
 		return 0, trace.Wrap(err, "failed to get matching comments for tag %q", tag)
 	}

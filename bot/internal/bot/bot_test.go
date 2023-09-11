@@ -376,15 +376,15 @@ func (f *fakeGithub) IsOrgMember(ctx context.Context, user string, org string) (
 	return member, nil
 }
 
-func (f *fakeGithub) ListStatefulComments(ctx context.Context, organization string, repository string, number int, tag string) ([]github.Comment, error) {
+func (f *fakeGithub) ListCommentsByTag(ctx context.Context, organization string, repository string, number int, tag string) ([]github.Comment, error) {
 	return f.comments, nil
 }
 
-func (f *fakeGithub) CreateOrUpdateStatefulComment(ctx context.Context, organization string, repository string, number int, comment string, tag string) (int, error) {
+func (f *fakeGithub) CreateOrUpdateCommentByTag(ctx context.Context, organization string, repository string, number int, comment string, tag string) (int, error) {
 	return len(f.comments), nil
 }
 
-func (f *fakeGithub) DeleteStatefulComment(ctx context.Context, organization string, repository string, number int, tag string) (int, error) {
+func (f *fakeGithub) DeleteCommentByTag(ctx context.Context, organization string, repository string, number int, tag string) (int, error) {
 	return len(f.comments), nil
 }
 

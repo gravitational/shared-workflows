@@ -32,7 +32,11 @@ const NoChangelogLabel string = "no-changelog"
 const ChangelogPrefix string = "changelog: "
 const ChangelogTag string = "changelog"
 
-func (b *Bot) Changelog(ctx context.Context) error {
+// Checks if the PR contains a changelog entry in the PR body, or a "no-changelog" label.
+//
+// A few tests are performed on the extracted changelog entry to ensure it conforms to a
+// common standard.
+func (b *Bot) CheckChangelog(ctx context.Context) error {
 	pull, err := b.c.GitHub.GetPullRequest(ctx,
 		b.c.Environment.Organization,
 		b.c.Environment.Repository,
@@ -43,7 +47,7 @@ func (b *Bot) Changelog(ctx context.Context) error {
 	}
 
 	if slices.Contains(pull.UnsafeLabels, NoChangelogLabel) {
-		log.Printf("PR contains no changelog label %q, skipping changelog check", NoChangelogLabel)
+		log.Printf("PR contains %q label, skipping changelog check", NoChangelogLabel)
 		return nil
 	}
 
@@ -67,10 +71,7 @@ func (b *Bot) Changelog(ctx context.Context) error {
 
 func (b *Bot) getChangelogEntry(ctx context.Context, prBody string) (string, error) {
 	changelogRegexString := fmt.Sprintf("(?mi)^%s.*", regexp.QuoteMeta(ChangelogPrefix))
-	changelogRegex, err := regexp.Compile(changelogRegexString)
-	if err != nil {
-		return "", trace.Wrap(err, "failed to compile changelog prefix regex %q", changelogRegexString)
-	}
+	changelogRegex := regexp.MustCompile(changelogRegexString)
 
 	changelogMatches := changelogRegex.FindAllString(prBody, 2) // Two or more changelog entries is invalid, so no need to search for more than two.
 	if len(changelogMatches) == 0 {
@@ -97,21 +98,9 @@ func (b *Bot) validateChangelogEntry(ctx context.Context, changelogEntry string)
 		return b.logFailedCheck(ctx, "The changelog entry must start with a letter")
 	}
 
-	if unicode.IsLower([]rune(changelogEntry)[0]) {
-		return b.logFailedCheck(ctx, "The changelog entry must start with an uppercase character")
-	}
-
-	if strings.TrimSpace(changelogEntry) != changelogEntry {
-		return b.logFailedCheck(ctx, "The changelog entry must not contain leading or trailing whitespace")
-	}
-
 	if strings.HasPrefix(strings.ToLower(changelogEntry), "backport of") ||
 		strings.HasPrefix(strings.ToLower(changelogEntry), "backports") {
 		return b.logFailedCheck(ctx, "The changelog entry must contain the actual change, not a reference to the source PR of the backport.")
-	}
-
-	if unicode.IsPunct([]rune(changelogEntry)[len(changelogEntry)-1:][0]) {
-		return b.logFailedCheck(ctx, "The changelog entry must not end with punctuation.")
 	}
 
 	if strings.Contains(changelogEntry, "](") {
@@ -126,7 +115,7 @@ func (b *Bot) validateChangelogEntry(ctx context.Context, changelogEntry string)
 }
 
 func (b *Bot) logFailedCheck(ctx context.Context, format string, args ...interface{}) error {
-	createOrUpdateCount, err := b.c.GitHub.CreateOrUpdateStatefulComment(ctx,
+	createOrUpdateCount, err := b.c.GitHub.CreateOrUpdateCommentByTag(ctx,
 		b.c.Environment.Organization,
 		b.c.Environment.Repository,
 		b.c.Environment.Number,
@@ -144,7 +133,7 @@ func (b *Bot) logFailedCheck(ctx context.Context, format string, args ...interfa
 }
 
 func (b *Bot) deleteComments(ctx context.Context) error {
-	_, err := b.c.GitHub.DeleteStatefulComment(ctx,
+	_, err := b.c.GitHub.DeleteCommentByTag(ctx,
 		b.c.Environment.Organization,
 		b.c.Environment.Repository,
 		b.c.Environment.Number,

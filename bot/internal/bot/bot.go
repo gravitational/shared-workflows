@@ -62,16 +62,16 @@ type Client interface {
 	// CreateComment will leave a comment on an Issue or Pull Request.
 	CreateComment(ctx context.Context, organization string, repository string, number int, comment string) error
 
-	// ListStatefulComments finds comments on a given PR matching the provided tag
-	ListStatefulComments(ctx context.Context, organization string, repository string, number int, tag string) ([]github.Comment, error)
+	// ListCommentsByTag finds comments on a given PR matching the provided tag
+	ListCommentsByTag(ctx context.Context, organization string, repository string, number int, tag string) ([]github.Comment, error)
 
-	// CreateOrUpdateStatefulComment will create a comment on a Pull Request, or update a pre-existing comment if one is found with a matching tag.
+	// CreateOrUpdateCommentByTag will create a comment on a Pull Request, or update a pre-existing comment if one is found with a matching tag.
 	// Returns the number of created or updated comments.
-	CreateOrUpdateStatefulComment(ctx context.Context, organization string, repository string, number int, comment string, tag string) (int, error)
+	CreateOrUpdateCommentByTag(ctx context.Context, organization string, repository string, number int, comment string, tag string) (int, error)
 
-	// DeleteStatefulComment will delete all comments on a Pull Request found with a matching tag.
+	// DeleteCommentByTag will delete all comments on a Pull Request found with a matching tag.
 	// Returns the number of deleted comments.
-	DeleteStatefulComment(ctx context.Context, organization string, repository string, number int, tag string) (int, error)
+	DeleteCommentByTag(ctx context.Context, organization string, repository string, number int, tag string) (int, error)
 
 	// ListComments will list all comments on an Issue or Pull Request.
 	ListComments(ctx context.Context, organization string, repository string, number int) ([]github.Comment, error)

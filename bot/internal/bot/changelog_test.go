@@ -32,7 +32,7 @@ func TestChangelog(t *testing.T) {
 		b, ctx := buildTestingFixtures()
 		b.c.GitHub.(*fakeGithub).pull.UnsafeLabels = []string{NoChangelogLabel}
 
-		err := b.Changelog(ctx)
+		err := b.CheckChangelog(ctx)
 		require.True(t, err == nil)
 	})
 }
@@ -129,28 +129,8 @@ func TestValidateGetChangelogEntry(t *testing.T) {
 			shouldError: true,
 		},
 		{
-			desc:        "fail-lowercase-starting-character",
-			entry:       "changelog entry",
-			shouldError: true,
-		},
-		{
-			desc:        "fail-trailing-whitespace",
-			entry:       "Changelog entry ",
-			shouldError: true,
-		},
-		{
-			desc:        "fail-leading-whitespace",
-			entry:       " Changelog entry",
-			shouldError: true,
-		},
-		{
 			desc:        "fail-refers-to-backport",
 			entry:       "Backport of #1234",
-			shouldError: true,
-		},
-		{
-			desc:        "fail-ends-with-punctuation",
-			entry:       "Changelog entry.",
 			shouldError: true,
 		},
 		{
