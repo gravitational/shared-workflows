@@ -51,34 +51,35 @@ func (b *Bot) CheckChangelog(ctx context.Context) error {
 		return nil
 	}
 
-	changelogEntry, err := b.getChangelogEntry(ctx, pull.UnsafeBody)
+	changelogEntries, err := b.getChangelogEntries(ctx, pull.UnsafeBody)
 	if err != nil {
 		return trace.Wrap(err, "failed to get changelog entry")
 	}
 
-	err = b.validateChangelogEntry(ctx, changelogEntry)
-	if err != nil {
-		return trace.Wrap(err, "failed to validate changelog entry")
+	for _, changelogEntry := range changelogEntries {
+		err = b.validateChangelogEntry(ctx, changelogEntry)
+		if err != nil {
+			return trace.Wrap(err, "failed to validate changelog entry %q", changelogEntry)
+		}
 	}
 
 	return nil
 }
 
-func (b *Bot) getChangelogEntry(ctx context.Context, prBody string) (string, error) {
+func (b *Bot) getChangelogEntries(ctx context.Context, prBody string) ([]string, error) {
 	changelogRegex := regexp.MustCompile(ChangelogRegex)
 
-	changelogMatches := changelogRegex.FindAllString(prBody, 2) // Two or more changelog entries is invalid, so no need to search for more than two.
+	changelogMatches := changelogRegex.FindAllString(prBody, -1)
 	if len(changelogMatches) == 0 {
-		return "", b.logFailedCheck(ctx, "Changelog entry not found in the PR body. Please add a %q label to the PR, or a changelog line starting with `%s` followed by the changelog entry for the PR.", NoChangelogLabel, ChangelogPrefix)
+		return nil, b.logFailedCheck(ctx, "Changelog entry not found in the PR body. Please add a %q label to the PR, or changelog lines starting with `%s` followed by the changelog entries for the PR.", NoChangelogLabel, ChangelogPrefix)
 	}
 
-	if len(changelogMatches) > 1 {
-		return "", b.logFailedCheck(ctx, "Found two or more changelog entries in the PR body: %v", changelogMatches)
+	for i, changelogMatch := range changelogMatches {
+		changelogMatches[i] = changelogMatch[len(ChangelogPrefix):] // Case insensitive prefix removal
 	}
 
-	changelogEntry := changelogMatches[0][len(ChangelogPrefix):] // Case insensitive prefix removal
-	log.Printf("Found changelog entry %q", changelogEntry)
-	return changelogEntry, nil
+	log.Printf("Found changelog entries %v", changelogMatches)
+	return changelogMatches, nil
 }
 
 // Checks for common issues with the changelog entry.

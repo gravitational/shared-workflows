@@ -42,31 +42,45 @@ func TestGetChangelogEntry(t *testing.T) {
 		desc        string
 		body        string
 		shouldError bool
-		expected    string
+		expected    []string
 	}{
 		{
 			desc:        "pass-simple",
-			body:        strings.Join([]string{"some typical PR entry", fmt.Sprintf("%schangelog entry", ChangelogPrefix)}, "\n"),
+			body:        strings.Join([]string{"some typical PR entry", fmt.Sprintf("%schangelog entry", ChangelogPrefix), "some extra text"}, "\n"),
 			shouldError: false,
-			expected:    "changelog entry",
+			expected:    []string{"changelog entry"},
 		},
 		{
 			desc:        "pass-case-invariant",
 			body:        strings.Join([]string{"some typical PR entry", fmt.Sprintf("%schangelog entry", strings.ToUpper(ChangelogPrefix))}, "\n"),
 			shouldError: false,
-			expected:    "changelog entry",
+			expected:    []string{"changelog entry"},
 		},
 		{
 			desc:        "pass-prefix-in-changelog-entry",
 			body:        strings.Join([]string{"some typical PR entry", strings.Repeat(ChangelogPrefix, 5)}, "\n"),
 			shouldError: false,
-			expected:    strings.Repeat(ChangelogPrefix, 4),
+			expected:    []string{strings.Repeat(ChangelogPrefix, 4)},
 		},
 		{
 			desc:        "pass-only-changelog-in-body",
 			body:        fmt.Sprintf("%schangelog entry", ChangelogPrefix),
 			shouldError: false,
-			expected:    "changelog entry",
+			expected:    []string{"changelog entry"},
+		},
+		{
+			desc: "pass-multiple-entries",
+			body: strings.Join([]string{
+				ChangelogPrefix + "entry 1",
+				ChangelogPrefix + "entry 2",
+				ChangelogPrefix + "entry 3",
+			}, "\n"),
+			expected: []string{
+				"entry 1",
+				"entry 2",
+				"entry 3",
+			},
+			shouldError: false,
 		},
 		{
 			desc:        "fail-if-no-body",
@@ -78,20 +92,15 @@ func TestGetChangelogEntry(t *testing.T) {
 			body:        "some typical PR entry",
 			shouldError: true,
 		},
-		{
-			desc:        "fail-if-multiple-entries",
-			body:        strings.Join([]string{ChangelogPrefix, ChangelogPrefix, ChangelogPrefix}, "\n"),
-			shouldError: true,
-		},
 	}
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
 			b, ctx := buildTestingFixtures()
 
-			changelogEntry, err := b.getChangelogEntry(ctx, test.body)
+			changelogEntries, err := b.getChangelogEntries(ctx, test.body)
 			require.Equal(t, test.shouldError, err != nil)
 			if !test.shouldError {
-				require.Equal(t, test.expected, changelogEntry)
+				require.Exactly(t, test.expected, changelogEntries)
 			}
 		})
 	}
