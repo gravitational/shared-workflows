@@ -119,7 +119,7 @@ func (b *Bot) logFailedCheck(ctx context.Context, format string, args ...interfa
 		b.c.Environment.Organization,
 		b.c.Environment.Repository,
 		b.c.Environment.Number,
-		fmt.Sprintf(format, args...),
+		fmt.Sprintf("The PR changelog entry failed validation: %s", fmt.Sprintf(format, args...)),
 	)
 	if err != nil {
 		return trace.Wrap(err, "failed to create or update the changelog comment")
