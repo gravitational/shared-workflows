@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"unicode"
 
 	"github.com/gravitational/shared-workflows/bot/internal/env"
 	"github.com/gravitational/shared-workflows/bot/internal/github"
@@ -183,7 +184,16 @@ func TestValidateGetChangelogEntry(t *testing.T) {
 			b, ctx := buildTestingFixtures()
 
 			err := b.validateChangelogEntry(ctx, test.entry)
-			require.Equal(t, test.shouldError, err != nil)
+			if !test.shouldError {
+				require.NoError(t, err, "the test should not have errored but did")
+				return
+			}
+
+			require.Error(t, err, "the test should have errored but did not")
+			errorMessage := err.Error()
+			require.NotEmpty(t, strings.TrimSpace(errorMessage), "the error message was empty or whitespace")
+			require.True(t, strings.HasSuffix(errorMessage, "."), "the error message did not end with a \".\"")
+			require.True(t, unicode.IsUpper(rune(errorMessage[0])), "the error message did not start with an upper case letter")
 		})
 	}
 }
