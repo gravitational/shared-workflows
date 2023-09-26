@@ -85,7 +85,8 @@ func (b *Bot) getChangelogEntries(ctx context.Context, prBody string) ([]string,
 // Checks for common issues with the changelog entry.
 // This is not intended to be comprehensive, rather, it is intended to cover the majority of problems.
 func (b *Bot) validateChangelogEntry(ctx context.Context, changelogEntry string) error {
-	if strings.TrimSpace(changelogEntry) == "" {
+	changelogEntry = strings.ToLower(strings.TrimSpace(changelogEntry)) // Format the entry for easy validation
+	if changelogEntry == "" {
 		return b.logFailedCheck(ctx, "The changelog entry must contain one or more non-whitespace characters")
 	}
 
@@ -93,8 +94,8 @@ func (b *Bot) validateChangelogEntry(ctx context.Context, changelogEntry string)
 		return b.logFailedCheck(ctx, "The changelog entry must start with a letter")
 	}
 
-	if strings.HasPrefix(strings.ToLower(changelogEntry), "backport of") ||
-		strings.HasPrefix(strings.ToLower(changelogEntry), "backports") {
+	if strings.HasPrefix(changelogEntry, "backport of") ||
+		strings.HasPrefix(changelogEntry, "backports") {
 		return b.logFailedCheck(ctx, "The changelog entry must contain the actual change, not a reference to the source PR of the backport.")
 	}
 
@@ -104,6 +105,10 @@ func (b *Bot) validateChangelogEntry(ctx context.Context, changelogEntry string)
 
 	if strings.Contains(changelogEntry, "```") {
 		return b.logFailedCheck(ctx, "The changelog entry must not contain a multiline code block")
+	}
+
+	if changelogEntry == "none" {
+		return b.logFailedCheck(ctx, "The %q label must be set instead of listing 'none' as the changelog entry", NoChangelogLabel)
 	}
 
 	return nil

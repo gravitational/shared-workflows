@@ -172,6 +172,11 @@ func TestValidateGetChangelogEntry(t *testing.T) {
 			entry:       "Changelog entry ```",
 			shouldError: true,
 		},
+		{
+			desc:        "fail-is-set-to-none",
+			entry:       " None ",
+			shouldError: true,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
