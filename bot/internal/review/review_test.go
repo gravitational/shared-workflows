@@ -149,6 +149,14 @@ func TestIsInternal(t *testing.T) {
 			author: RenovateBotPrivate,
 			expect: true,
 		},
+		{
+			desc: "post-release bot is internal",
+			assignments: &Assignments{
+				c: &Config{},
+			},
+			author: PostReleaseBot,
+			expect: true,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {

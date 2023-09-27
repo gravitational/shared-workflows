@@ -44,10 +44,17 @@ const (
 	// RenovateBotPublic is the name of the app that runs the Renovate action in
 	// public repos(teleport).
 	RenovateBotPublic = "public-renovate-gha[bot]"
+	// PostReleaseBot is the name of the bot user that creates post-release PRs
+	// such as AMI and docs version updates.
+	PostReleaseBot = "teleport-post-release-automation[bot]"
 )
 
 func isAllowedRobot(author string) bool {
-	return author == Dependabot || author == DependabotBatcher || author == RenovateBotPrivate || author == RenovateBotPublic
+	switch author {
+	case Dependabot, DependabotBatcher, RenovateBotPrivate, RenovateBotPublic, PostReleaseBot:
+		return true
+	}
+	return false
 }
 
 // Reviewer is a code reviewer.
