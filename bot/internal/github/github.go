@@ -250,6 +250,8 @@ type PullRequestFile struct {
 	Additions int
 	// Deletions is the number of lines removed from the file
 	Deletions int
+	// Status is either added, removed, modified, renamed, copied, changed, unchanged
+	Status string
 }
 
 // PullRequestFiles is a list of pull request files.
@@ -411,6 +413,7 @@ func (c *Client) ListFiles(ctx context.Context, organization string, repository 
 				Name:      file.GetFilename(),
 				Additions: file.GetAdditions(),
 				Deletions: file.GetDeletions(),
+				Status:    file.GetStatus(),
 			})
 		}
 

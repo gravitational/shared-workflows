@@ -63,6 +63,11 @@ func (b *Bot) verifyDBMigration(ctx context.Context, pathPrefix string) error {
 		return nil
 	}
 
+	// don't evaluate removed files
+	prFiles = filterSlice(prFiles, func(f github.PullRequestFile) bool {
+		return f.Status != "removed"
+	})
+
 	// parse PR migration file ids
 	// 202301031500_subscription-alter.up.sql => 202301031500
 	prIDs, err := parseMigrationFileIDs(pathPrefix, pullRequestFileNames(prFiles))
@@ -175,4 +180,16 @@ func pullRequestFileNames(files []github.PullRequestFile) []string {
 		names[i] = files[i].Name
 	}
 	return names
+}
+
+// filterSlice filters a slice returning a slice of the original items
+// excluding those itens where filterfunc returns false.
+func filterSlice[T any](ts []T, filterfunc func(T) bool) []T {
+	p := make([]T, 0, len(ts))
+	for i := range ts {
+		if filterfunc(ts[i]) {
+			p = append(p, ts[i])
+		}
+	}
+	return p
 }
