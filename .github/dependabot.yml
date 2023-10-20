@@ -4,3 +4,8 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+
+updates:
+  - package-ecosystem: "gomod"
+    directory: "/bot"
+    open-pull-requests-limit: 0
