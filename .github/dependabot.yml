@@ -8,3 +8,5 @@ updates:
   - package-ecosystem: "gomod"
     directory: "/bot"
     open-pull-requests-limit: 0
+    schedule:
+      interval: "weekly"
