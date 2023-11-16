@@ -210,6 +210,7 @@ func (r *Assignments) getDocsReviewers(e *env.Environment, files []github.PullRe
 
 	// If no docs reviewers were assigned, assign admin reviews.
 	if len(reviewers) == 0 {
+		log.Println("No docs reviewers found. Assigning admin reviewers.")
 		return r.getAdminReviewers(e.Author)
 	}
 	return reviewers
@@ -270,14 +271,26 @@ func (r *Assignments) getPreferredReviewers(set []string, files []github.PullReq
 
 // getAllPreferredReviewers returns a list of reviewers that would be
 // preferrable to review the provided changeset. Includes all preferred
-// reviewers for each file path in the chagne set.
+// reviewers for each file path in the changeset.
 func (r *Assignments) getAllPreferredReviewers(set []string, files []github.PullRequestFile) (preferredReviewers []string) {
+	// Check each key in the preferred reviewer map, which is a file path
+	// that reviewers are assigned to. For any file names in the changeset
+	// that begin with that file path, add the reviewers for that pile path
+	// to the set of preferred reviewers. Look up each reviewer in a map to
+	// avoid duplication.
+	assigned := make(map[string]struct{})
 	for path, reviewers := range r.getPreferredReviewersMap(set) {
 		for _, file := range files {
 			if !strings.HasPrefix(file.Name, path) {
 				continue
 			}
-			preferredReviewers = append(preferredReviewers, reviewers...)
+			for _, rev := range reviewers {
+				if _, ok := assigned[rev]; ok {
+					continue
+				}
+				assigned[rev] = struct{}{}
+				preferredReviewers = append(preferredReviewers, rev)
+			}
 		}
 	}
 	return preferredReviewers

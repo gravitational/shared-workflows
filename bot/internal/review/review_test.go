@@ -504,6 +504,24 @@ func TestGetDocsReviewers(t *testing.T) {
 			},
 			reviewers: []string{"1", "2"},
 		},
+		{
+			desc: "preferred code reviewer for docs page with duplicate code reviewers",
+			assignments: &Assignments{
+				c: &Config{
+
+					CodeReviewers: map[string]Reviewer{
+						"2": {Team: "Core", Owner: true, PreferredReviewerFor: []string{"server-access", "database-access"}},
+						"3": {Team: "Core", Owner: true, PreferredReviewerFor: []string{"server-access", "database-access"}},
+					},
+				},
+			},
+			author: "4",
+			files: []github.PullRequestFile{
+				{Name: "server-access/get-started.mdx"},
+				{Name: "database-access/get-started.mdx"},
+			},
+			reviewers: []string{"2", "3"},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
@@ -1011,6 +1029,24 @@ func TestCheckInternal(t *testing.T) {
 			release: false,
 			large:   false,
 			result:  true,
+		},
+		{
+			desc:       "docs-with-non-preferred-code-reviewer",
+			repository: "teleport",
+			author:     "1",
+			reviews: []github.Review{
+				{Author: "3", State: Approved},
+			},
+			files: []github.PullRequestFile{
+				{
+					Name: "docs/pages/server-access/get-started.mdx",
+				},
+			},
+			docs:    true,
+			code:    false,
+			release: false,
+			large:   false,
+			result:  false,
 		},
 	}
 	for _, test := range tests {
