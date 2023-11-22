@@ -16,20 +16,40 @@ import (
 
 // Verify is a catch-all for verifying the PR doesn't have any issues.
 func (b *Bot) Verify(ctx context.Context) error {
+	var err error
 	switch b.c.Environment.Repository {
+	case env.AccessGraphRepo:
+		err = b.verifyAccessGraph(ctx)
 	case env.CloudRepo:
-		err := b.verifyCloud(ctx)
-		if err != nil {
-			return trace.Wrap(err)
-		}
+		err = b.verifyCloud(ctx)
 	}
-	return nil
+	return trace.Wrap(err)
+}
+
+// verifyAccessGraph runs verification checks for the access-graph repo.
+func (b *Bot) verifyAccessGraph(ctx context.Context) error {
+	// exec DB migration verification
+	return trace.Wrap(b.verifyDBMigrations(ctx))
 }
 
 // verifyCloud runs verification checks for cloud repos.
 // E.g. it is used to verify DB migration files are ordered properly in the Cloud repo.
 func (b *Bot) verifyCloud(ctx context.Context) error {
 	// exec DB migration verification
+	return trace.Wrap(b.verifyDBMigrations(ctx))
+}
+
+// migrationConfig enables the DB migration verification for a repo/path.
+//
+//	map[repo]: [...path]
+var migrationConfig = map[string][]string{
+	env.AccessGraphRepo: {"migrations/public", "migrations/tenant"},
+	env.CloudRepo:       {"db/salescenter/migrations"},
+}
+
+// verifyDBMigrations runs verifyDBMigration for each
+// of the migration paths defined for the current repository
+func (b *Bot) verifyDBMigrations(ctx context.Context) error {
 	for _, path := range migrationConfig[b.c.Environment.Repository] {
 		err := b.verifyDBMigration(ctx, path)
 		if err != nil {
@@ -37,12 +57,6 @@ func (b *Bot) verifyCloud(ctx context.Context) error {
 		}
 	}
 	return nil
-}
-
-// migrationConfig enables the DB migration verification for a repo/path.
-//   map[repo]: [...path]
-var migrationConfig = map[string][]string{
-	env.CloudRepo: []string{"db/salescenter/migrations"},
 }
 
 // verifyDBMigration ensures the DB migration files in a PR have a timestamp
