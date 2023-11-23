@@ -91,7 +91,7 @@ func (b *Bot) verifyDBMigration(ctx context.Context, pathPrefix string) error {
 
 	// no PR migration files
 	if len(prIDs) == 0 {
-		log.Print("Verify:cloudDBMigration: no migration files in this PR")
+		log.Printf("Verify:cloudDBMigration: no migration files in %s in this PR", pathPrefix)
 		return nil
 	}
 
@@ -146,7 +146,7 @@ func (b *Bot) verifyDBMigration(ctx context.Context, pathPrefix string) error {
 // the prefix ID of each file or returns an error if the file does not have an
 // integer prefix. The returned IDs are sorted in ascending order.
 //
-//	  202301031500_subscription-alter.up.sql => 202301031500
+//	202301031500_subscription-alter.up.sql => 202301031500
 func parseMigrationFileIDs(pathPrefix string, files []string) ([]int, error) {
 	var ids []int
 	for _, file := range files {
