@@ -176,14 +176,14 @@ func (r *Assignments) Get(e *env.Environment, changes env.Changes, files []githu
 	switch {
 	case changes.Docs && changes.Code:
 		log.Printf("Assign: Found docs and code changes.")
-		reviewers = append(reviewers, r.getDocsReviewers(e.Author)...)
+		reviewers = append(reviewers, r.getDocsReviewers(e, files)...)
 		reviewers = append(reviewers, r.getCodeReviewers(e, files)...)
 	case !changes.Docs && changes.Code:
 		log.Printf("Assign: Found code changes.")
 		reviewers = append(reviewers, r.getCodeReviewers(e, files)...)
 	case changes.Docs && !changes.Code:
 		log.Printf("Assign: Found docs changes.")
-		reviewers = append(reviewers, r.getDocsReviewers(e.Author)...)
+		reviewers = append(reviewers, r.getDocsReviewers(e, files)...)
 	// Strange state, an empty commit? Return admin reviewers.
 	case !changes.Docs && !changes.Code:
 		log.Printf("Assign: Found no docs or code changes.")
@@ -197,13 +197,21 @@ func (r *Assignments) getReleaseReviewers() []string {
 	return r.c.ReleaseReviewers
 }
 
-func (r *Assignments) getDocsReviewers(author string) []string {
-	setA, setB := getReviewerSets(author, "Core", r.c.DocsReviewers, r.c.DocsReviewersOmit)
-	reviewers := append(setA, setB...)
+func (r *Assignments) getDocsReviewers(e *env.Environment, files []github.PullRequestFile) []string {
+	// See if any code reviewers are designated preferred reviewers for one of
+	// the changed docs files. If so, add them as docs reviewers.
+	a, b := getReviewerSets(e.Author, "Core", r.c.CodeReviewers, r.c.CodeReviewersOmit)
+	prefCodeReviewers := r.getAllPreferredReviewers(append(a, b...), files)
+
+	// Get the docs reviewer pool, which does not depend on the files
+	// changed by a pull request.
+	docsA, docsB := getReviewerSets(e.Author, "Core", r.c.DocsReviewers, r.c.DocsReviewersOmit)
+	reviewers := append(prefCodeReviewers, append(docsA, docsB...)...)
 
 	// If no docs reviewers were assigned, assign admin reviews.
 	if len(reviewers) == 0 {
-		return r.getAdminReviewers(author)
+		log.Println("No docs reviewers found. Assigning admin reviewers.")
+		return r.getAdminReviewers(e.Author)
 	}
 	return reviewers
 }
@@ -236,7 +244,8 @@ func (r *Assignments) getCodeReviewers(e *env.Environment, files []github.PullRe
 }
 
 // getPreferredReviewers returns a list of reviewers that would be preferrable
-// to review the provided changeset.
+// to review the provided changeset. Returns at most one preferred reviewer per
+// file path.
 func (r *Assignments) getPreferredReviewers(set []string, files []github.PullRequestFile) (preferredReviewers []string) {
 	// To avoid assigning too many reviewers iterate over paths that we have
 	// preferred reviewers for and see if any of them are among the changeset.
@@ -254,6 +263,33 @@ func (r *Assignments) getPreferredReviewers(set []string, files []github.PullReq
 					coveredPaths[path] = struct{}{}
 				}
 				break
+			}
+		}
+	}
+	return preferredReviewers
+}
+
+// getAllPreferredReviewers returns a list of reviewers that would be
+// preferrable to review the provided changeset. Includes all preferred
+// reviewers for each file path in the changeset.
+func (r *Assignments) getAllPreferredReviewers(set []string, files []github.PullRequestFile) (preferredReviewers []string) {
+	// Check each key in the preferred reviewer map, which is a file path
+	// that reviewers are assigned to. For any file names in the changeset
+	// that begin with that file path, add the reviewers for that pile path
+	// to the set of preferred reviewers. Look up each reviewer in a map to
+	// avoid duplication.
+	assigned := make(map[string]struct{})
+	for path, reviewers := range r.getPreferredReviewersMap(set) {
+		for _, file := range files {
+			if !strings.HasPrefix(file.Name, path) {
+				continue
+			}
+			for _, rev := range reviewers {
+				if _, ok := assigned[rev]; ok {
+					continue
+				}
+				assigned[rev] = struct{}{}
+				preferredReviewers = append(preferredReviewers, rev)
 			}
 		}
 	}
@@ -327,7 +363,7 @@ func (r *Assignments) CheckExternal(author string, reviews []github.Review) erro
 // CheckInternal will verify if required reviewers have approved. Checks if
 // docs and if each set of code reviews have approved. Admin approvals bypass
 // all checks.
-func (r *Assignments) CheckInternal(e *env.Environment, reviews []github.Review, changes env.Changes) error {
+func (r *Assignments) CheckInternal(e *env.Environment, reviews []github.Review, changes env.Changes, files []github.PullRequestFile) error {
 	log.Printf("Check: Found internal author %v.", e.Author)
 
 	// Skip checks if admins have approved.
@@ -354,7 +390,7 @@ func (r *Assignments) CheckInternal(e *env.Environment, reviews []github.Review,
 	switch {
 	case changes.Docs && changes.Code:
 		log.Printf("Check: Found docs and code changes.")
-		if err := r.checkInternalDocsReviews(e.Author, reviews); err != nil {
+		if err := r.checkInternalDocsReviews(e, reviews, files); err != nil {
 			return trace.Wrap(err)
 		}
 		if err := r.checkInternalCodeReviews(e, reviews); err != nil {
@@ -367,7 +403,7 @@ func (r *Assignments) CheckInternal(e *env.Environment, reviews []github.Review,
 		}
 	case changes.Docs && !changes.Code:
 		log.Printf("Check: Found docs changes.")
-		if err := r.checkInternalDocsReviews(e.Author, reviews); err != nil {
+		if err := r.checkInternalDocsReviews(e, reviews, files); err != nil {
 			return trace.Wrap(err)
 		}
 	// Strange state, an empty commit? Check admins.
@@ -396,8 +432,8 @@ func (r *Assignments) checkInternalReleaseReviews(reviews []github.Review) error
 
 // checkInternalDocsReviews checks whether docs review requirements are satisfied
 // for a PR authored by an internal employee
-func (r *Assignments) checkInternalDocsReviews(author string, reviews []github.Review) error {
-	reviewers := r.getDocsReviewers(author)
+func (r *Assignments) checkInternalDocsReviews(e *env.Environment, reviews []github.Review, files []github.PullRequestFile) error {
+	reviewers := r.getDocsReviewers(e, files)
 
 	if check(reviewers, reviews) {
 		return nil
