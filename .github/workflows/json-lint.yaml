@@ -18,16 +18,17 @@ jobs:
           fetch-depth: 2
 
       - name: Get changed files
-        id: changed-files
-        uses: tj-actions/changed-files@v40.2.0
+        id: filter
+        uses: dorny/paths-filter@4512585405083f25c027a35db413c2b3b9006d50 # v2.11.1
         with:
-          files: |
-            **/*.json
+          filters: |
+            json:
+              - '**/*.json'
 
       - name: jsonlint
-        if: steps.changed-files.outputs.any_changed == 'true'
+        if: steps.filter.outputs.json == 'true'
         run: |
-          for file in ${{ steps.changed-files.outputs.all_changed_files }}; do
+          for file in ${{ steps.filter.outputs.json_files }}; do
             echo "Validating ${file}"
             jq empty ${file}
           done
