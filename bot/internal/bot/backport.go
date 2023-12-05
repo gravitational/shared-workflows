@@ -97,29 +97,51 @@ func (b *Bot) Backport(ctx context.Context) error {
 		if err != nil {
 			log.Printf("Failed to create backport branch:\n%v\n", trace.DebugReport(err))
 			rows = append(rows, row{
-				Branch: base,
-				Failed: true,
-				Link:   u,
+				Branch:       base,
+				BranchFailed: true,
+				Link:         u,
 			})
 			continue
 		}
 
+		backportPR, err := b.createBackportPR(ctx, pull, head, base)
+		if err != nil {
+			// If we failed to create a backport PR automatically, fallback to
+			// giving a "quick PR" link since the backport branch was created
+			// successfully.
+			log.Printf("Failed to create backport PR:\n%v\n", trace.DebugReport(err))
+			rows = append(rows, row{
+				Branch:   base,
+				PRFailed: true,
+				Link: url.URL{
+					Scheme: "https",
+					Host:   "github.com",
+					// Both base and head are safe to put into the URL: base has
+					// had the "branchPattern" regexp run against it and head is
+					// formed from base so an attacker can not control the path.
+					Path: path.Join(b.c.Environment.Organization, b.c.Environment.Repository, "compare", fmt.Sprintf("%v...%v", base, head)),
+					RawQuery: url.Values{
+						"expand": []string{"1"},
+						"title":  []string{fmt.Sprintf("[%v] %v", strings.Trim(base, "branch/"), pull.UnsafeTitle)},
+						"body":   []string{fmt.Sprintf("Backport #%v to %v.", b.c.Environment.Number, base)},
+						"labels": filterBackportLabels(pull.UnsafeLabels),
+					}.Encode(),
+				},
+			})
+			continue
+		}
+
+		prURL := url.URL{
+			Scheme: "https",
+			Host:   "github.com",
+			Path:   path.Join(b.c.Environment.Organization, b.c.Environment.Repository, "pull", strconv.Itoa(backportPR)),
+		}
+
+		log.Printf("Created backport PR: %v", prURL.String())
+
 		rows = append(rows, row{
 			Branch: base,
-			Failed: false,
-			Link: url.URL{
-				Scheme: "https",
-				Host:   "github.com",
-				// Both base and head are safe to put into the URL: base has
-				// had the "branchPattern" regexp run against it and head is
-				// formed from base so an attacker can not control the path.
-				Path: path.Join(b.c.Environment.Organization, b.c.Environment.Repository, "compare", fmt.Sprintf("%v...%v", base, head)),
-				RawQuery: url.Values{
-					"expand": []string{"1"},
-					"title":  []string{fmt.Sprintf("[%v] %v", strings.Trim(base, "branch/"), pull.UnsafeTitle)},
-					"body":   []string{fmt.Sprintf("Backport #%v to %v", b.c.Environment.Number, base)},
-				}.Encode(),
-			},
+			Link:   prURL,
 		})
 	}
 
@@ -134,6 +156,33 @@ func (b *Bot) Backport(ctx context.Context) error {
 			Rows:   rows,
 		})
 	return trace.Wrap(err)
+}
+
+func (b *Bot) createBackportPR(ctx context.Context, pull github.PullRequest, head, base string) (int, error) {
+	backportPR, err := b.c.GitHub.CreatePullRequest(ctx,
+		b.c.Environment.Organization,
+		b.c.Environment.Repository,
+		fmt.Sprintf("[%v] %v", strings.Trim(base, "branch/"), pull.UnsafeTitle),
+		head,
+		base,
+		fmt.Sprintf(`Backport #%v to %v.
+
+%v`, b.c.Environment.Number, base, pull.UnsafeBody),
+		false)
+	if err != nil {
+		return 0, trace.Wrap(err)
+	}
+
+	err = b.c.GitHub.AddLabels(ctx,
+		b.c.Environment.Organization,
+		b.c.Environment.Repository,
+		backportPR,
+		filterBackportLabels(pull.UnsafeLabels))
+	if err != nil {
+		return 0, trace.Wrap(err)
+	}
+
+	return backportPR, nil
 }
 
 // BackportLocal executes dry run backport workflow locally. No git commands
@@ -164,6 +213,16 @@ func (b *Bot) BackportLocal(ctx context.Context, branch string) error {
 
 func (b *Bot) backportBranchName(base string) string {
 	return fmt.Sprintf("bot/backport-%v-%v", b.c.Environment.Number, base)
+}
+
+func filterBackportLabels(labels []string) (filtered []string) {
+	for _, label := range labels {
+		if strings.HasPrefix(label, "backport/") {
+			continue
+		}
+		filtered = append(filtered, label)
+	}
+	return filtered
 }
 
 // findBranches looks through the labels attached to a Pull Request for all the
@@ -307,8 +366,11 @@ type data struct {
 
 // row represents a single backport attempt.
 type row struct {
-	// Failed is used to indicate if this backport failed.
-	Failed bool
+	// BranchFailed indicates if backport branch creation failed.
+	BranchFailed bool
+
+	// PRFailed indicates is automatic backport PR creation failed.
+	PRFailed bool
 
 	// Branch is the name of the backport branch.
 	Branch string
@@ -325,7 +387,7 @@ const table = `
 | Branch | Result |
 |--------|--------|
 {{- range .Rows}}
-| {{.Branch}} | {{if .Failed}}[Failed]({{.Link}}){{else}}[Create PR]({{.Link}}){{end}} |
+| {{.Branch}} | {{if .BranchFailed}}[Failed]({{.Link}}){{else if .PRFailed}}[Create PR]({{.Link}}){{else}}[Backport PR created]({{.Link}}){{end}} |
 {{- end}}
 `
 
