@@ -420,6 +420,7 @@ func TestGetDocsReviewers(t *testing.T) {
 		assignments *Assignments
 		author      string
 		reviewers   []string
+		files       []github.PullRequestFile
 	}{
 		{
 			desc: "skip-self-assign",
@@ -483,10 +484,52 @@ func TestGetDocsReviewers(t *testing.T) {
 			author:    "3",
 			reviewers: []string{"1", "2"},
 		},
+		{
+			desc: "preferred code reviewer for docs page",
+			assignments: &Assignments{
+				c: &Config{
+
+					DocsReviewers: map[string]Reviewer{
+						"1": {Team: "Core", Owner: true},
+					},
+					CodeReviewers: map[string]Reviewer{
+						"2": {Team: "Core", Owner: true, PreferredReviewerFor: []string{"docs/pages/server-access"}},
+						"3": {Team: "Core", Owner: true},
+					},
+				},
+			},
+			author: "4",
+			files: []github.PullRequestFile{
+				{Name: "docs/pages/server-access/get-started.mdx"},
+			},
+			reviewers: []string{"1", "2"},
+		},
+		{
+			desc: "preferred code reviewer for docs page with duplicate code reviewers",
+			assignments: &Assignments{
+				c: &Config{
+
+					CodeReviewers: map[string]Reviewer{
+						"2": {Team: "Core", Owner: true, PreferredReviewerFor: []string{"server-access", "database-access"}},
+						"3": {Team: "Core", Owner: true, PreferredReviewerFor: []string{"server-access", "database-access"}},
+					},
+				},
+			},
+			author: "4",
+			files: []github.PullRequestFile{
+				{Name: "server-access/get-started.mdx"},
+				{Name: "database-access/get-started.mdx"},
+			},
+			reviewers: []string{"2", "3"},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
-			reviewers := test.assignments.getDocsReviewers(test.author)
+			e := &env.Environment{
+				Author: test.author,
+			}
+
+			reviewers := test.assignments.getDocsReviewers(e, test.files)
 			require.ElementsMatch(t, reviewers, test.reviewers)
 		})
 	}
@@ -604,6 +647,7 @@ func TestCheckInternal(t *testing.T) {
 				"11": {Team: "Cloud", Owner: false},
 				"12": {Team: "Cloud", Owner: false},
 				"13": {Team: "Cloud", Owner: true},
+				"14": {Team: "Core", Owner: true, PreferredReviewerFor: []string{"docs/pages/server-access"}},
 			},
 			// Docs.
 			DocsReviewers: map[string]Reviewer{
@@ -632,6 +676,7 @@ func TestCheckInternal(t *testing.T) {
 		large      bool
 		release    bool
 		result     bool
+		files      []github.PullRequestFile
 	}{
 		{
 			desc:       "no-reviews-fail",
@@ -967,6 +1012,42 @@ func TestCheckInternal(t *testing.T) {
 			release: true,
 			result:  true,
 		},
+		{
+			desc:       "docs-with-preferred-code-reviewer",
+			repository: "teleport",
+			author:     "1",
+			reviews: []github.Review{
+				{Author: "14", State: Approved},
+			},
+			files: []github.PullRequestFile{
+				{
+					Name: "docs/pages/server-access/get-started.mdx",
+				},
+			},
+			docs:    true,
+			code:    false,
+			release: false,
+			large:   false,
+			result:  true,
+		},
+		{
+			desc:       "docs-with-non-preferred-code-reviewer",
+			repository: "teleport",
+			author:     "1",
+			reviews: []github.Review{
+				{Author: "3", State: Approved},
+			},
+			files: []github.PullRequestFile{
+				{
+					Name: "docs/pages/server-access/get-started.mdx",
+				},
+			},
+			docs:    true,
+			code:    false,
+			release: false,
+			large:   false,
+			result:  false,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
@@ -979,7 +1060,7 @@ func TestCheckInternal(t *testing.T) {
 				Code:    test.code,
 				Large:   test.large,
 				Release: test.release,
-			})
+			}, test.files)
 			if test.result {
 				require.NoError(t, err)
 			} else {

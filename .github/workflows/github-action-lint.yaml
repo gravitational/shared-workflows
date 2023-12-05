@@ -1,0 +1,37 @@
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_call:
+
+name: Lint (GitHub Actions)
+
+jobs:
+  check-github-actions:
+    name: Check GitHub Actions
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check for affected paths
+        id: changes
+        uses: dorny/paths-filter@4512585405083f25c027a35db413c2b3b9006d50 # v2.11.1
+        with:
+          filters: |
+            github-actions:
+              - '.github/*/**/*.{yaml,yml}'
+
+      - name: Ensure SHA pinned actions
+        uses: zgosalvez/github-actions-ensure-sha-pinned-actions@b1b635d24259e8a047a6ce7d6501ea432aa7a830 # v3.0.2
+        if: steps.changes.outputs.github-actions == 'true'
+        with:
+          allowlist: |
+            github/
+            actions/
+            gravitational/shared-workflows/.github/workflows
+            gravitational/teleport/.github/workflows
+            gravitational/teleport.e/.github/workflows
