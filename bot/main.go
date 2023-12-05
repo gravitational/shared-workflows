@@ -36,7 +36,7 @@ import (
 func main() {
 	flags, err := parseFlags()
 	if err != nil {
-		log.Fatalf("Failed to parse flags: %v.", err)
+		log.Fatalf("Failed to parse flags: %#v.", err)
 	}
 
 	// Cancel run if it takes longer than 5 minutes.
@@ -48,7 +48,7 @@ func main() {
 
 	b, err := createBot(ctx, flags)
 	if err != nil {
-		log.Fatalf("Failed to create bot: %v.", err)
+		log.Fatalf("Failed to create bot: %#v.", err)
 	}
 
 	log.Printf("Running %v.", flags.workflow)
