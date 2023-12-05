@@ -178,12 +178,9 @@ func createBot(ctx context.Context, flags flags) (*bot.Bot, error) {
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	var reviewer *review.Assignments
-	if flags.workflow == "assign" || flags.workflow == "check" {
-		reviewer, err = review.FromString(flags.reviewers)
-		if err != nil {
-			return nil, trace.Wrap(err)
-		}
+	reviewer, err := review.FromString(flags.reviewers)
+	if err != nil {
+		return nil, trace.Wrap(err)
 	}
 	b, err := bot.New(&bot.Config{
 		GitHub:      gh,
