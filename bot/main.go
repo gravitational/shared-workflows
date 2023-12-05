@@ -48,7 +48,7 @@ func main() {
 
 	b, err := createBot(ctx, flags)
 	if err != nil {
-		log.Fatalf("Failed to create bot: %#v.", err)
+		log.Fatalf("Failed to create bot: %v.", err)
 	}
 
 	log.Printf("Running %v.", flags.workflow)
@@ -137,7 +137,7 @@ func parseFlags() (flags, error) {
 	if *token == "" {
 		return flags{}, trace.BadParameter("token missing")
 	}
-	if *reviewers == "" && !*local && (*workflow == "assign" || *workflow == "check") {
+	if *reviewers == "" && !*local {
 		return flags{}, trace.BadParameter("reviewers required for assign and check")
 	}
 
