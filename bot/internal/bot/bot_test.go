@@ -20,11 +20,11 @@ import (
 	"context"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/gravitational/shared-workflows/bot/internal/env"
 	"github.com/gravitational/shared-workflows/bot/internal/github"
 	"github.com/gravitational/shared-workflows/bot/internal/review"
-
-	"github.com/stretchr/testify/require"
 )
 
 // TestClassifyChanges checks that PR contents are correctly parsed for docs and
@@ -311,6 +311,7 @@ func TestDoNotMerge(t *testing.T) {
 type fakeGithub struct {
 	files       []github.PullRequestFile
 	pull        github.PullRequest
+	jobs        []github.Job
 	reviewers   []string
 	reviews     []github.Review
 	orgMembers  map[string]struct{}
@@ -364,7 +365,7 @@ func (f *fakeGithub) ListWorkflowRuns(ctx context.Context, organization string, 
 }
 
 func (f *fakeGithub) ListWorkflowJobs(ctx context.Context, organization string, repository string, runID int64) ([]github.Job, error) {
-	return nil, nil
+	return f.jobs, nil
 }
 
 func (f *fakeGithub) DeleteWorkflowRun(ctx context.Context, organization string, repository string, runID int64) error {
@@ -377,6 +378,10 @@ func (f *fakeGithub) IsOrgMember(ctx context.Context, user string, org string) (
 }
 
 func (f *fakeGithub) CreateComment(ctx context.Context, organization string, repository string, number int, comment string) error {
+	f.comments = append(f.comments, github.Comment{
+		Body: comment,
+	})
+
 	return nil
 }
 

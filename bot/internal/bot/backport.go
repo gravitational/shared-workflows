@@ -30,9 +30,10 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/gravitational/shared-workflows/bot/internal/github"
-
 	"github.com/gravitational/trace"
+	"golang.org/x/exp/slices"
+
+	"github.com/gravitational/shared-workflows/bot/internal/github"
 )
 
 // Backport will create backport Pull Requests (if requested) when a Pull
@@ -79,6 +80,11 @@ func (b *Bot) Backport(ctx context.Context) error {
 
 	var rows []row
 
+	g := git
+	if b.c.Git != nil {
+		g = b.c.Git
+	}
+
 	// Loop over all requested backport branches and create backport branch and
 	// GitHub Pull Request.
 	for _, base := range branches {
@@ -92,7 +98,7 @@ func (b *Bot) Backport(ctx context.Context) error {
 			base,
 			pull,
 			head,
-			git,
+			g,
 		)
 		if err != nil {
 			log.Printf("Failed to create backport branch:\n%v\n", trace.DebugReport(err))
@@ -102,6 +108,16 @@ func (b *Bot) Backport(ctx context.Context) error {
 				Link:   u,
 			})
 			continue
+		}
+
+		labels := []string{NoChangelogLabel}
+		bodyText := fmt.Sprintf("Backport #%v to %v", b.c.Environment.Number, base)
+		if entries := b.getChangelogEntries(pull.UnsafeBody); len(entries) > 0 && !slices.Contains(pull.UnsafeLabels, NoChangelogLabel) {
+			bodyText += "\n\n"
+			labels = labels[:0]
+			for _, entry := range entries {
+				bodyText += fmt.Sprintf("%s%s\n", ChangelogPrefix, entry)
+			}
 		}
 
 		rows = append(rows, row{
@@ -117,7 +133,8 @@ func (b *Bot) Backport(ctx context.Context) error {
 				RawQuery: url.Values{
 					"expand": []string{"1"},
 					"title":  []string{fmt.Sprintf("[%v] %v", strings.Trim(base, "branch/"), pull.UnsafeTitle)},
-					"body":   []string{fmt.Sprintf("Backport #%v to %v", b.c.Environment.Number, base)},
+					"body":   []string{bodyText},
+					"labels": labels,
 				}.Encode(),
 			},
 		})
@@ -162,8 +179,10 @@ func (b *Bot) BackportLocal(ctx context.Context, branch string) error {
 	return nil
 }
 
+const botBackportBranchPrefix = "bot/backport"
+
 func (b *Bot) backportBranchName(base string) string {
-	return fmt.Sprintf("bot/backport-%v-%v", b.c.Environment.Number, base)
+	return fmt.Sprintf("%s-%v-%v", botBackportBranchPrefix, b.c.Environment.Number, base)
 }
 
 // findBranches looks through the labels attached to a Pull Request for all the
