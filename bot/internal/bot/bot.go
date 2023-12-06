@@ -20,11 +20,11 @@ import (
 	"context"
 	"strings"
 
+	"github.com/gravitational/trace"
+
 	"github.com/gravitational/shared-workflows/bot/internal/env"
 	"github.com/gravitational/shared-workflows/bot/internal/github"
 	"github.com/gravitational/shared-workflows/bot/internal/review"
-
-	"github.com/gravitational/trace"
 )
 
 // Client implements the GitHub API.
@@ -44,7 +44,7 @@ type Client interface {
 	// GetPullRequest returns a specific Pull Request.
 	GetPullRequest(ctx context.Context, organization string, repository string, number int) (github.PullRequest, error)
 
-	// GetPullRequestWithCommitsd returns a specific Pull Request with commits.
+	// GetPullRequestWithCommits returns a specific Pull Request with commits.
 	GetPullRequestWithCommits(ctx context.Context, organization string, repository string, number int) (github.PullRequest, error)
 
 	// CreatePullRequest will create a Pull Request.
@@ -97,6 +97,9 @@ type Config struct {
 
 	// Review is used to get code and docs reviewers.
 	Review *review.Assignments
+
+	// Git is used to run git commands, uses dry run in tests.
+	Git func(...string) error
 }
 
 // CheckAndSetDefaults checks and sets defaults.

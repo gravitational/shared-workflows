@@ -51,9 +51,11 @@ func (b *Bot) CheckChangelog(ctx context.Context) error {
 		return nil
 	}
 
-	changelogEntries, err := b.getChangelogEntries(ctx, pull.UnsafeBody)
-	if err != nil {
-		return trace.Wrap(err, "failed to get changelog entry")
+	changelogEntries := b.getChangelogEntries(pull.UnsafeBody)
+	if len(changelogEntries) == 0 {
+		return trace.Wrap(
+			b.logFailedCheck(ctx, "Changelog entry not found in the PR body. Please add a %q label to the PR, or changelog lines starting with `%s` followed by the changelog entries for the PR.", NoChangelogLabel, ChangelogPrefix),
+			"failed to get changelog entry")
 	}
 
 	for _, changelogEntry := range changelogEntries {
@@ -66,20 +68,18 @@ func (b *Bot) CheckChangelog(ctx context.Context) error {
 	return nil
 }
 
-func (b *Bot) getChangelogEntries(ctx context.Context, prBody string) ([]string, error) {
+func (b *Bot) getChangelogEntries(prBody string) []string {
 	changelogRegex := regexp.MustCompile(ChangelogRegex)
 
 	changelogMatches := changelogRegex.FindAllString(prBody, -1)
-	if len(changelogMatches) == 0 {
-		return nil, b.logFailedCheck(ctx, "Changelog entry not found in the PR body. Please add a %q label to the PR, or changelog lines starting with `%s` followed by the changelog entries for the PR.", NoChangelogLabel, ChangelogPrefix)
-	}
-
 	for i, changelogMatch := range changelogMatches {
 		changelogMatches[i] = changelogMatch[len(ChangelogPrefix):] // Case insensitive prefix removal
 	}
 
-	log.Printf("Found changelog entries %v", changelogMatches)
-	return changelogMatches, nil
+	if len(changelogMatches) > 0 {
+		log.Printf("Found changelog entries %v", changelogMatches)
+	}
+	return changelogMatches
 }
 
 // Checks for common issues with the changelog entry.

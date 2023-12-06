@@ -23,9 +23,10 @@ import (
 	"testing"
 	"unicode"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/gravitational/shared-workflows/bot/internal/env"
 	"github.com/gravitational/shared-workflows/bot/internal/github"
-	"github.com/stretchr/testify/require"
 )
 
 func TestChangelog(t *testing.T) {
@@ -40,34 +41,29 @@ func TestChangelog(t *testing.T) {
 
 func TestGetChangelogEntry(t *testing.T) {
 	tests := []struct {
-		desc        string
-		body        string
-		shouldError bool
-		expected    []string
+		desc     string
+		body     string
+		expected []string
 	}{
 		{
-			desc:        "pass-simple",
-			body:        strings.Join([]string{"some typical PR entry", fmt.Sprintf("%schangelog entry", ChangelogPrefix), "some extra text"}, "\n"),
-			shouldError: false,
-			expected:    []string{"changelog entry"},
+			desc:     "pass-simple",
+			body:     strings.Join([]string{"some typical PR entry", fmt.Sprintf("%schangelog entry", ChangelogPrefix), "some extra text"}, "\n"),
+			expected: []string{"changelog entry"},
 		},
 		{
-			desc:        "pass-case-invariant",
-			body:        strings.Join([]string{"some typical PR entry", fmt.Sprintf("%schangelog entry", strings.ToUpper(ChangelogPrefix))}, "\n"),
-			shouldError: false,
-			expected:    []string{"changelog entry"},
+			desc:     "pass-case-invariant",
+			body:     strings.Join([]string{"some typical PR entry", fmt.Sprintf("%schangelog entry", strings.ToUpper(ChangelogPrefix))}, "\n"),
+			expected: []string{"changelog entry"},
 		},
 		{
-			desc:        "pass-prefix-in-changelog-entry",
-			body:        strings.Join([]string{"some typical PR entry", strings.Repeat(ChangelogPrefix, 5)}, "\n"),
-			shouldError: false,
-			expected:    []string{strings.Repeat(ChangelogPrefix, 4)},
+			desc:     "pass-prefix-in-changelog-entry",
+			body:     strings.Join([]string{"some typical PR entry", strings.Repeat(ChangelogPrefix, 5)}, "\n"),
+			expected: []string{strings.Repeat(ChangelogPrefix, 4)},
 		},
 		{
-			desc:        "pass-only-changelog-in-body",
-			body:        fmt.Sprintf("%schangelog entry", ChangelogPrefix),
-			shouldError: false,
-			expected:    []string{"changelog entry"},
+			desc:     "pass-only-changelog-in-body",
+			body:     fmt.Sprintf("%schangelog entry", ChangelogPrefix),
+			expected: []string{"changelog entry"},
 		},
 		{
 			desc: "pass-multiple-entries",
@@ -81,28 +77,24 @@ func TestGetChangelogEntry(t *testing.T) {
 				"entry 2",
 				"entry 3",
 			},
-			shouldError: false,
 		},
 		{
-			desc:        "fail-if-no-body",
-			body:        "",
-			shouldError: true,
+			desc:     "empty-if-no-body",
+			body:     "",
+			expected: nil,
 		},
 		{
-			desc:        "fail-if-no-entry",
-			body:        "some typical PR entry",
-			shouldError: true,
+			desc:     "empty-if-no-entry",
+			body:     "some typical PR entry",
+			expected: nil,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
-			b, ctx := buildTestingFixtures()
+			b, _ := buildTestingFixtures()
 
-			changelogEntries, err := b.getChangelogEntries(ctx, test.body)
-			require.Equal(t, test.shouldError, err != nil)
-			if !test.shouldError {
-				require.Exactly(t, test.expected, changelogEntries)
-			}
+			changelogEntries := b.getChangelogEntries(test.body)
+			require.Exactly(t, test.expected, changelogEntries)
 		})
 	}
 }
