@@ -40,6 +40,7 @@ jobs:
         run: |
           cd csvlint
           for file in ${{ steps.changed-files.outputs.all_changed_files }}; do
-            echo "Validating ${file}"
-            go run cmd/csvlint/main.go ../${file}
+            sanitized_file=$(printf '%q' "$file")
+            echo "Validating ${sanitized_file}"
+            go run cmd/csvlint/main.go ../${sanitized_file}
           done
