@@ -1,0 +1,81 @@
+# This is a GitHub Action to report an error to Teleport internal slack.
+
+name: Slack on Error
+description: Report CI errors to a slack channel
+
+inputs:
+  slack-token:
+    description: Slack bot token.
+    required: true
+  channel-id:
+    description: ID of channel to send error to.
+    default: 'C052S7U6SR1' # #drone-alerts channel. Override for desired channel
+  workflow-description:
+    description: |
+      Description of workflow that failed. GitHub makes available only the
+      name of the top-level workflow that was invoked. To provide more context
+      for the error, provide a space-separated list of names that qualify the
+      error. e.g. "build-linux amd64 FIPS". The first name should be the name
+      of the workflow file (without extension) if it is a called workflow.
+      Subsequent names are usually input parameters to the called workflow to
+      identify what was being built.
+
+runs:
+  using: composite
+  steps:
+    - name: Validate inputs
+      uses: actions/github-script@v6
+      env:
+        INPUT_SLACK-TOKEN: ${{ inputs.slack-token }}
+      with:
+        script: |
+          core.getInput("slack-token", {required: true})
+
+    - name: Format message
+      id: format
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+        SERVER_URL: ${{ github.server_url }}
+        REPOSITORY: ${{ github.repository }}
+        RUN_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        TOP_WORKFLOW: ${{ github.workflow_ref }}
+        WORKFLOW_DESCRIPTION: ${{ inputs.workflow-description }}
+        AUTHOR: ${{ github.event.head_commit.author.username }}
+        REF_TYPE: ${{ github.ref_type }}
+        REF_NAME: ${{ github.ref_name }}
+        COMMIT_URL: ${{ github.event.head_commit.url }}
+        SHA: ${{ github.sha }}
+      run: |
+        top_wfname="${TOP_WORKFLOW%@*}" # strip ref from end
+        top_wfname="${top_wfname##*/}" # strip path to workflow
+        top_wfname="${top_wfname%.*}" # strip extension
+        {
+          echo 'message<<EOF'
+          printf '✘ <%s|*Failed*>: ' "${RUN_URL}"
+          printf '`%s` ' "${top_wfname}"
+          read -ra desc <<< "${WORKFLOW_DESCRIPTION}" # split on spaces, dont glob
+          printf '/ `%s` ' "${desc[@]}" # format repeats for each arg in array
+          printf '\\n'
+          printf 'author: <%s|%s> ' "${SERVER_URL}/${AUTHOR}" "${AUTHOR}"
+          printf 'repo: <%s|%s> ' "${SERVER_URL}/${REPOSITORY}" "${REPOSITORY#gravitational/}"
+          printf '%s: <%s|%s> ' "${REF_TYPE}" "${SERVER_URL}/${REPOSITORY}/commits/${REF_NAME}" "${REF_NAME}"
+          printf 'commit: <%s|%s> ' "${COMMIT_URL}" "${SHA:0:10}"
+          printf '\nEOF\n'
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Send failure message to slack
+      uses: slackapi/slack-github-action@e28cf165c92ffef168d23c5c9000cffc8a25e117 # v1.24.0
+      env:
+        SLACK_BOT_TOKEN: ${{ inputs.slack-token }}
+      with:
+        channel-id: ${{ inputs.channel-id }}
+        payload: |
+          {
+            "attachments": [
+              {
+                "color": "danger",
+                "text": "${{ steps.format.outputs.message }}"
+              }
+            ]
+          }
