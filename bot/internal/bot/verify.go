@@ -84,7 +84,7 @@ func (b *Bot) verifyDBMigration(ctx context.Context, pathPrefix string) error {
 
 	// parse PR migration file ids
 	// 202301031500_subscription-alter.up.sql => 202301031500
-	prIDs, err := parseMigrationFileIDs(pathPrefix, pullRequestFileNames(prFiles))
+	prIDs, err := parseMigrationFileIDs(pathPrefix, excludeDownMigrationFiles(pullRequestFileNames(prFiles)))
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -185,6 +185,18 @@ func parseMigrationFileID(file string) (int, error) {
 	}
 
 	return id, nil
+}
+
+// excludeDownMigrationFiles returns the same list of names
+// excluding files whose suffix is '.down.sql'.
+func excludeDownMigrationFiles(names []string) []string {
+	filtered := make([]string, 0, len(names))
+	for _, n := range names {
+		if !strings.HasSuffix(n, ".down.sql") {
+			filtered = append(filtered, n)
+		}
+	}
+	return filtered
 }
 
 // pullRequestFileNames returns all Name fields from each PullRequestFile.
