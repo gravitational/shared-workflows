@@ -7,6 +7,7 @@ import (
 
 	"github.com/gravitational/shared-workflows/bot/internal/env"
 	"github.com/gravitational/shared-workflows/bot/internal/github"
+	"github.com/stretchr/testify/require"
 )
 
 func TestParseMigrationFileID(t *testing.T) {
@@ -157,6 +158,16 @@ func TestVerifyCloudDBMigration(t *testing.T) {
 				"db/202301031501_exists.up.sql",
 			},
 		},
+		{ // 6 OK extra down file
+			prFiles: []string{
+				"db/202301031501_adding.up.sql",
+				"db/202301031501_adding.down.sql",
+				"db/202109104352_exclude.down.sql",
+			},
+			branchFiles: []string{
+				"db/202301031500_exists.up.sql",
+			},
+		},
 	}
 	fghBaseline := *fgh
 	for i, test := range cases {
@@ -183,5 +194,21 @@ func TestVerifyCloudDBMigration(t *testing.T) {
 		}
 
 		*fgh = fghBaseline
+	}
+}
+
+func TestFilterDownMigrationFiles(t *testing.T) {
+	cases := []struct {
+		names  []string
+		expect []string
+	}{
+		{
+			names:  []string{"foo", "bar.up.sql", "bar.down.sql"},
+			expect: []string{"foo", "bar.up.sql"},
+		},
+	}
+	for _, test := range cases {
+		got := excludeDownMigrationFiles(test.names)
+		require.Equal(t, test.expect, got)
 	}
 }
