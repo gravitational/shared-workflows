@@ -403,7 +403,8 @@ func TestGetCodeReviewers(t *testing.T) {
 				Repository: test.repository,
 				Author:     test.author,
 			}
-			require.ErrorContains(t, test.assignments.checkInternalCodeReviews(e, nil),
+			changes := env.Changes{ApproverCount: env.DefaultApproverCount}
+			require.ErrorContains(t, test.assignments.checkInternalCodeReviews(e, changes, nil),
 				"at least one approval required from each set")
 
 			setA, setB := test.assignments.getCodeReviewerSets(e)
@@ -1056,10 +1057,11 @@ func TestCheckInternal(t *testing.T) {
 				Author:     test.author,
 			}
 			err := r.CheckInternal(e, test.reviews, env.Changes{
-				Docs:    test.docs,
-				Code:    test.code,
-				Large:   test.large,
-				Release: test.release,
+				Docs:          test.docs,
+				Code:          test.code,
+				Large:         test.large,
+				Release:       test.release,
+				ApproverCount: env.DefaultApproverCount,
 			}, test.files)
 			if test.result {
 				require.NoError(t, err)
@@ -1104,6 +1106,9 @@ func TestFromString(t *testing.T) {
 	require.EqualValues(t, r.c.Admins, []string{
 		"7",
 		"8",
+	})
+	require.EqualValues(t, r.c.SingleApproverPaths, map[string][]string{
+		"cloud": []string{"single/approval/path"},
 	})
 }
 
@@ -1221,6 +1226,11 @@ const reviewers = `
 	"admins": [
 		"7",
 		"8"
-	]
+	],
+	"singleApproverPaths": {
+		"cloud": [
+			"single/approval/path"
+		]
+	}
 }
 `

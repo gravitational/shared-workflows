@@ -94,6 +94,10 @@ type Config struct {
 
 	// Admins are assigned reviews when no others match.
 	Admins []string `json:"admins"`
+
+	// SingleApproverPaths defines paths in cloud or core repos that only require a single approver.
+	// The map key is the repo (cloud|teleport|teleport.e) and the value is a list of paths.
+	SingleApproverPaths map[string][]string
 }
 
 // CheckAndSetDefaults checks and sets defaults.
@@ -152,6 +156,15 @@ func New(c *Config) (*Assignments, error) {
 	return &Assignments{
 		c: c,
 	}, nil
+}
+
+// SingleApproverPaths returns the configured paths that only require a single
+// approval in a given repository as defined in the bot config file.
+func (r *Assignments) SingleApproverPaths(repo string) []string {
+	if r == nil {
+		return nil
+	}
+	return r.c.SingleApproverPaths[repo]
 }
 
 // IsInternal checks whether the author of a PR is explicitly
@@ -393,12 +406,12 @@ func (r *Assignments) CheckInternal(e *env.Environment, reviews []github.Review,
 		if err := r.checkInternalDocsReviews(e, reviews, files); err != nil {
 			return trace.Wrap(err)
 		}
-		if err := r.checkInternalCodeReviews(e, reviews); err != nil {
+		if err := r.checkInternalCodeReviews(e, changes, reviews); err != nil {
 			return trace.Wrap(err)
 		}
 	case !changes.Docs && changes.Code:
 		log.Printf("Check: Found code changes.")
-		if err := r.checkInternalCodeReviews(e, reviews); err != nil {
+		if err := r.checkInternalCodeReviews(e, changes, reviews); err != nil {
 			return trace.Wrap(err)
 		}
 	case changes.Docs && !changes.Code:
@@ -444,7 +457,7 @@ func (r *Assignments) checkInternalDocsReviews(e *env.Environment, reviews []git
 
 // checkInternalCodeReviews checks whether code review requirements are satisfied
 // for a PR authored by an internal employee
-func (r *Assignments) checkInternalCodeReviews(e *env.Environment, reviews []github.Review) error {
+func (r *Assignments) checkInternalCodeReviews(e *env.Environment, changes env.Changes, reviews []github.Review) error {
 	// Teams do their own internal reviews
 	var team string
 	switch e.Repository {
@@ -459,8 +472,9 @@ func (r *Assignments) checkInternalCodeReviews(e *env.Environment, reviews []git
 	setA, setB := getReviewerSets(e.Author, team, r.c.CodeReviewers, r.c.CodeReviewersOmit)
 
 	// PRs can be approved if you either have multiple code owners that approve
-	// or code owner and code reviewer.
-	if checkN(setA, reviews) >= 2 {
+	// or code owner and code reviewer. An exception is for PRs that
+	// only modify paths that require a single approver.
+	if checkN(setA, reviews) >= changes.ApproverCount {
 		return nil
 	}
 	if check(setA, reviews) && check(setB, reviews) {

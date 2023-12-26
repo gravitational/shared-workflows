@@ -132,12 +132,13 @@ func New(c *Config) (*Bot, error) {
 
 // classifyChanges determines whether the PR contains code changes
 // and/or docs changes.
-func classifyChanges(e *env.Environment, files []github.PullRequestFile) env.Changes {
+func classifyChanges(c *Config, files []github.PullRequestFile) env.Changes {
 	ch := env.Changes{
-		Large:   !e.IsCloudDeployBranch() && xlargeRequiresAdminApproval(files),
-		Release: isReleasePR(e, files),
+		Large:         !c.Environment.IsCloudDeployBranch() && xlargeRequiresAdminApproval(files),
+		Release:       isReleasePR(c.Environment, files),
+		ApproverCount: approverCount(c.Review.SingleApproverPaths(c.Environment.Repository), files),
 	}
-	switch e.Repository {
+	switch c.Environment.Repository {
 	case env.TeleportRepo:
 		for _, file := range files {
 			if strings.HasPrefix(file.Name, "docs/") ||
@@ -151,6 +152,28 @@ func classifyChanges(e *env.Environment, files []github.PullRequestFile) env.Cha
 		ch.Code = true
 	}
 	return ch
+}
+
+// approverCount returns the number of required approvers for the PR by comparing the files included
+// in the PR against a set of paths that only require a single approver. 1 is returned when all of the
+// files match a single approver path, otherwise env.DefaultApproverCount is returned.
+func approverCount(singleApproverPaths []string, files []github.PullRequestFile) int {
+	if len(singleApproverPaths) == 0 || len(files) == 0 {
+		return env.DefaultApproverCount
+	}
+	for _, file := range files {
+		var match bool
+		for _, path := range singleApproverPaths {
+			if strings.HasPrefix(file.Name, path) {
+				match = true
+				break
+			}
+		}
+		if !match {
+			return env.DefaultApproverCount
+		}
+	}
+	return 1
 }
 
 // isReleasePR applies a number of heuristics to the PR changeset to determine
