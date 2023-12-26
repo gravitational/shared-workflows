@@ -178,7 +178,7 @@ func createBot(ctx context.Context, flags flags) (*bot.Bot, error) {
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	reviewer, err := review.FromString(flags.reviewers)
+	reviewer, err := review.FromString(environment, flags.reviewers)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}

@@ -109,6 +109,8 @@ type Config struct {
 	// CodeReviewers and CodeReviewersOmit is a map of code reviews and code
 	// reviewers to omit.
 	CodeReviewers     map[string]Reviewer `json:"codeReviewers"`
+	CoreReviewers     map[string]Reviewer `json:"coreReviewers"`
+	CloudReviewers    map[string]Reviewer `json:"cloudReviewers"`
 	CodeReviewersOmit map[string]bool     `json:"codeReviewersOmit"`
 
 	// DocsReviewers and DocsReviewersOmit is a map of docs reviews and docs
@@ -156,10 +158,24 @@ type Assignments struct {
 }
 
 // FromString parses JSON formatted configuration and returns assignments.
-func FromString(reviewers string) (*Assignments, error) {
+func FromString(e *env.Environment, reviewers string) (*Assignments, error) {
 	var c Config
 	if err := json.Unmarshal([]byte(reviewers), &c); err != nil {
 		return nil, trace.Wrap(err)
+	}
+
+	// hacky way of allowing the same reviewer to be defined in
+	// both cloud and core repos without having to change the
+	// bot in a large number of places.
+	if len(c.CodeReviewers) == 0 { // allow this change to deploy before updating the config file
+		switch e.Team() {
+		case env.CloudTeam:
+			c.CodeReviewers = c.CloudReviewers
+		case env.CoreTeam:
+			c.CodeReviewers = c.CoreReviewers
+		default:
+			return nil, trace.BadParameter("unable to detect code reviewers due to invalid team: %s", e.Team())
+		}
 	}
 
 	r, err := New(&c)
