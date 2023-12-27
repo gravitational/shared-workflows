@@ -1107,9 +1107,6 @@ func TestFromString(t *testing.T) {
 		"7",
 		"8",
 	})
-	require.EqualValues(t, r.c.SingleApproverPaths, map[string][]string{
-		"cloud": []string{"single/approval/path"},
-	})
 }
 
 type randStatic struct{}
@@ -1226,11 +1223,6 @@ const reviewers = `
 	"admins": [
 		"7",
 		"8"
-	],
-	"singleApproverPaths": {
-		"cloud": [
-			"single/approval/path"
-		]
-	}
+	]
 }
 `

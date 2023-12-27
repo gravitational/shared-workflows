@@ -49,6 +49,21 @@ const (
 	PostReleaseBot = "teleport-post-release-automation[bot]"
 )
 
+var (
+	// singleApproverPaths defines paths in cloud or core repos that only require a single approver.
+	// The map key is the repo (cloud|teleport|teleport.e) and the value is a list of paths.
+	singleApproverPaths = map[string][]string{
+		"cloud": []string{
+			"deploy/fluxcd/config/values.yaml",
+		},
+	}
+)
+
+// SingleApproverPaths returns repository paths that only require a single approver.
+func SingleApproverPaths(repository string) []string {
+	return singleApproverPaths[repository]
+}
+
 func isAllowedRobot(author string) bool {
 	switch author {
 	case Dependabot, DependabotBatcher, RenovateBotPrivate, RenovateBotPublic, PostReleaseBot:
@@ -94,10 +109,6 @@ type Config struct {
 
 	// Admins are assigned reviews when no others match.
 	Admins []string `json:"admins"`
-
-	// SingleApproverPaths defines paths in cloud or core repos that only require a single approver.
-	// The map key is the repo (cloud|teleport|teleport.e) and the value is a list of paths.
-	SingleApproverPaths map[string][]string
 }
 
 // CheckAndSetDefaults checks and sets defaults.
@@ -156,15 +167,6 @@ func New(c *Config) (*Assignments, error) {
 	return &Assignments{
 		c: c,
 	}, nil
-}
-
-// SingleApproverPaths returns the configured paths that only require a single
-// approval in a given repository as defined in the bot config file.
-func (r *Assignments) SingleApproverPaths(repo string) []string {
-	if r == nil {
-		return nil
-	}
-	return r.c.SingleApproverPaths[repo]
 }
 
 // IsInternal checks whether the author of a PR is explicitly

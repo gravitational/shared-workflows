@@ -136,7 +136,7 @@ func classifyChanges(c *Config, files []github.PullRequestFile) env.Changes {
 	ch := env.Changes{
 		Large:         !c.Environment.IsCloudDeployBranch() && xlargeRequiresAdminApproval(files),
 		Release:       isReleasePR(c.Environment, files),
-		ApproverCount: approverCount(c.Review.SingleApproverPaths(c.Environment.Repository), files),
+		ApproverCount: approverCount(review.SingleApproverPaths(c.Environment.Repository), files),
 	}
 	switch c.Environment.Repository {
 	case env.TeleportRepo:
