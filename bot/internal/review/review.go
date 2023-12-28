@@ -57,11 +57,23 @@ var (
 			"deploy/fluxcd/config/values.yaml",
 		},
 	}
+
+	// singleApproverAuthors defines pull request authors in cloud or core repos that only
+	// require a single approver. The map key is the repo (cloud|teleport|teleport.e) and the
+	// value is a list of authors.
+	singleApproverAuthors = map[string][]string{
+		"cloud": []string{Dependabot, DependabotBatcher, RenovateBotPrivate, RenovateBotPublic},
+	}
 )
 
 // SingleApproverPaths returns repository paths that only require a single approver.
 func SingleApproverPaths(repository string) []string {
 	return singleApproverPaths[repository]
+}
+
+// SingleApproverAuthors returns a list of authors that only require a single approver.
+func SingleApproverAuthors(repository string) []string {
+	return singleApproverAuthors[repository]
 }
 
 func isAllowedRobot(author string) bool {

@@ -310,10 +310,12 @@ func TestDoNotMerge(t *testing.T) {
 
 func TestApproverCount(t *testing.T) {
 	cases := []struct {
-		desc   string
-		paths  []string
-		files  []github.PullRequestFile
-		expect int
+		desc    string
+		author  string
+		authors []string
+		paths   []string
+		files   []github.PullRequestFile
+		expect  int
 	}{
 		{
 			desc:   "no paths or files",
@@ -367,10 +369,24 @@ func TestApproverCount(t *testing.T) {
 			paths:  []string{"lib/default", "lib/db"},
 			expect: 1,
 		},
+		{
+			desc:    "authors without match",
+			author:  "foo",
+			authors: []string{"bar"},
+			files:   []github.PullRequestFile{{Name: "cannot_be_zero"}},
+			expect:  env.DefaultApproverCount,
+		},
+		{
+			desc:    "authors with match",
+			author:  "foo",
+			authors: []string{"bar", "foo"},
+			files:   []github.PullRequestFile{{Name: "cannot_be_zero"}},
+			expect:  1,
+		},
 	}
 	for _, test := range cases {
 		t.Run(test.desc, func(t *testing.T) {
-			got := approverCount(test.paths, test.files)
+			got := approverCount(test.authors, test.paths, test.author, test.files)
 			require.Equal(t, test.expect, got)
 		})
 	}

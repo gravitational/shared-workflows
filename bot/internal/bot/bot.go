@@ -134,9 +134,14 @@ func New(c *Config) (*Bot, error) {
 // and/or docs changes.
 func classifyChanges(c *Config, files []github.PullRequestFile) env.Changes {
 	ch := env.Changes{
-		Large:         !c.Environment.IsCloudDeployBranch() && xlargeRequiresAdminApproval(files),
-		Release:       isReleasePR(c.Environment, files),
-		ApproverCount: approverCount(review.SingleApproverPaths(c.Environment.Repository), files),
+		Large:   !c.Environment.IsCloudDeployBranch() && xlargeRequiresAdminApproval(files),
+		Release: isReleasePR(c.Environment, files),
+		ApproverCount: approverCount(
+			review.SingleApproverAuthors(c.Environment.Repository),
+			review.SingleApproverPaths(c.Environment.Repository),
+			c.Environment.Author,
+			files,
+		),
 	}
 	switch c.Environment.Repository {
 	case env.TeleportRepo:
@@ -155,15 +160,29 @@ func classifyChanges(c *Config, files []github.PullRequestFile) env.Changes {
 }
 
 // approverCount returns the number of required approvers for the PR by comparing the files included
-// in the PR against a set of paths that only require a single approver. 1 is returned when all of the
-// files match a single approver path, otherwise env.DefaultApproverCount is returned.
-func approverCount(singleApproverPaths []string, files []github.PullRequestFile) int {
-	if len(singleApproverPaths) == 0 || len(files) == 0 {
+// in the PR against a set of paths that only require a single approver and the PR author against
+// a set of authors that only require a single approver. 1 is returned when all of the
+// files match a single approver path or the PR author matches one of the authors, otherwise
+// env.DefaultApproverCount is returned.
+func approverCount(authors, paths []string, author string, files []github.PullRequestFile) int {
+	if len(files) == 0 {
+		return env.DefaultApproverCount
+	}
+
+	// check if pr author only requires a single approval
+	for _, a := range authors {
+		if author == a {
+			return 1
+		}
+	}
+
+	// check if pr files only require a single approval
+	if len(paths) == 0 {
 		return env.DefaultApproverCount
 	}
 	for _, file := range files {
 		var match bool
-		for _, path := range singleApproverPaths {
+		for _, path := range paths {
 			if strings.HasPrefix(file.Name, path) {
 				match = true
 				break
