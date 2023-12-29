@@ -174,13 +174,13 @@ func FromString(e *env.Environment, reviewers string) (*Assignments, error) {
 	// both cloud and core repos without having to change the
 	// bot in a large number of places.
 	if len(c.CodeReviewers) == 0 { // allow this change to deploy before updating the config file
-		switch e.Team() {
+		switch e.RepoOwnerTeam() {
 		case env.CloudTeam:
 			c.CodeReviewers = c.CloudReviewers
 		case env.CoreTeam:
 			c.CodeReviewers = c.CoreReviewers
 		default:
-			return nil, trace.BadParameter("unable to detect code reviewers due to invalid team: %s", e.Team())
+			return nil, trace.BadParameter("unable to detect code reviewers due to invalid team: %s", e.RepoOwnerTeam())
 		}
 	}
 

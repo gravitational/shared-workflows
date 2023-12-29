@@ -132,8 +132,8 @@ func (e *Environment) IsCloudDeployBranch() bool {
 		(e.UnsafeBase == CloudProdBranch || e.UnsafeBase == CloudStagingBranch)
 }
 
-// Team returns CloudTeam when the repository is the cloud repo otherwise CoreTeam.
-func (e *Environment) Team() string {
+// RepoOwnerTeam returns CloudTeam when the repository is the cloud repo otherwise CoreTeam.
+func (e *Environment) RepoOwnerTeam() string {
 	if e.Repository == CloudRepo {
 		return CloudTeam
 	}
