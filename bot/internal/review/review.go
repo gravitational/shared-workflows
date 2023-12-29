@@ -60,7 +60,7 @@ var (
 
 	// singleApproverAuthors defines pull request authors in cloud or core repos that only
 	// require a single approver. The map key is the repo (cloud|teleport|teleport.e) and the
-	// value is a list of authors.
+	// value is a list of authors. BOTS ONLY - DO NOT INCLUDE EMPLOYEE GITHUB HANDLES.
 	singleApproverAuthors = map[string][]string{
 		"cloud": []string{Dependabot, DependabotBatcher, RenovateBotPrivate, RenovateBotPublic},
 	}

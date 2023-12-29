@@ -17,6 +17,7 @@ limitations under the License.
 package review
 
 import (
+	"slices"
 	"sort"
 	"testing"
 
@@ -1189,6 +1190,21 @@ func TestPreferredReviewers(t *testing.T) {
 			sort.Strings(actual)
 			require.ElementsMatch(t, test.expected, actual)
 		})
+	}
+}
+
+func TestSingleApproverAuthors(t *testing.T) {
+	name := func(authors []string, i int) string {
+		if i == -1 {
+			return ""
+		}
+		return authors[i]
+	}
+	for repo, authors := range singleApproverAuthors {
+		i := slices.IndexFunc(authors, func(author string) bool {
+			return !isAllowedRobot(author)
+		})
+		require.Equal(t, -1, i, "%q is not allowed to be a single approver author in the %q repository (only bots)", name(authors, i), repo)
 	}
 }
 
