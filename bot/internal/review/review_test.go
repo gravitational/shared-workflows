@@ -17,6 +17,7 @@ limitations under the License.
 package review
 
 import (
+	"slices"
 	"sort"
 	"testing"
 
@@ -403,7 +404,8 @@ func TestGetCodeReviewers(t *testing.T) {
 				Repository: test.repository,
 				Author:     test.author,
 			}
-			require.ErrorContains(t, test.assignments.checkInternalCodeReviews(e, nil),
+			changes := env.Changes{ApproverCount: env.DefaultApproverCount}
+			require.ErrorContains(t, test.assignments.checkInternalCodeReviews(e, changes, nil),
 				"at least one approval required from each set")
 
 			setA, setB := test.assignments.getCodeReviewerSets(e)
@@ -1056,10 +1058,11 @@ func TestCheckInternal(t *testing.T) {
 				Author:     test.author,
 			}
 			err := r.CheckInternal(e, test.reviews, env.Changes{
-				Docs:    test.docs,
-				Code:    test.code,
-				Large:   test.large,
-				Release: test.release,
+				Docs:          test.docs,
+				Code:          test.code,
+				Large:         test.large,
+				Release:       test.release,
+				ApproverCount: env.DefaultApproverCount,
 			}, test.files)
 			if test.result {
 				require.NoError(t, err)
@@ -1187,6 +1190,21 @@ func TestPreferredReviewers(t *testing.T) {
 			sort.Strings(actual)
 			require.ElementsMatch(t, test.expected, actual)
 		})
+	}
+}
+
+func TestSingleApproverAuthors(t *testing.T) {
+	name := func(authors []string, i int) string {
+		if i == -1 {
+			return ""
+		}
+		return authors[i]
+	}
+	for repo, authors := range singleApproverAuthors {
+		i := slices.IndexFunc(authors, func(author string) bool {
+			return !isAllowedRobot(author)
+		})
+		require.Equal(t, -1, i, "%q is not allowed to be a single approver author in the %q repository (only bots)", name(authors, i), repo)
 	}
 }
 

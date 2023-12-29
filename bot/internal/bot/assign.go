@@ -72,7 +72,7 @@ func (b *Bot) getReviewers(ctx context.Context, files []github.PullRequestFile) 
 		log.Printf("Assign: Found backport PR, but failed to find original reviewers: %v. Falling through to normal assignment logic.", err)
 	}
 
-	changes := classifyChanges(b.c.Environment, files)
+	changes := classifyChanges(b.c, files)
 	return b.c.Review.Get(b.c.Environment, changes, files), nil
 }
 

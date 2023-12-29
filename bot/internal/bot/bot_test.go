@@ -70,10 +70,10 @@ func TestClassifyChanges(t *testing.T) {
 			code:  false,
 		},
 	}
-	e := &env.Environment{Repository: env.TeleportRepo}
+	c := &Config{Environment: &env.Environment{Repository: env.TeleportRepo}}
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
-			changes := classifyChanges(e, test.files)
+			changes := classifyChanges(c, test.files)
 			require.Equal(t, changes.Docs, test.docs)
 			require.Equal(t, changes.Code, test.code)
 		})
@@ -306,6 +306,90 @@ func TestDoNotMerge(t *testing.T) {
 		},
 	}
 	require.Error(t, bot.checkDoNotMerge(context.Background()))
+}
+
+func TestApproverCount(t *testing.T) {
+	cases := []struct {
+		desc    string
+		author  string
+		authors []string
+		paths   []string
+		files   []github.PullRequestFile
+		expect  int
+	}{
+		{
+			desc:   "no paths or files",
+			expect: env.DefaultApproverCount,
+		},
+		{
+			desc: "no paths",
+			files: []github.PullRequestFile{
+				{Name: "lib/default.go"},
+			},
+			expect: env.DefaultApproverCount,
+		},
+		{
+			desc:   "no files",
+			paths:  []string{"single/approver"},
+			expect: env.DefaultApproverCount,
+		},
+		{
+			desc: "no files matching paths",
+			files: []github.PullRequestFile{
+				{Name: "lib/default.go"},
+				{Name: "lib/db.go"},
+			},
+			paths:  []string{"single/approver"},
+			expect: env.DefaultApproverCount,
+		},
+		{
+			desc: "one file matching path",
+			files: []github.PullRequestFile{
+				{Name: "lib/default.go"},
+				{Name: "lib/db.go"},
+			},
+			paths:  []string{"lib/db.go"},
+			expect: env.DefaultApproverCount,
+		},
+		{
+			desc: "all files matching path",
+			files: []github.PullRequestFile{
+				{Name: "lib/default.go"},
+				{Name: "lib/db.go"},
+			},
+			paths:  []string{"lib"},
+			expect: 1,
+		},
+		{
+			desc: "all files matching multiple paths",
+			files: []github.PullRequestFile{
+				{Name: "lib/default.go"},
+				{Name: "lib/db.go"},
+			},
+			paths:  []string{"lib/default", "lib/db"},
+			expect: 1,
+		},
+		{
+			desc:    "authors without match",
+			author:  "foo",
+			authors: []string{"bar"},
+			files:   []github.PullRequestFile{{Name: "cannot_be_zero"}},
+			expect:  env.DefaultApproverCount,
+		},
+		{
+			desc:    "authors with match",
+			author:  "foo",
+			authors: []string{"bar", "foo"},
+			files:   []github.PullRequestFile{{Name: "cannot_be_zero"}},
+			expect:  1,
+		},
+	}
+	for _, test := range cases {
+		t.Run(test.desc, func(t *testing.T) {
+			got := approverCount(test.authors, test.paths, test.author, test.files)
+			require.Equal(t, test.expect, got)
+		})
+	}
 }
 
 type fakeGithub struct {

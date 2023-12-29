@@ -73,7 +73,7 @@ func (b *Bot) Check(ctx context.Context) error {
 		return trace.Wrap(err)
 	}
 
-	changes := classifyChanges(b.c.Environment, files)
+	changes := classifyChanges(b.c, files)
 
 	if changes.Large {
 		comment := fmt.Sprintf("@%v - this PR will require admin approval to merge due to its size. "+

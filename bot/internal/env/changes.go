@@ -16,6 +16,10 @@ limitations under the License.
 
 package env
 
+// DefaultApproverCount is the default number of required approvers.
+// This value should be greater than 1.
+const DefaultApproverCount = 2
+
 // Changes contains classification of the PR changes.
 type Changes struct {
 	// Code indicates the PR contains code changes.
@@ -26,4 +30,6 @@ type Changes struct {
 	Release bool
 	// Large indicates the PR changeset is large.
 	Large bool
+	// Number of required approvers (default is DefaultApproverCount)
+	ApproverCount int
 }

@@ -49,6 +49,33 @@ const (
 	PostReleaseBot = "teleport-post-release-automation[bot]"
 )
 
+var (
+	// singleApproverPaths defines paths in cloud or core repos that only require a single approver.
+	// The map key is the repo (cloud|teleport|teleport.e) and the value is a list of paths.
+	singleApproverPaths = map[string][]string{
+		"cloud": []string{
+			"deploy/fluxcd/config/values.yaml",
+		},
+	}
+
+	// singleApproverAuthors defines pull request authors in cloud or core repos that only
+	// require a single approver. The map key is the repo (cloud|teleport|teleport.e) and the
+	// value is a list of authors. BOTS ONLY - DO NOT INCLUDE EMPLOYEE GITHUB HANDLES.
+	singleApproverAuthors = map[string][]string{
+		"cloud": []string{Dependabot, DependabotBatcher, RenovateBotPrivate, RenovateBotPublic},
+	}
+)
+
+// SingleApproverPaths returns repository paths that only require a single approver.
+func SingleApproverPaths(repository string) []string {
+	return singleApproverPaths[repository]
+}
+
+// SingleApproverAuthors returns a list of authors that only require a single approver.
+func SingleApproverAuthors(repository string) []string {
+	return singleApproverAuthors[repository]
+}
+
 func isAllowedRobot(author string) bool {
 	switch author {
 	case Dependabot, DependabotBatcher, RenovateBotPrivate, RenovateBotPublic, PostReleaseBot:
@@ -393,12 +420,12 @@ func (r *Assignments) CheckInternal(e *env.Environment, reviews []github.Review,
 		if err := r.checkInternalDocsReviews(e, reviews, files); err != nil {
 			return trace.Wrap(err)
 		}
-		if err := r.checkInternalCodeReviews(e, reviews); err != nil {
+		if err := r.checkInternalCodeReviews(e, changes, reviews); err != nil {
 			return trace.Wrap(err)
 		}
 	case !changes.Docs && changes.Code:
 		log.Printf("Check: Found code changes.")
-		if err := r.checkInternalCodeReviews(e, reviews); err != nil {
+		if err := r.checkInternalCodeReviews(e, changes, reviews); err != nil {
 			return trace.Wrap(err)
 		}
 	case changes.Docs && !changes.Code:
@@ -444,7 +471,7 @@ func (r *Assignments) checkInternalDocsReviews(e *env.Environment, reviews []git
 
 // checkInternalCodeReviews checks whether code review requirements are satisfied
 // for a PR authored by an internal employee
-func (r *Assignments) checkInternalCodeReviews(e *env.Environment, reviews []github.Review) error {
+func (r *Assignments) checkInternalCodeReviews(e *env.Environment, changes env.Changes, reviews []github.Review) error {
 	// Teams do their own internal reviews
 	var team string
 	switch e.Repository {
@@ -459,8 +486,9 @@ func (r *Assignments) checkInternalCodeReviews(e *env.Environment, reviews []git
 	setA, setB := getReviewerSets(e.Author, team, r.c.CodeReviewers, r.c.CodeReviewersOmit)
 
 	// PRs can be approved if you either have multiple code owners that approve
-	// or code owner and code reviewer.
-	if checkN(setA, reviews) >= 2 {
+	// or code owner and code reviewer. An exception is for PRs that
+	// only modify paths that require a single approver.
+	if checkN(setA, reviews) >= changes.ApproverCount {
 		return nil
 	}
 	if check(setA, reviews) && check(setB, reviews) {

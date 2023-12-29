@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/gravitational/trace"
+	"golang.org/x/exp/slices"
 
 	"github.com/gravitational/shared-workflows/bot/internal/env"
 	"github.com/gravitational/shared-workflows/bot/internal/github"
@@ -132,12 +133,18 @@ func New(c *Config) (*Bot, error) {
 
 // classifyChanges determines whether the PR contains code changes
 // and/or docs changes.
-func classifyChanges(e *env.Environment, files []github.PullRequestFile) env.Changes {
+func classifyChanges(c *Config, files []github.PullRequestFile) env.Changes {
 	ch := env.Changes{
-		Large:   !e.IsCloudDeployBranch() && xlargeRequiresAdminApproval(files),
-		Release: isReleasePR(e, files),
+		Large:   !c.Environment.IsCloudDeployBranch() && xlargeRequiresAdminApproval(files),
+		Release: isReleasePR(c.Environment, files),
+		ApproverCount: approverCount(
+			review.SingleApproverAuthors(c.Environment.Repository),
+			review.SingleApproverPaths(c.Environment.Repository),
+			c.Environment.Author,
+			files,
+		),
 	}
-	switch e.Repository {
+	switch c.Environment.Repository {
 	case env.TeleportRepo:
 		for _, file := range files {
 			if strings.HasPrefix(file.Name, "docs/") ||
@@ -151,6 +158,35 @@ func classifyChanges(e *env.Environment, files []github.PullRequestFile) env.Cha
 		ch.Code = true
 	}
 	return ch
+}
+
+// approverCount returns the number of required approvers for the PR by comparing the files included
+// in the PR against a set of paths that only require a single approver and the PR author against
+// a set of authors that only require a single approver. 1 is returned when all of the
+// files match a single approver path or the PR author matches one of the authors, otherwise
+// env.DefaultApproverCount is returned.
+func approverCount(authors, paths []string, author string, files []github.PullRequestFile) int {
+	if len(files) == 0 {
+		return env.DefaultApproverCount
+	}
+
+	// check if pr author only requires a single approval
+	if slices.Contains(authors, author) {
+		return 1
+	}
+
+	// check if pr files only require a single approval
+	if len(paths) == 0 {
+		return env.DefaultApproverCount
+	}
+	for _, file := range files {
+		if !slices.ContainsFunc(paths, func(path string) bool {
+			return strings.HasPrefix(file.Name, path)
+		}) {
+			return env.DefaultApproverCount
+		}
+	}
+	return 1
 }
 
 // isReleasePR applies a number of heuristics to the PR changeset to determine
