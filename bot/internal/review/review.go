@@ -107,11 +107,17 @@ type Config struct {
 	Rand Rand
 
 	// CodeReviewers and CodeReviewersOmit is a map of code reviews and code
-	// reviewers to omit.
+	// reviewers to omit. CodeReviewers is set to either CoreReviewers
+	// or CloudReviewers depending on the repository when the configuration
+	// file is loaded if CodeReviewers is empty.
 	CodeReviewers     map[string]Reviewer `json:"codeReviewers"`
-	CoreReviewers     map[string]Reviewer `json:"coreReviewers"`
-	CloudReviewers    map[string]Reviewer `json:"cloudReviewers"`
 	CodeReviewersOmit map[string]bool     `json:"codeReviewersOmit"`
+
+	// CoreReviewers and CloudReviewers defines reviewers for the respositories
+	// owned by the core and cloud teams. One of these is assigned to CodeReviewers
+	// depending on the repository when the configuration file is loaded.
+	CoreReviewers  map[string]Reviewer `json:"coreReviewers"`
+	CloudReviewers map[string]Reviewer `json:"cloudReviewers"`
 
 	// DocsReviewers and DocsReviewersOmit is a map of docs reviews and docs
 	// reviewers to omit.
