@@ -180,14 +180,9 @@ func approverCount(authors, paths []string, author string, files []github.PullRe
 		return env.DefaultApproverCount
 	}
 	for _, file := range files {
-		var match bool
-		for _, path := range paths {
-			if strings.HasPrefix(file.Name, path) {
-				match = true
-				break
-			}
-		}
-		if !match {
+		if !slices.ContainsFunc(paths, func(path string) bool {
+			return strings.HasPrefix(file.Name, path)
+		}) {
 			return env.DefaultApproverCount
 		}
 	}
