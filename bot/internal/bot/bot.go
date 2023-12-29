@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/gravitational/trace"
+	"golang.org/x/exp/slices"
 
 	"github.com/gravitational/shared-workflows/bot/internal/env"
 	"github.com/gravitational/shared-workflows/bot/internal/github"
@@ -170,10 +171,8 @@ func approverCount(authors, paths []string, author string, files []github.PullRe
 	}
 
 	// check if pr author only requires a single approval
-	for _, a := range authors {
-		if author == a {
-			return 1
-		}
+	if slices.Contains(authors, author) {
+		return 1
 	}
 
 	// check if pr files only require a single approval
