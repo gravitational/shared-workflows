@@ -1213,21 +1213,17 @@ const reviewers = `
 {
 	"coreReviewers": {
 		"1": {
-			"team": "Core",
 			"owner": true
 		},
 		"2": {
-			"team": "Core",
 			"owner": false
 		}
 	},
 	"cloudReviewers": {
 		"1": {
-			"team": "Cloud",
 			"owner": true
 		},
 		"2": {
-			"team": "Cloud",
 			"owner": false
 		}
 	},
@@ -1236,11 +1232,9 @@ const reviewers = `
     },
 	"docsReviewers": {
 		"4": {
-			"team": "Core",
 			"owner": true
 		},
 		"5": {
-			"team": "Core",
 			"owner": false
 		}
 	},
