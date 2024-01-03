@@ -1,6 +1,6 @@
 module github.com/gravitational/shared-workflows/bot
 
-go 1.18
+go 1.21
 
 require (
 	github.com/google/go-github/v37 v37.0.0
