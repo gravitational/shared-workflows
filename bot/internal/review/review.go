@@ -518,10 +518,14 @@ func (r *Assignments) checkInternalCodeReviews(e *env.Environment, changes env.C
 	// PRs can be approved if you either have multiple code owners that approve
 	// or code owner and code reviewer. An exception is for PRs that
 	// only modify paths that require a single approver.
-	if checkN(setA, reviews) >= changes.ApproverCount {
+	a := checkN(setA, reviews)
+	b := checkN(setB, reviews)
+	switch {
+	case changes.ApproverCount == 1 && (a >= 1 || b >= 1):
 		return nil
-	}
-	if check(setA, reviews) && check(setB, reviews) {
+	case a >= changes.ApproverCount:
+		return nil
+	case a > 0 && b > 0 && a+b >= changes.ApproverCount:
 		return nil
 	}
 

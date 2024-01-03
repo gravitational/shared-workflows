@@ -669,16 +669,17 @@ func TestCheckInternal(t *testing.T) {
 		},
 	}
 	tests := []struct {
-		desc       string
-		author     string
-		repository string
-		reviews    []github.Review
-		docs       bool
-		code       bool
-		large      bool
-		release    bool
-		result     bool
-		files      []github.PullRequestFile
+		desc           string
+		author         string
+		repository     string
+		reviews        []github.Review
+		docs           bool
+		code           bool
+		large          bool
+		release        bool
+		singleApproval bool
+		result         bool
+		files          []github.PullRequestFile
 	}{
 		{
 			desc:       "no-reviews-fail",
@@ -1050,6 +1051,30 @@ func TestCheckInternal(t *testing.T) {
 			large:   false,
 			result:  false,
 		},
+		{
+			desc:       "cloud-single-approval-setA-success",
+			repository: "cloud",
+			author:     Dependabot,
+			reviews: []github.Review{
+				{Author: "12", State: Approved},
+			},
+			docs:           false,
+			code:           true,
+			singleApproval: true,
+			result:         true,
+		},
+		{
+			desc:       "cloud-single-approval-setB-success",
+			repository: "cloud",
+			author:     Dependabot,
+			reviews: []github.Review{
+				{Author: "13", State: Approved},
+			},
+			docs:           false,
+			code:           true,
+			singleApproval: true,
+			result:         true,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
@@ -1057,13 +1082,17 @@ func TestCheckInternal(t *testing.T) {
 				Repository: test.repository,
 				Author:     test.author,
 			}
-			err := r.CheckInternal(e, test.reviews, env.Changes{
+			changes := env.Changes{
 				Docs:          test.docs,
 				Code:          test.code,
 				Large:         test.large,
 				Release:       test.release,
 				ApproverCount: env.DefaultApproverCount,
-			}, test.files)
+			}
+			if test.singleApproval {
+				changes.ApproverCount = 1
+			}
+			err := r.CheckInternal(e, test.reviews, changes, test.files)
 			if test.result {
 				require.NoError(t, err)
 			} else {
