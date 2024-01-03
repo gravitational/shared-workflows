@@ -86,7 +86,12 @@ func isAllowedRobot(author string) bool {
 
 // Reviewer is a code reviewer.
 type Reviewer struct {
-	// Team the reviewer belongs to.
+	// Team the reviewer belongs to. This field is set when loading the configuration file
+	// based on whether the section being loaded is either CoreReviewers or CloudReviewers.
+	// DocsReviewers is automatically set to Core.
+	//
+	// Deprecated: we should remove the need for this field and detect by environment now
+	// that the teams have been split into their own sections in the configuration file.
 	Team string `json:"team"`
 	// Owner is true if the reviewer is a code or docs owner (required for all reviews).
 	Owner bool `json:"owner"`
@@ -107,9 +112,17 @@ type Config struct {
 	Rand Rand
 
 	// CodeReviewers and CodeReviewersOmit is a map of code reviews and code
-	// reviewers to omit.
+	// reviewers to omit. CodeReviewers is set to either CoreReviewers
+	// or CloudReviewers depending on the repository when the configuration
+	// file is loaded if CodeReviewers is empty.
 	CodeReviewers     map[string]Reviewer `json:"codeReviewers"`
 	CodeReviewersOmit map[string]bool     `json:"codeReviewersOmit"`
+
+	// CoreReviewers and CloudReviewers defines reviewers for the respositories
+	// owned by the core and cloud teams. One of these is assigned to CodeReviewers
+	// depending on the repository when the configuration file is loaded.
+	CoreReviewers  map[string]Reviewer `json:"coreReviewers"`
+	CloudReviewers map[string]Reviewer `json:"cloudReviewers"`
 
 	// DocsReviewers and DocsReviewersOmit is a map of docs reviews and docs
 	// reviewers to omit.
@@ -156,11 +169,28 @@ type Assignments struct {
 }
 
 // FromString parses JSON formatted configuration and returns assignments.
-func FromString(reviewers string) (*Assignments, error) {
+func FromString(e *env.Environment, reviewers string) (*Assignments, error) {
 	var c Config
 	if err := json.Unmarshal([]byte(reviewers), &c); err != nil {
 		return nil, trace.Wrap(err)
 	}
+
+	// hacky way of allowing the same reviewer to be defined in
+	// both cloud and core repos without having to change the
+	// bot in a large number of places.
+	if len(c.CodeReviewers) == 0 { // allow this change to deploy before updating the config file
+		switch e.RepoOwnerTeam() {
+		case env.CloudTeam:
+			c.CodeReviewers = setReviewerTeam(env.CloudTeam, c.CloudReviewers)
+		case env.CoreTeam:
+			c.CodeReviewers = setReviewerTeam(env.CoreTeam, c.CoreReviewers)
+		default:
+			return nil, trace.BadParameter("unable to detect code reviewers due to invalid team: %s", e.RepoOwnerTeam())
+		}
+	}
+
+	// team for all docs reviewers should be set to Core
+	c.DocsReviewers = setReviewerTeam(env.CoreTeam, c.DocsReviewers)
 
 	r, err := New(&c)
 	if err != nil {
@@ -569,6 +599,19 @@ func reviewsByAuthor(reviews []github.Review) map[string]string {
 	}
 
 	return m
+}
+
+// setReviewerTeam sets the Team field in each Reviewer of the reviewers map.
+//
+// NOTE: This is a hack so the team field doesn't need to be included in the config file.
+// Eventually we should remove the team field and use the environment since the config file
+// now separates cloud and core engineers.
+func setReviewerTeam(team string, reviewers map[string]Reviewer) map[string]Reviewer {
+	for name, r := range reviewers {
+		r.Team = team
+		reviewers[name] = r
+	}
+	return reviewers
 }
 
 const (

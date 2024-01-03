@@ -1075,7 +1075,8 @@ func TestCheckInternal(t *testing.T) {
 
 // TestFromString tests if configuration is correctly read in from a string.
 func TestFromString(t *testing.T) {
-	r, err := FromString(reviewers)
+	e := &env.Environment{Repository: env.TeleportRepo}
+	r, err := FromString(e, reviewers)
 	require.NoError(t, err)
 
 	require.EqualValues(t, r.c.CodeReviewers, map[string]Reviewer{
@@ -1210,13 +1211,19 @@ func TestSingleApproverAuthors(t *testing.T) {
 
 const reviewers = `
 {
-	"codeReviewers": {
+	"coreReviewers": {
 		"1": {
-			"team": "Core",
 			"owner": true
 		},
 		"2": {
-			"team": "Core",
+			"owner": false
+		}
+	},
+	"cloudReviewers": {
+		"1": {
+			"owner": true
+		},
+		"2": {
 			"owner": false
 		}
 	},
@@ -1225,11 +1232,9 @@ const reviewers = `
     },
 	"docsReviewers": {
 		"4": {
-			"team": "Core",
 			"owner": true
 		},
 		"5": {
-			"team": "Core",
 			"owner": false
 		}
 	},
