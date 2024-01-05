@@ -18,7 +18,6 @@ package bot
 
 import (
 	"context"
-	"slices"
 	"strings"
 
 	"github.com/gravitational/trace"
@@ -26,6 +25,8 @@ import (
 	"github.com/gravitational/shared-workflows/bot/internal/env"
 	"github.com/gravitational/shared-workflows/bot/internal/github"
 	"github.com/gravitational/shared-workflows/bot/internal/review"
+
+	"golang.org/x/exp/slices"
 )
 
 // Client implements the GitHub API.
