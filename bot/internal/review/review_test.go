@@ -17,13 +17,14 @@ limitations under the License.
 package review
 
 import (
-	"slices"
 	"sort"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/slices"
+
 	"github.com/gravitational/shared-workflows/bot/internal/env"
 	"github.com/gravitational/shared-workflows/bot/internal/github"
-	"github.com/stretchr/testify/require"
 )
 
 // TestIsInternal checks if docs and code reviewers show up as internal.
