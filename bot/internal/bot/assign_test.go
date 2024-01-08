@@ -30,7 +30,8 @@ import (
 // TestBackportReviewers checks if backport reviewers are correctly assigned.
 func TestBackportReviewers(t *testing.T) {
 	r, err := review.New(&review.Config{
-		CodeReviewers:     map[string]review.Reviewer{},
+		CoreReviewers:     map[string]review.Reviewer{},
+		CloudReviewers:    map[string]review.Reviewer{},
 		CodeReviewersOmit: map[string]bool{},
 		DocsReviewers:     map[string]review.Reviewer{},
 		DocsReviewersOmit: map[string]bool{},

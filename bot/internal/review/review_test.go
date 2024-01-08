@@ -17,14 +17,13 @@ limitations under the License.
 package review
 
 import (
+	"slices"
 	"sort"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-	"golang.org/x/exp/slices"
-
 	"github.com/gravitational/shared-workflows/bot/internal/env"
 	"github.com/gravitational/shared-workflows/bot/internal/github"
+	"github.com/stretchr/testify/require"
 )
 
 // TestIsInternal checks if docs and code reviewers show up as internal.
@@ -36,22 +35,46 @@ func TestIsInternal(t *testing.T) {
 		expect      bool
 	}{
 		{
-			desc: "code-is-internal",
+			desc: "core-is-internal",
 			assignments: &Assignments{
 				c: &Config{
 					// Code.
-					CodeReviewers: map[string]Reviewer{
-						"1": {Team: "Core", Owner: true},
-						"2": {Team: "Core", Owner: true},
-						"3": {Team: "Core", Owner: false},
-						"4": {Team: "Core", Owner: false},
+					CoreReviewers: map[string]Reviewer{
+						"1": {Owner: true},
+						"2": {Owner: true},
+						"3": {Owner: false},
+						"4": {Owner: false},
 					},
 					CodeReviewersOmit: map[string]bool{},
 					// Docs.
 					DocsReviewers: map[string]Reviewer{
-						"5": {Team: "Core", Owner: true},
-						"6": {Team: "Core", Owner: true},
+						"5": {Owner: true},
+						"6": {Owner: true},
 					},
+					DocsReviewersOmit: map[string]bool{},
+					// Admins.
+					Admins: []string{
+						"1",
+						"2",
+					},
+				},
+			},
+			author: "1",
+			expect: true,
+		},
+		{
+			desc: "cloud-is-internal",
+			assignments: &Assignments{
+				c: &Config{
+					// Code.
+					CloudReviewers: map[string]Reviewer{
+						"1": {Owner: true},
+						"2": {Owner: true},
+						"3": {Owner: false},
+						"4": {Owner: false},
+					},
+					CodeReviewersOmit: map[string]bool{},
+					DocsReviewers:     map[string]Reviewer{},
 					DocsReviewersOmit: map[string]bool{},
 					// Admins.
 					Admins: []string{
@@ -68,17 +91,17 @@ func TestIsInternal(t *testing.T) {
 			assignments: &Assignments{
 				c: &Config{
 					// Code.
-					CodeReviewers: map[string]Reviewer{
-						"1": {Team: "Core", Owner: true},
-						"2": {Team: "Core", Owner: true},
-						"3": {Team: "Core", Owner: false},
-						"4": {Team: "Core", Owner: false},
+					CoreReviewers: map[string]Reviewer{
+						"1": {Owner: true},
+						"2": {Owner: true},
+						"3": {Owner: false},
+						"4": {Owner: false},
 					},
 					CodeReviewersOmit: map[string]bool{},
 					// Docs.
 					DocsReviewers: map[string]Reviewer{
-						"5": {Team: "Core", Owner: true},
-						"6": {Team: "Core", Owner: true},
+						"5": {Owner: true},
+						"6": {Owner: true},
 					},
 					DocsReviewersOmit: map[string]bool{},
 					// Admins.
@@ -96,17 +119,17 @@ func TestIsInternal(t *testing.T) {
 			assignments: &Assignments{
 				c: &Config{
 					// Code.
-					CodeReviewers: map[string]Reviewer{
-						"1": {Team: "Core", Owner: true},
-						"2": {Team: "Core", Owner: true},
-						"3": {Team: "Core", Owner: false},
-						"4": {Team: "Core", Owner: false},
+					CoreReviewers: map[string]Reviewer{
+						"1": {Owner: true},
+						"2": {Owner: true},
+						"3": {Owner: false},
+						"4": {Owner: false},
 					},
 					CodeReviewersOmit: map[string]bool{},
 					// Docs.
 					DocsReviewers: map[string]Reviewer{
-						"5": {Team: "Core", Owner: true},
-						"6": {Team: "Core", Owner: true},
+						"5": {Owner: true},
+						"6": {Owner: true},
 					},
 					DocsReviewersOmit: map[string]bool{},
 					// Admins.
@@ -183,12 +206,13 @@ func TestGetCodeReviewers(t *testing.T) {
 			assignments: &Assignments{
 				c: &Config{
 					// Code.
-					CodeReviewers: map[string]Reviewer{
-						"1": {Team: "Core", Owner: true},
-						"2": {Team: "Core", Owner: true},
-						"3": {Team: "Core", Owner: false},
-						"4": {Team: "Core", Owner: false},
+					CoreReviewers: map[string]Reviewer{
+						"1": {Owner: true},
+						"2": {Owner: true},
+						"3": {Owner: false},
+						"4": {Owner: false},
 					},
+					CloudReviewers:    map[string]Reviewer{},
 					CodeReviewersOmit: map[string]bool{},
 					// Admins.
 					Admins: []string{
@@ -207,13 +231,14 @@ func TestGetCodeReviewers(t *testing.T) {
 			assignments: &Assignments{
 				c: &Config{
 					// Code.
-					CodeReviewers: map[string]Reviewer{
-						"1": {Team: "Core", Owner: true},
-						"2": {Team: "Core", Owner: true},
-						"3": {Team: "Core", Owner: false},
-						"4": {Team: "Core", Owner: false},
-						"5": {Team: "Core", Owner: false},
+					CoreReviewers: map[string]Reviewer{
+						"1": {Owner: true},
+						"2": {Owner: true},
+						"3": {Owner: false},
+						"4": {Owner: false},
+						"5": {Owner: false},
 					},
+					CloudReviewers: map[string]Reviewer{},
 					CodeReviewersOmit: map[string]bool{
 						"3": true,
 					},
@@ -230,78 +255,19 @@ func TestGetCodeReviewers(t *testing.T) {
 			setB:       []string{"4"},
 		},
 		{
-			desc: "internal-gets-defaults",
-			assignments: &Assignments{
-				c: &Config{
-					// Code.
-					CodeReviewers: map[string]Reviewer{
-						"1": {Team: "Core", Owner: true},
-						"2": {Team: "Core", Owner: true},
-						"3": {Team: "Core", Owner: false},
-						"4": {Team: "Core", Owner: false},
-						"5": {Team: "Internal"},
-					},
-					CodeReviewersOmit: map[string]bool{},
-					// Admins.
-					Admins: []string{
-						"1",
-						"2",
-					},
-				},
-			},
-			repository: "teleport",
-			author:     "5",
-			setA:       []string{"1"},
-			setB:       []string{"2"},
-		},
-		{
-			desc: "cloud-gets-core-reviewers",
-			assignments: &Assignments{
-				c: &Config{
-					// Code.
-					CodeReviewers: map[string]Reviewer{
-						"1": {Team: "Core", Owner: true},
-						"2": {Team: "Core", Owner: true},
-						"3": {Team: "Core", Owner: true},
-						"4": {Team: "Core", Owner: false},
-						"5": {Team: "Core", Owner: false},
-						"6": {Team: "Core", Owner: false},
-						"7": {Team: "Internal", Owner: false},
-						"8": {Team: "Cloud", Owner: false},
-						"9": {Team: "Cloud", Owner: false},
-					},
-					CodeReviewersOmit: map[string]bool{
-						"6": true,
-					},
-					// Docs.
-					DocsReviewers:     map[string]Reviewer{},
-					DocsReviewersOmit: map[string]bool{},
-					// Admins.
-					Admins: []string{
-						"1",
-						"2",
-					},
-				},
-			},
-			repository: "teleport",
-			author:     "8",
-			setA:       []string{"1", "2", "3"},
-			setB:       []string{"4", "5"},
-		},
-		{
 			desc: "normal",
 			assignments: &Assignments{
 				c: &Config{
 					// Code.
-					CodeReviewers: map[string]Reviewer{
-						"1": {Team: "Core", Owner: true},
-						"2": {Team: "Core", Owner: true},
-						"3": {Team: "Core", Owner: true},
-						"4": {Team: "Core", Owner: false},
-						"5": {Team: "Core", Owner: false},
-						"6": {Team: "Core", Owner: false},
-						"7": {Team: "Internal", Owner: false},
+					CoreReviewers: map[string]Reviewer{
+						"1": {Owner: true},
+						"2": {Owner: true},
+						"3": {Owner: true},
+						"4": {Owner: false},
+						"5": {Owner: false},
+						"6": {Owner: false},
 					},
+					CloudReviewers: map[string]Reviewer{},
 					CodeReviewersOmit: map[string]bool{
 						"6": true,
 					},
@@ -325,15 +291,15 @@ func TestGetCodeReviewers(t *testing.T) {
 			assignments: &Assignments{
 				c: &Config{
 					// Code.
-					CodeReviewers: map[string]Reviewer{
-						"1": {Team: "Core", Owner: true},
-						"2": {Team: "Core", Owner: true},
-						"3": {Team: "Core", Owner: true},
-						"4": {Team: "Core", Owner: false},
-						"5": {Team: "Core", Owner: false},
-						"6": {Team: "Core", Owner: false},
-						"7": {Team: "Internal", Owner: false},
+					CoreReviewers: map[string]Reviewer{
+						"1": {Owner: true},
+						"2": {Owner: true},
+						"3": {Owner: true},
+						"4": {Owner: false},
+						"5": {Owner: false},
+						"6": {Owner: false},
 					},
+					CloudReviewers: map[string]Reviewer{},
 					CodeReviewersOmit: map[string]bool{
 						"6": true,
 					},
@@ -356,12 +322,13 @@ func TestGetCodeReviewers(t *testing.T) {
 			desc: "docs reviewers submitting code changes are treated as internal authors",
 			assignments: &Assignments{
 				c: &Config{
-					CodeReviewers: map[string]Reviewer{
-						"code-1": {Team: "Core", Owner: true},
-						"code-2": {Team: "Core", Owner: false},
+					CoreReviewers: map[string]Reviewer{
+						"code-1": {Owner: true},
+						"code-2": {Owner: false},
 					},
+					CloudReviewers: map[string]Reviewer{},
 					DocsReviewers: map[string]Reviewer{
-						"docs-1": {Team: "Core", Owner: true},
+						"docs-1": {Owner: true},
 					},
 					Admins: []string{"code-1", "code-2"},
 				},
@@ -375,15 +342,16 @@ func TestGetCodeReviewers(t *testing.T) {
 			desc: "admins can be omitted from code reviews",
 			assignments: &Assignments{
 				c: &Config{
-					CodeReviewers: map[string]Reviewer{
-						"code-1": {Team: "Core", Owner: true},
-						"code-2": {Team: "Core", Owner: false},
+					CoreReviewers: map[string]Reviewer{
+						"code-1": {Owner: true},
+						"code-2": {Owner: false},
 					},
 					Admins: []string{
 						"code-1",
 						"code-2",
 						"code-3",
 					},
+					CloudReviewers: map[string]Reviewer{},
 					CodeReviewersOmit: map[string]bool{
 						"code-1": true,
 					},
@@ -431,8 +399,8 @@ func TestGetDocsReviewers(t *testing.T) {
 				c: &Config{
 					// Docs.
 					DocsReviewers: map[string]Reviewer{
-						"1": {Team: "Core", Owner: true},
-						"2": {Team: "Core", Owner: true},
+						"1": {Owner: true},
+						"2": {Owner: true},
 					},
 					DocsReviewersOmit: map[string]bool{},
 					// Admins.
@@ -451,8 +419,8 @@ func TestGetDocsReviewers(t *testing.T) {
 				c: &Config{
 					// Docs.
 					DocsReviewers: map[string]Reviewer{
-						"1": {Team: "Core", Owner: true},
-						"2": {Team: "Core", Owner: true},
+						"1": {Owner: true},
+						"2": {Owner: true},
 					},
 					DocsReviewersOmit: map[string]bool{
 						"2": true,
@@ -473,8 +441,8 @@ func TestGetDocsReviewers(t *testing.T) {
 				c: &Config{
 					// Docs.
 					DocsReviewers: map[string]Reviewer{
-						"1": {Team: "Core", Owner: true},
-						"2": {Team: "Core", Owner: true},
+						"1": {Owner: true},
+						"2": {Owner: true},
 					},
 					DocsReviewersOmit: map[string]bool{},
 					// Admins.
@@ -491,13 +459,12 @@ func TestGetDocsReviewers(t *testing.T) {
 			desc: "preferred code reviewer for docs page",
 			assignments: &Assignments{
 				c: &Config{
-
 					DocsReviewers: map[string]Reviewer{
-						"1": {Team: "Core", Owner: true},
+						"1": {Owner: true},
 					},
-					CodeReviewers: map[string]Reviewer{
-						"2": {Team: "Core", Owner: true, PreferredReviewerFor: []string{"docs/pages/server-access"}},
-						"3": {Team: "Core", Owner: true},
+					CoreReviewers: map[string]Reviewer{
+						"2": {Owner: true, PreferredReviewerFor: []string{"docs/pages/server-access"}},
+						"3": {Owner: true},
 					},
 				},
 			},
@@ -511,10 +478,9 @@ func TestGetDocsReviewers(t *testing.T) {
 			desc: "preferred code reviewer for docs page with duplicate code reviewers",
 			assignments: &Assignments{
 				c: &Config{
-
-					CodeReviewers: map[string]Reviewer{
-						"2": {Team: "Core", Owner: true, PreferredReviewerFor: []string{"server-access", "database-access"}},
-						"3": {Team: "Core", Owner: true, PreferredReviewerFor: []string{"server-access", "database-access"}},
+					CoreReviewers: map[string]Reviewer{
+						"2": {Owner: true, PreferredReviewerFor: []string{"server-access", "database-access"}},
+						"3": {Owner: true, PreferredReviewerFor: []string{"server-access", "database-access"}},
 					},
 				},
 			},
@@ -529,7 +495,8 @@ func TestGetDocsReviewers(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
 			e := &env.Environment{
-				Author: test.author,
+				Repository: env.TeleportRepo,
+				Author:     test.author,
 			}
 
 			reviewers := test.assignments.getDocsReviewers(e, test.files)
@@ -543,13 +510,13 @@ func TestCheckExternal(t *testing.T) {
 	r := &Assignments{
 		c: &Config{
 			// Code.
-			CodeReviewers: map[string]Reviewer{
-				"1": {Team: "Core", Owner: true},
-				"2": {Team: "Core", Owner: true},
-				"3": {Team: "Core", Owner: true},
-				"4": {Team: "Core", Owner: false},
-				"5": {Team: "Core", Owner: false},
-				"6": {Team: "Core", Owner: false},
+			CoreReviewers: map[string]Reviewer{
+				"1": {Owner: true},
+				"2": {Owner: true},
+				"3": {Owner: true},
+				"4": {Owner: false},
+				"5": {Owner: false},
+				"6": {Owner: false},
 			},
 			CodeReviewersOmit: map[string]bool{
 				"3": true,
@@ -637,24 +604,25 @@ func TestCheckInternal(t *testing.T) {
 	r := &Assignments{
 		c: &Config{
 			// Code.
-			CodeReviewers: map[string]Reviewer{
-				"1":  {Team: "Core", Owner: true},
-				"2":  {Team: "Core", Owner: true},
-				"3":  {Team: "Core", Owner: true},
-				"9":  {Team: "Core", Owner: true},
-				"4":  {Team: "Core", Owner: false},
-				"5":  {Team: "Core", Owner: false},
-				"6":  {Team: "Core", Owner: false},
-				"8":  {Team: "Internal", Owner: false},
-				"10": {Team: "Cloud", Owner: false},
-				"11": {Team: "Cloud", Owner: false},
-				"12": {Team: "Cloud", Owner: false},
-				"13": {Team: "Cloud", Owner: true},
-				"14": {Team: "Core", Owner: true, PreferredReviewerFor: []string{"docs/pages/server-access"}},
+			CoreReviewers: map[string]Reviewer{
+				"1":  {Owner: true},
+				"2":  {Owner: true},
+				"3":  {Owner: true},
+				"9":  {Owner: true},
+				"4":  {Owner: false},
+				"5":  {Owner: false},
+				"6":  {Owner: false},
+				"14": {Owner: true, PreferredReviewerFor: []string{"docs/pages/server-access"}},
+			},
+			CloudReviewers: map[string]Reviewer{
+				"10": {Owner: false},
+				"11": {Owner: false},
+				"12": {Owner: false},
+				"13": {Owner: true},
 			},
 			// Docs.
 			DocsReviewers: map[string]Reviewer{
-				"7": {Team: "Core", Owner: true},
+				"7": {Owner: true},
 			},
 			DocsReviewersOmit: map[string]bool{},
 			CodeReviewersOmit: map[string]bool{},
@@ -1083,6 +1051,7 @@ func TestCheckInternal(t *testing.T) {
 				Repository: test.repository,
 				Author:     test.author,
 			}
+
 			changes := env.Changes{
 				Docs:          test.docs,
 				Code:          test.code,
@@ -1090,9 +1059,11 @@ func TestCheckInternal(t *testing.T) {
 				Release:       test.release,
 				ApproverCount: env.DefaultApproverCount,
 			}
+
 			if test.singleApproval {
 				changes.ApproverCount = 1
 			}
+
 			err := r.CheckInternal(e, test.reviews, changes, test.files)
 			if test.result {
 				require.NoError(t, err)
@@ -1109,13 +1080,11 @@ func TestFromString(t *testing.T) {
 	r, err := FromString(e, reviewers)
 	require.NoError(t, err)
 
-	require.EqualValues(t, r.c.CodeReviewers, map[string]Reviewer{
+	require.EqualValues(t, r.c.CoreReviewers, map[string]Reviewer{
 		"1": {
-			Team:  "Core",
 			Owner: true,
 		},
 		"2": {
-			Team:  "Core",
 			Owner: false,
 		},
 	})
@@ -1124,11 +1093,9 @@ func TestFromString(t *testing.T) {
 	})
 	require.EqualValues(t, r.c.DocsReviewers, map[string]Reviewer{
 		"4": {
-			Team:  "Core",
 			Owner: true,
 		},
 		"5": {
-			Team:  "Core",
 			Owner: false,
 		},
 	})
@@ -1151,13 +1118,13 @@ func TestPreferredReviewers(t *testing.T) {
 	assignments := &Assignments{
 		c: &Config{
 			Rand: &randStatic{},
-			CodeReviewers: map[string]Reviewer{
-				"1": {Team: "Core", Owner: true, PreferredReviewerFor: []string{"lib/srv/db", "lib/srv/app"}},
-				"2": {Team: "Core", Owner: true, PreferredReviewerFor: []string{"lib/srv/db", "lib/alpn"}},
-				"3": {Team: "Core", Owner: true},
-				"4": {Team: "Core", Owner: false, PreferredReviewerFor: []string{"lib/srv/app"}},
-				"5": {Team: "Core", Owner: false, PreferredReviewerFor: []string{"lib/srv/db"}},
-				"6": {Team: "Core", Owner: false},
+			CoreReviewers: map[string]Reviewer{
+				"1": {Owner: true, PreferredReviewerFor: []string{"lib/srv/db", "lib/srv/app"}},
+				"2": {Owner: true, PreferredReviewerFor: []string{"lib/srv/db", "lib/alpn"}},
+				"3": {Owner: true},
+				"4": {Owner: false, PreferredReviewerFor: []string{"lib/srv/app"}},
+				"5": {Owner: false, PreferredReviewerFor: []string{"lib/srv/db"}},
+				"6": {Owner: false},
 			},
 		},
 	}
@@ -1215,7 +1182,8 @@ func TestPreferredReviewers(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.description, func(t *testing.T) {
 			e := &env.Environment{
-				Author: test.author,
+				Repository: env.TeleportRepo,
+				Author:     test.author,
 			}
 			actual := assignments.getCodeReviewers(e, test.files)
 			sort.Strings(actual)

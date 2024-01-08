@@ -257,13 +257,14 @@ func TestIsInternal(t *testing.T) {
 			}
 			rc := &review.Config{
 				Admins:            []string{},
-				CodeReviewers:     make(map[string]review.Reviewer),
+				CoreReviewers:     make(map[string]review.Reviewer),
+				CloudReviewers:    make(map[string]review.Reviewer),
 				CodeReviewersOmit: map[string]bool{},
 				DocsReviewers:     make(map[string]review.Reviewer),
 				DocsReviewersOmit: make(map[string]bool),
 			}
 			for _, cr := range test.codeReviewers {
-				rc.CodeReviewers[cr] = review.Reviewer{}
+				rc.CoreReviewers[cr] = review.Reviewer{}
 			}
 			for _, dr := range test.docsReviewers {
 				rc.DocsReviewers[dr] = review.Reviewer{}

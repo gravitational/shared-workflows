@@ -44,9 +44,8 @@ func TestFindBranches(t *testing.T) {
 func TestBackport(t *testing.T) {
 	buildTestBot := func(github Client) (*Bot, context.Context) {
 		r, _ := review.New(&review.Config{
-			CodeReviewers: map[string]review.Reviewer{"dev": review.Reviewer{
-				Team: "core",
-			}},
+			CoreReviewers:     map[string]review.Reviewer{"dev": review.Reviewer{}},
+			CloudReviewers:    map[string]review.Reviewer{},
 			CodeReviewersOmit: map[string]bool{},
 			DocsReviewers:     map[string]review.Reviewer{},
 			DocsReviewersOmit: map[string]bool{},

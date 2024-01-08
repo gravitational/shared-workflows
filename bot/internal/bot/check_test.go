@@ -121,12 +121,13 @@ func TestDismissUnnecessaryReviewers(t *testing.T) {
 		t.Run(test.desc, func(t *testing.T) {
 			a, err := review.New(&review.Config{
 				Admins: []string{"admin1"},
-				CodeReviewers: map[string]review.Reviewer{
+				CoreReviewers: map[string]review.Reviewer{
 					"user1": {},
 					"user2": {},
 					"user3": {},
 					"user4": {},
 				},
+				CloudReviewers:    make(map[string]review.Reviewer),
 				CodeReviewersOmit: make(map[string]bool),
 				DocsReviewers:     make(map[string]review.Reviewer),
 				DocsReviewersOmit: make(map[string]bool),
