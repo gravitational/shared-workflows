@@ -55,6 +55,13 @@ var (
 	singleApproverPaths = map[string][]string{
 		"cloud": []string{
 			"deploy/fluxcd/config/values.yaml",
+			"deploy/fluxcd/config/*/values.yaml",
+			"deploy/fluxcd/config/*/*/values.yaml",
+			"deploy/fluxcd/config/*/*/*/values.yaml",
+			"deploy/fluxcd/src/platform/*/values.helm.yaml",
+			"deploy/fluxcd/src/platform/*/helmrelease.yaml",
+			"deploy/fluxcd/src/platform/*/*/values.helm.yaml",
+			"deploy/fluxcd/src/platform/*/*/helmrelease.yaml",
 		},
 	}
 
