@@ -255,6 +255,66 @@ func TestGetCodeReviewers(t *testing.T) {
 			setB:       []string{"4"},
 		},
 		{
+			desc: "internal-gets-defaults",
+			assignments: &Assignments{
+				c: &Config{
+					// Code.
+					CoreReviewers: map[string]Reviewer{
+						"1": {Owner: true},
+						"2": {Owner: true},
+						"3": {Owner: false},
+						"4": {Owner: false},
+					},
+					CloudReviewers:    map[string]Reviewer{},
+					CodeReviewersOmit: map[string]bool{},
+					// Admins.
+					Admins: []string{
+						"1",
+						"2",
+					},
+				},
+			},
+			repository: "teleport",
+			author:     "5",
+			setA:       []string{"1"},
+			setB:       []string{"2"},
+		},
+		{
+			desc: "cloud-gets-core-reviewers",
+			assignments: &Assignments{
+				c: &Config{
+					// Code.
+					CoreReviewers: map[string]Reviewer{
+						"1": {Owner: true},
+						"2": {Owner: true},
+						"3": {Owner: true},
+						"4": {Owner: false},
+						"5": {Owner: false},
+						"6": {Owner: false},
+					},
+					CloudReviewers: map[string]Reviewer{
+						"8": {Owner: false},
+						"9": {Owner: false},
+					},
+					CodeReviewersOmit: map[string]bool{
+						"6": true,
+					},
+					// Docs.
+					DocsReviewers:     map[string]Reviewer{},
+					DocsReviewersOmit: map[string]bool{},
+					// Admins.
+					Admins: []string{
+						"1",
+						"2",
+					},
+				},
+			},
+			repository: "teleport",
+			author:     "8",
+			setA:       []string{"1", "2", "3"},
+			setB:       []string{"4", "5"},
+		},
+		{
 			desc: "normal",
 			assignments: &Assignments{
 				c: &Config{
