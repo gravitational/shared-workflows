@@ -1,0 +1,7 @@
+{
+    "recommendations": [
+        "earthly.earthfile-syntax-highlighting",
+        "golang.go",
+        "github.vscode-github-actions"
+    ]
+}
