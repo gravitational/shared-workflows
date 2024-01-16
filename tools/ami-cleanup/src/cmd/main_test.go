@@ -26,5 +26,5 @@ import (
 )
 
 func TestVersion(t *testing.T) {
-	require.True(t, semver.IsValid(Version), "the version string is not a valid semver")
+	require.True(t, semver.IsValid("v"+Version), "the version string is not a valid semver")
 }
