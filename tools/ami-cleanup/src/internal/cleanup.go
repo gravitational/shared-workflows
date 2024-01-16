@@ -54,7 +54,7 @@ func NewApplicationInstance(doDryRun bool) *ApplicationInstance {
 func (ai *ApplicationInstance) Run(ctx context.Context) error {
 	cfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
-		trace.Wrap(err, "failed to load AWS credentials")
+		return trace.Wrap(err, "failed to load AWS credentials")
 	}
 
 	enabledRegions, err := ai.getEnabledRegions(ctx, ai.accountClientGenerator(&cfg))
