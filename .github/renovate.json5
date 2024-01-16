@@ -43,14 +43,14 @@
   "ignorePaths": [
     // These predate RFD 0001 and are managed by dependabot
     "bot/**", 
-    "github/workflows/codeql.yml",
-    "github/workflows/csv-lint.yaml",
-    "github/workflows/dependency-review.yaml",
-    "github/workflows/github-action-lint.yaml",
-    "github/workflows/govulncheck.yaml",
-    "github/workflows/json-lint.yaml",
-    "github/workflows/terraform-lint.yaml",
-    "github/workflows/trivy.yaml"
+    ".github/workflows/codeql.yml",
+    ".github/workflows/csv-lint.yaml",
+    ".github/workflows/dependency-review.yaml",
+    ".github/workflows/github-action-lint.yaml",
+    ".github/workflows/govulncheck.yaml",
+    ".github/workflows/json-lint.yaml",
+    ".github/workflows/terraform-lint.yaml",
+    ".github/workflows/trivy.yaml"
   ],
   "vulnerabilityAlerts": {
     "dependencyDashboardApproval": true,
