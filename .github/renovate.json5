@@ -4,11 +4,6 @@
     "config:recommended",
     ":enableRenovate",
     ":semanticCommits",
-    // TODO enable these after extensive testing
-    // ":automergeDigest",
-    // ":automergeMinor",
-    // ":automergeAll",
-    // ":automergeRequireAllStatusChecks",
     ":enableVulnerabilityAlerts",
     ":ignoreUnstable",
     ":label(dependency-update)",
@@ -28,10 +23,6 @@
     "github>gravitational/shared-workflows//tools/ami-cleanup/renovate.json5"
   ],
   "useBaseBranchConfig": "merge", // This is set to allow for some degree of testing PRs, see https://github.com/renovatebot/renovate/discussions/16108
-  "pinDigest": {
-    // TODO enable this after extensive testing
-    // "automerge": true
-  },
   // This is used so that not everything in the entire repo is setup for Renovate at once
   // Initially this configuration is designed to only support the new GHA EKS clusters
   "enabledManagers": [
