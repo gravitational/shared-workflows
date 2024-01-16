@@ -38,4 +38,5 @@ jobs:
       - name: Cut a new release for ${{ env.SEMVER_TAG }}
         env:
           GIT_TAG: ${{ github.ref_name }}
+        working-directory: tools/ami-cleanup
         run: earthly -ci +release --GIT_TAG="$SEMVER_TAG"
