@@ -18,6 +18,7 @@ package bot
 
 import (
 	"context"
+	"regexp"
 	"strings"
 
 	"github.com/gravitational/trace"
@@ -27,6 +28,10 @@ import (
 	"github.com/gravitational/shared-workflows/bot/internal/github"
 	"github.com/gravitational/shared-workflows/bot/internal/review"
 )
+
+// isCRDRegex matches Teleport operator CRD file paths.
+// Those files receive a special treatment as they're automatically generated.
+var isCRDRegex = regexp.MustCompile(`.*/resources\.teleport\.dev_[[:alpha:]]+\.yaml$`)
 
 // Client implements the GitHub API.
 type Client interface {
@@ -265,7 +270,8 @@ func skipFileForSizeCheck(name string) bool {
 		strings.HasSuffix(name, "_pb.d.ts") ||
 		strings.HasSuffix(name, ".json") ||
 		strings.Contains(name, "webassets/") ||
-		strings.Contains(name, "vendor/")
+		strings.Contains(name, "vendor/") ||
+		isCRDRegex.MatchString(name)
 }
 
 func isReleaseBranch(branch string) bool {
