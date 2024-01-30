@@ -18,6 +18,7 @@ package bot
 
 import (
 	"context"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -186,6 +187,10 @@ func approverCount(authors, paths []string, author string, files []github.PullRe
 	}
 	for _, file := range files {
 		if !slices.ContainsFunc(paths, func(path string) bool {
+			wildcardMatch, err := filepath.Match(path, file.Name)
+			if err == nil && wildcardMatch {
+				return true
+			}
 			return strings.HasPrefix(file.Name, path)
 		}) {
 			return env.DefaultApproverCount

@@ -361,6 +361,42 @@ func TestApproverCount(t *testing.T) {
 			expect: 1,
 		},
 		{
+			desc: "all files match wildcard",
+			files: []github.PullRequestFile{
+				{Name: "src/package/values.yaml"},
+				{Name: "src/package2/values.yaml"},
+			},
+			paths:  []string{"src/*/values.yaml"},
+			expect: 1,
+		},
+		{
+			desc: "all files match multiple wildcard",
+			files: []github.PullRequestFile{
+				{Name: "src/package/values.yaml"},
+				{Name: "docs/README.md"},
+			},
+			paths:  []string{"src/*/values.yaml", "*/*.md"},
+			expect: 1,
+		},
+		{
+			desc: "all files match wildcard or path",
+			files: []github.PullRequestFile{
+				{Name: "src/package/values.yaml"},
+				{Name: "lib/db.go"},
+			},
+			paths:  []string{"lib", "src/*/values.yaml"},
+			expect: 1,
+		},
+		{
+			desc: "one file doesn't match wildcard",
+			files: []github.PullRequestFile{
+				{Name: "src/package/values.yaml"},
+				{Name: "src/package/values2.yaml"},
+			},
+			paths:  []string{"src/*/values.yaml"},
+			expect: env.DefaultApproverCount,
+		},
+		{
 			desc: "all files matching multiple paths",
 			files: []github.PullRequestFile{
 				{Name: "lib/default.go"},
