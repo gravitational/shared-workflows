@@ -95,7 +95,7 @@ type Reviewer struct {
 	// Owner is true if the reviewer is a code or docs owner (required for all reviews).
 	Owner bool `json:"owner"`
 	// PreferredOnly is true if the reviewer should only be included in preferred reviewer paths.
-	PreferredOnly bool `json:"preferredOnly",omitempty`
+	PreferredOnly bool `json:"preferredOnly,omitempty"`
 	// PreferredReviewerFor contains a list of file paths that this reviewer
 	// should be selected to review.
 	PreferredReviewerFor []string `json:"preferredReviewerFor,omitempty"`
