@@ -288,13 +288,13 @@ func (r *Assignments) getCodeReviewers(e *env.Environment, files []github.PullRe
 	// pick from the overall set at random.
 	resultingSetA := preferredSetA
 	if len(resultingSetA) == 0 {
-		// Remove reviewers from setA whose preferredOnly field is false.
+		// Only include reviewers from setA whose preferredOnly field is false.
 		setA = filterPreferredOnly(reviewers, setA, false)
 		resultingSetA = append(resultingSetA, setA[r.c.Rand.Intn(len(setA))])
 	}
 	resultingSetB := preferredSetB
 	if len(resultingSetB) == 0 {
-		// Remove reviewers from setB whose preferredOnly field is false.
+		// Only include reviewers from setB whose preferredOnly field is false.
 		setB = filterPreferredOnly(reviewers, setB, false)
 		resultingSetB = append(resultingSetB, setB[r.c.Rand.Intn(len(setB))])
 	}
