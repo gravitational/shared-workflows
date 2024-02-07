@@ -94,6 +94,8 @@ func isAllowedRobot(author string) bool {
 type Reviewer struct {
 	// Owner is true if the reviewer is a code or docs owner (required for all reviews).
 	Owner bool `json:"owner"`
+	// PreferredOnly is true if the reviewer should only be included in preferred reviewer paths.
+	PreferredOnly bool `json:"preferredOnly",omitempty`
 	// PreferredReviewerFor contains a list of file paths that this reviewer
 	// should be selected to review.
 	PreferredReviewerFor []string `json:"preferredReviewerFor,omitempty"`
@@ -286,10 +288,14 @@ func (r *Assignments) getCodeReviewers(e *env.Environment, files []github.PullRe
 	// pick from the overall set at random.
 	resultingSetA := preferredSetA
 	if len(resultingSetA) == 0 {
+		// Remove reviewers from setA whose preferredOnly field is false.
+		setA = filterPreferredOnly(reviewers, setA, false)
 		resultingSetA = append(resultingSetA, setA[r.c.Rand.Intn(len(setA))])
 	}
 	resultingSetB := preferredSetB
 	if len(resultingSetB) == 0 {
+		// Remove reviewers from setB whose preferredOnly field is false.
+		setB = filterPreferredOnly(reviewers, setB, false)
 		resultingSetB = append(resultingSetB, setB[r.c.Rand.Intn(len(setB))])
 	}
 
@@ -572,6 +578,21 @@ func reviewsByAuthor(reviews []github.Review) map[string]string {
 	}
 
 	return m
+}
+
+// filterPreferredOnly returns all names in set whose preferredOnly field is set to the preferredOnly parameter.
+func filterPreferredOnly(reviewers map[string]Reviewer, set []string, preferredOnly bool) []string {
+	filtered := make([]string, 0, len(set))
+	for _, name := range set {
+		reviewer, ok := reviewers[name]
+		if !ok {
+			continue
+		}
+		if reviewer.PreferredOnly == preferredOnly {
+			filtered = append(filtered, name)
+		}
+	}
+	return filtered
 }
 
 const (

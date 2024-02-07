@@ -192,7 +192,7 @@ func TestIsInternal(t *testing.T) {
 }
 
 // TestGetCodeReviewers checks internal code review assignments.
-func TestGetCodeReviewers(t *testing.T) {
+func TestGetCodeReviewerSets(t *testing.T) {
 	tests := []struct {
 		desc        string
 		assignments *Assignments
@@ -1174,15 +1174,15 @@ func (r *randStatic) Intn(n int) int {
 	return 0
 }
 
-func TestPreferredReviewers(t *testing.T) {
+func TestGetCodeReviewers(t *testing.T) {
 	assignments := &Assignments{
 		c: &Config{
 			Rand: &randStatic{},
 			CoreReviewers: map[string]Reviewer{
-				"1": {Owner: true, PreferredReviewerFor: []string{"lib/srv/db", "lib/srv/app"}},
+				"1": {Owner: true, PreferredReviewerFor: []string{"lib/srv/db", "lib/srv/app"}, PreferredOnly: true},
 				"2": {Owner: true, PreferredReviewerFor: []string{"lib/srv/db", "lib/alpn"}},
 				"3": {Owner: true},
-				"4": {Owner: false, PreferredReviewerFor: []string{"lib/srv/app"}},
+				"4": {Owner: false, PreferredReviewerFor: []string{"lib/srv/app"}, PreferredOnly: true},
 				"5": {Owner: false, PreferredReviewerFor: []string{"lib/srv/db"}},
 				"6": {Owner: false},
 			},
@@ -1209,7 +1209,7 @@ func TestPreferredReviewers(t *testing.T) {
 			files: []github.PullRequestFile{
 				{Name: "lib/alpn/proxy.go"},
 			},
-			expected: []string{"2", "4"},
+			expected: []string{"2", "5"},
 		},
 		{
 			description: "preferred reviewers for different files",
@@ -1226,7 +1226,7 @@ func TestPreferredReviewers(t *testing.T) {
 			files: []github.PullRequestFile{
 				{Name: "lib/service/service.go"},
 			},
-			expected: []string{"1", "4"},
+			expected: []string{"2", "5"},
 		},
 		{
 			description: "covered paths: don't add new or duplicate reviewers for paths already covered",
