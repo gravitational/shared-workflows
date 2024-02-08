@@ -23,7 +23,8 @@ func createFileWithSize(t *testing.T, path string, sizeInMB int64) {
 func TestBloatCheck(t *testing.T) {
 	r, err := review.New(&review.Config{
 		Admins:            []string{"admin1", "admin2"},
-		CodeReviewers:     make(map[string]review.Reviewer),
+		CoreReviewers:     make(map[string]review.Reviewer),
+		CloudReviewers:    make(map[string]review.Reviewer),
 		CodeReviewersOmit: make(map[string]bool),
 		DocsReviewers:     make(map[string]review.Reviewer),
 		DocsReviewersOmit: make(map[string]bool),

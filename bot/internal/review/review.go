@@ -18,7 +18,6 @@ package review
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"math/rand"
 	"sort"
@@ -93,15 +92,10 @@ func isAllowedRobot(author string) bool {
 
 // Reviewer is a code reviewer.
 type Reviewer struct {
-	// Team the reviewer belongs to. This field is set when loading the configuration file
-	// based on whether the section being loaded is either CoreReviewers or CloudReviewers.
-	// DocsReviewers is automatically set to Core.
-	//
-	// Deprecated: we should remove the need for this field and detect by environment now
-	// that the teams have been split into their own sections in the configuration file.
-	Team string `json:"team"`
 	// Owner is true if the reviewer is a code or docs owner (required for all reviews).
 	Owner bool `json:"owner"`
+	// PreferredOnly is true if the reviewer should only be included in preferred reviewer paths.
+	PreferredOnly bool `json:"preferredOnly,omitempty"`
 	// PreferredReviewerFor contains a list of file paths that this reviewer
 	// should be selected to review.
 	PreferredReviewerFor []string `json:"preferredReviewerFor,omitempty"`
@@ -118,16 +112,11 @@ type Config struct {
 	// operations.
 	Rand Rand
 
-	// CodeReviewers and CodeReviewersOmit is a map of code reviews and code
-	// reviewers to omit. CodeReviewers is set to either CoreReviewers
-	// or CloudReviewers depending on the repository when the configuration
-	// file is loaded if CodeReviewers is empty.
-	CodeReviewers     map[string]Reviewer `json:"codeReviewers"`
-	CodeReviewersOmit map[string]bool     `json:"codeReviewersOmit"`
+	// CodeReviewersOmit is a map of code reviews and code reviewers to omit.
+	CodeReviewersOmit map[string]bool `json:"codeReviewersOmit"`
 
 	// CoreReviewers and CloudReviewers defines reviewers for the respositories
-	// owned by the core and cloud teams. One of these is assigned to CodeReviewers
-	// depending on the repository when the configuration file is loaded.
+	// owned by the core and cloud teams.
 	CoreReviewers  map[string]Reviewer `json:"coreReviewers"`
 	CloudReviewers map[string]Reviewer `json:"cloudReviewers"`
 
@@ -149,9 +138,14 @@ func (c *Config) CheckAndSetDefaults() error {
 		c.Rand = rand.New(rand.NewSource(time.Now().UnixNano()))
 	}
 
-	if c.CodeReviewers == nil {
-		return trace.BadParameter("missing parameter CodeReviewers")
+	if c.CoreReviewers == nil {
+		return trace.BadParameter("missing parameter CoreReviewers")
 	}
+
+	if c.CloudReviewers == nil {
+		return trace.BadParameter("missing parameter CloudReviewers")
+	}
+
 	if c.CodeReviewersOmit == nil {
 		return trace.BadParameter("missing parameter CodeReviewersOmit")
 	}
@@ -182,23 +176,6 @@ func FromString(e *env.Environment, reviewers string) (*Assignments, error) {
 		return nil, trace.Wrap(err)
 	}
 
-	// hacky way of allowing the same reviewer to be defined in
-	// both cloud and core repos without having to change the
-	// bot in a large number of places.
-	if len(c.CodeReviewers) == 0 { // allow this change to deploy before updating the config file
-		switch e.RepoOwnerTeam() {
-		case env.CloudTeam:
-			c.CodeReviewers = setReviewerTeam(env.CloudTeam, c.CloudReviewers)
-		case env.CoreTeam:
-			c.CodeReviewers = setReviewerTeam(env.CoreTeam, c.CoreReviewers)
-		default:
-			return nil, trace.BadParameter("unable to detect code reviewers due to invalid team: %s", e.RepoOwnerTeam())
-		}
-	}
-
-	// team for all docs reviewers should be set to Core
-	c.DocsReviewers = setReviewerTeam(env.CoreTeam, c.DocsReviewers)
-
 	r, err := New(&c)
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -225,9 +202,10 @@ func (r *Assignments) IsInternal(author string) bool {
 		return true
 	}
 
-	_, code := r.c.CodeReviewers[author]
+	_, core := r.c.CoreReviewers[author]
+	_, cloud := r.c.CloudReviewers[author]
 	_, docs := r.c.DocsReviewers[author]
-	return code || docs
+	return core || cloud || docs
 }
 
 // Get will return a list of code reviewers for a given author.
@@ -257,6 +235,16 @@ func (r *Assignments) Get(e *env.Environment, changes env.Changes, files []githu
 	return reviewers
 }
 
+func (r *Assignments) repoReviewers(repo string) map[string]Reviewer {
+	switch repo {
+	case env.TeleportRepo, env.TeleportERepo:
+		return r.c.CoreReviewers
+	case env.CloudRepo:
+		return r.c.CloudReviewers
+	}
+	return map[string]Reviewer{}
+}
+
 func (r *Assignments) getReleaseReviewers() []string {
 	return r.c.ReleaseReviewers
 }
@@ -264,12 +252,13 @@ func (r *Assignments) getReleaseReviewers() []string {
 func (r *Assignments) getDocsReviewers(e *env.Environment, files []github.PullRequestFile) []string {
 	// See if any code reviewers are designated preferred reviewers for one of
 	// the changed docs files. If so, add them as docs reviewers.
-	a, b := getReviewerSets(e.Author, "Core", r.c.CodeReviewers, r.c.CodeReviewersOmit)
-	prefCodeReviewers := r.getAllPreferredReviewers(append(a, b...), files)
+	repoReviewers := r.repoReviewers(e.Repository)
+	a, b := getReviewerSets(e.Author, repoReviewers, r.c.CodeReviewersOmit)
+	prefCodeReviewers := r.getAllPreferredReviewers(repoReviewers, append(a, b...), files)
 
 	// Get the docs reviewer pool, which does not depend on the files
 	// changed by a pull request.
-	docsA, docsB := getReviewerSets(e.Author, "Core", r.c.DocsReviewers, r.c.DocsReviewersOmit)
+	docsA, docsB := getReviewerSets(e.Author, r.c.DocsReviewers, r.c.DocsReviewersOmit)
 	reviewers := append(prefCodeReviewers, append(docsA, docsB...)...)
 
 	// If no docs reviewers were assigned, assign admin reviews.
@@ -281,6 +270,8 @@ func (r *Assignments) getDocsReviewers(e *env.Environment, files []github.PullRe
 }
 
 func (r *Assignments) getCodeReviewers(e *env.Environment, files []github.PullRequestFile) []string {
+	reviewers := r.repoReviewers(e.Repository)
+
 	// Obtain full sets of reviewers.
 	setA, setB := r.getCodeReviewerSets(e)
 
@@ -290,17 +281,21 @@ func (r *Assignments) getCodeReviewers(e *env.Environment, files []github.PullRe
 	sort.Strings(setB)
 
 	// See if there are preferred reviewers for the changeset.
-	preferredSetA := r.getPreferredReviewers(setA, files)
-	preferredSetB := r.getPreferredReviewers(setB, files)
+	preferredSetA := r.getPreferredReviewers(reviewers, setA, files)
+	preferredSetB := r.getPreferredReviewers(reviewers, setB, files)
 
 	// All preferred reviewers should be requested reviews. If there are none,
 	// pick from the overall set at random.
 	resultingSetA := preferredSetA
 	if len(resultingSetA) == 0 {
+		// Only include reviewers from setA whose preferredOnly field is false.
+		setA = filterPreferredOnly(reviewers, setA, false)
 		resultingSetA = append(resultingSetA, setA[r.c.Rand.Intn(len(setA))])
 	}
 	resultingSetB := preferredSetB
 	if len(resultingSetB) == 0 {
+		// Only include reviewers from setB whose preferredOnly field is false.
+		setB = filterPreferredOnly(reviewers, setB, false)
 		resultingSetB = append(resultingSetB, setB[r.c.Rand.Intn(len(setB))])
 	}
 
@@ -310,11 +305,11 @@ func (r *Assignments) getCodeReviewers(e *env.Environment, files []github.PullRe
 // getPreferredReviewers returns a list of reviewers that would be preferrable
 // to review the provided changeset. Returns at most one preferred reviewer per
 // file path.
-func (r *Assignments) getPreferredReviewers(set []string, files []github.PullRequestFile) (preferredReviewers []string) {
+func (r *Assignments) getPreferredReviewers(teamReviewers map[string]Reviewer, set []string, files []github.PullRequestFile) (preferredReviewers []string) {
 	// To avoid assigning too many reviewers iterate over paths that we have
 	// preferred reviewers for and see if any of them are among the changeset.
 	coveredPaths := make(map[string]struct{})
-	for path, reviewers := range r.getPreferredReviewersMap(set) {
+	for path, reviewers := range r.getPreferredReviewersMap(teamReviewers, set) {
 		if _, ok := coveredPaths[path]; ok {
 			continue
 		}
@@ -323,7 +318,7 @@ func (r *Assignments) getPreferredReviewers(set []string, files []github.PullReq
 				reviewer := reviewers[r.c.Rand.Intn(len(reviewers))]
 				log.Printf("Picking %v as preferred reviewer for %v which matches %v.", reviewer, file.Name, path)
 				preferredReviewers = append(preferredReviewers, reviewer)
-				for _, path := range r.c.CodeReviewers[reviewer].PreferredReviewerFor {
+				for _, path := range teamReviewers[reviewer].PreferredReviewerFor {
 					coveredPaths[path] = struct{}{}
 				}
 				break
@@ -336,14 +331,14 @@ func (r *Assignments) getPreferredReviewers(set []string, files []github.PullReq
 // getAllPreferredReviewers returns a list of reviewers that would be
 // preferrable to review the provided changeset. Includes all preferred
 // reviewers for each file path in the changeset.
-func (r *Assignments) getAllPreferredReviewers(set []string, files []github.PullRequestFile) (preferredReviewers []string) {
+func (r *Assignments) getAllPreferredReviewers(reviewers map[string]Reviewer, set []string, files []github.PullRequestFile) (preferredReviewers []string) {
 	// Check each key in the preferred reviewer map, which is a file path
 	// that reviewers are assigned to. For any file names in the changeset
 	// that begin with that file path, add the reviewers for that pile path
 	// to the set of preferred reviewers. Look up each reviewer in a map to
 	// avoid duplication.
 	assigned := make(map[string]struct{})
-	for path, reviewers := range r.getPreferredReviewersMap(set) {
+	for path, reviewers := range r.getPreferredReviewersMap(reviewers, set) {
 		for _, file := range files {
 			if !strings.HasPrefix(file.Name, path) {
 				continue
@@ -361,10 +356,10 @@ func (r *Assignments) getAllPreferredReviewers(set []string, files []github.Pull
 }
 
 // getPreferredReviewersMap builds a map of preferred reviewers for file paths.
-func (r *Assignments) getPreferredReviewersMap(set []string) map[string][]string {
+func (r *Assignments) getPreferredReviewersMap(reviewers map[string]Reviewer, set []string) map[string][]string {
 	m := make(map[string][]string)
 	for _, name := range set {
-		if reviewer, ok := r.c.CodeReviewers[name]; ok {
+		if reviewer, ok := reviewers[name]; ok {
 			for _, path := range reviewer.PreferredReviewerFor {
 				m[path] = append(m[path], name)
 			}
@@ -392,24 +387,12 @@ func (r *Assignments) getAdminReviewers(author string) []string {
 func (r *Assignments) getCodeReviewerSets(e *env.Environment) ([]string, []string) {
 	// Internal non-Core contributors get assigned from the admin reviewer set.
 	// Admins will review, triage, and re-assign.
-	v, ok := r.c.CodeReviewers[e.Author]
-	if !ok || v.Team == env.InternalTeam {
+	if !r.IsInternal(e.Author) {
 		reviewers := r.getAdminReviewers(e.Author)
 		n := len(reviewers) / 2
 		return reviewers[:n], reviewers[n:]
 	}
-
-	team := v.Team
-
-	// Teams do their own internal reviews
-	switch e.Repository {
-	case env.TeleportRepo:
-		team = env.CoreTeam
-	case env.CloudRepo:
-		team = env.CloudTeam
-	}
-
-	return getReviewerSets(e.Author, team, r.c.CodeReviewers, r.c.CodeReviewersOmit)
+	return getReviewerSets(e.Author, r.repoReviewers(e.Repository), r.c.CodeReviewersOmit)
 }
 
 // CheckExternal requires two admins have approved.
@@ -509,18 +492,7 @@ func (r *Assignments) checkInternalDocsReviews(e *env.Environment, reviews []git
 // checkInternalCodeReviews checks whether code review requirements are satisfied
 // for a PR authored by an internal employee
 func (r *Assignments) checkInternalCodeReviews(e *env.Environment, changes env.Changes, reviews []github.Review) error {
-	// Teams do their own internal reviews
-	var team string
-	switch e.Repository {
-	case env.TeleportRepo, env.TeleportERepo:
-		team = env.CoreTeam
-	case env.CloudRepo:
-		team = env.CloudTeam
-	default:
-		return trace.Wrap(fmt.Errorf("unsupported repository: %s", e.Repository))
-	}
-
-	setA, setB := getReviewerSets(e.Author, team, r.c.CodeReviewers, r.c.CodeReviewersOmit)
+	setA, setB := getReviewerSets(e.Author, r.repoReviewers(e.Repository), r.c.CodeReviewersOmit)
 
 	// PRs can be approved if you either have multiple code owners that approve
 	// or code owner and code reviewer. An exception is for PRs that
@@ -551,15 +523,11 @@ func (r *Assignments) GetAdminCheckers(author string) []string {
 	return reviewers
 }
 
-func getReviewerSets(author string, team string, reviewers map[string]Reviewer, reviewersOmit map[string]bool) ([]string, []string) {
+func getReviewerSets(author string, reviewers map[string]Reviewer, reviewersOmit map[string]bool) ([]string, []string) {
 	var setA []string
 	var setB []string
 
 	for k, v := range reviewers {
-		// Only assign within a team.
-		if v.Team != team {
-			continue
-		}
 		// Skip over reviewers that are marked as omit.
 		if _, ok := reviewersOmit[k]; ok {
 			continue
@@ -612,17 +580,19 @@ func reviewsByAuthor(reviews []github.Review) map[string]string {
 	return m
 }
 
-// setReviewerTeam sets the Team field in each Reviewer of the reviewers map.
-//
-// NOTE: This is a hack so the team field doesn't need to be included in the config file.
-// Eventually we should remove the team field and use the environment since the config file
-// now separates cloud and core engineers.
-func setReviewerTeam(team string, reviewers map[string]Reviewer) map[string]Reviewer {
-	for name, r := range reviewers {
-		r.Team = team
-		reviewers[name] = r
+// filterPreferredOnly returns all names in set whose preferredOnly field is set to the preferredOnly parameter.
+func filterPreferredOnly(reviewers map[string]Reviewer, set []string, preferredOnly bool) []string {
+	filtered := make([]string, 0, len(set))
+	for _, name := range set {
+		reviewer, ok := reviewers[name]
+		if !ok {
+			continue
+		}
+		if reviewer.PreferredOnly == preferredOnly {
+			filtered = append(filtered, name)
+		}
 	}
-	return reviewers
+	return filtered
 }
 
 const (
