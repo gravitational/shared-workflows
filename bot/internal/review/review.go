@@ -235,12 +235,12 @@ func (r *Assignments) Get(e *env.Environment, changes env.Changes, files []githu
 	return reviewers
 }
 
-func (r *Assignments) repoReviewers(repo string) map[string]Reviewer {
-	switch repo {
-	case env.TeleportRepo, env.TeleportERepo:
-		return r.c.CoreReviewers
-	case env.CloudRepo:
+func (r *Assignments) repoReviewers(e *env.Environment) map[string]Reviewer {
+	switch e.RepoOwnerTeam() {
+	case env.CloudTeam:
 		return r.c.CloudReviewers
+	case env.CoreTeam:
+		return r.c.CoreReviewers
 	}
 	return map[string]Reviewer{}
 }
@@ -252,7 +252,7 @@ func (r *Assignments) getReleaseReviewers() []string {
 func (r *Assignments) getDocsReviewers(e *env.Environment, files []github.PullRequestFile) []string {
 	// See if any code reviewers are designated preferred reviewers for one of
 	// the changed docs files. If so, add them as docs reviewers.
-	repoReviewers := r.repoReviewers(e.Repository)
+	repoReviewers := r.repoReviewers(e)
 	a, b := getReviewerSets(e.Author, repoReviewers, r.c.CodeReviewersOmit)
 	prefCodeReviewers := r.getAllPreferredReviewers(repoReviewers, append(a, b...), files)
 
@@ -270,7 +270,7 @@ func (r *Assignments) getDocsReviewers(e *env.Environment, files []github.PullRe
 }
 
 func (r *Assignments) getCodeReviewers(e *env.Environment, files []github.PullRequestFile) []string {
-	reviewers := r.repoReviewers(e.Repository)
+	reviewers := r.repoReviewers(e)
 
 	// Obtain full sets of reviewers.
 	setA, setB := r.getCodeReviewerSets(e)
@@ -392,7 +392,7 @@ func (r *Assignments) getCodeReviewerSets(e *env.Environment) ([]string, []strin
 		n := len(reviewers) / 2
 		return reviewers[:n], reviewers[n:]
 	}
-	return getReviewerSets(e.Author, r.repoReviewers(e.Repository), r.c.CodeReviewersOmit)
+	return getReviewerSets(e.Author, r.repoReviewers(e), r.c.CodeReviewersOmit)
 }
 
 // CheckExternal requires two admins have approved.
@@ -492,7 +492,7 @@ func (r *Assignments) checkInternalDocsReviews(e *env.Environment, reviews []git
 // checkInternalCodeReviews checks whether code review requirements are satisfied
 // for a PR authored by an internal employee
 func (r *Assignments) checkInternalCodeReviews(e *env.Environment, changes env.Changes, reviews []github.Review) error {
-	setA, setB := getReviewerSets(e.Author, r.repoReviewers(e.Repository), r.c.CodeReviewersOmit)
+	setA, setB := getReviewerSets(e.Author, r.repoReviewers(e), r.c.CodeReviewersOmit)
 
 	// PRs can be approved if you either have multiple code owners that approve
 	// or code owner and code reviewer. An exception is for PRs that
