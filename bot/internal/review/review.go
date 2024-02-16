@@ -175,6 +175,7 @@ func FromString(e *env.Environment, reviewers string) (*Assignments, error) {
 	if err := json.Unmarshal([]byte(reviewers), &c); err != nil {
 		return nil, trace.Wrap(err)
 	}
+	log.Printf("Reviewers loaded with %d cloud and %d core reviewers", len(c.CloudReviewers), len(c.CoreReviewers))
 
 	r, err := New(&c)
 	if err != nil {
