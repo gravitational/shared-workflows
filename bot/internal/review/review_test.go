@@ -1186,6 +1186,10 @@ func TestGetCodeReviewers(t *testing.T) {
 				"5": {Owner: false, PreferredReviewerFor: []string{"lib/srv/db"}},
 				"6": {Owner: false},
 			},
+			Admins: []string{
+				"100",
+				"200",
+			},
 		},
 	}
 
@@ -1236,6 +1240,15 @@ func TestGetCodeReviewers(t *testing.T) {
 				{Name: "lib/srv/db/engine.go"},
 			},
 			expected: []string{"1", "4", "5"},
+		},
+		{
+			description: "admins",
+			author:      "999",
+			files: []github.PullRequestFile{
+				{Name: "lib/srv/app.go"},
+				{Name: "lib/srv/db/engine.go"},
+			},
+			expected: []string{"100", "200"},
 		},
 	}
 

@@ -587,6 +587,8 @@ func filterPreferredOnly(reviewers map[string]Reviewer, set []string, preferredO
 	for _, name := range set {
 		reviewer, ok := reviewers[name]
 		if !ok {
+			// set may only contain admin users that aren't also included in reviewers
+			filtered = append(filtered, name)
 			continue
 		}
 		if reviewer.PreferredOnly == preferredOnly {
