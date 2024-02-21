@@ -389,6 +389,16 @@ func TestApproverCount(t *testing.T) {
 			expect: 1,
 		},
 		{
+			desc: "helmrelease files match wildcard",
+			files: []github.PullRequestFile{
+				{Name: "src/package/helmrelease-with-suffix.yaml"},
+				{Name: "src/package/prefix-helmrelease.yaml"},
+				{Name: "lib/db.go"},
+			},
+			paths:  []string{"lib", "src/*/*helmrelease*.yaml"},
+			expect: 1,
+		},
+		{
 			desc: "one file doesn't match wildcard",
 			files: []github.PullRequestFile{
 				{Name: "src/package/values.yaml"},
