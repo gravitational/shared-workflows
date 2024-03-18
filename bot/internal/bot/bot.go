@@ -276,6 +276,7 @@ func skipFileForSizeCheck(name string) bool {
 		strings.HasSuffix(name, "_pb.ts") ||
 		strings.HasSuffix(name, "_pb.grpc-client.ts") ||
 		strings.HasSuffix(name, "_pb.grpc-server.ts") ||
+		strings.HasSuffix(name, "_pb.client.ts") ||
 		strings.HasSuffix(name, ".json") ||
 		strings.Contains(name, "webassets/") ||
 		strings.Contains(name, "vendor/") ||
