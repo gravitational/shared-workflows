@@ -1,0 +1,53 @@
+{
+    "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+    "github-actions": {
+        "fileMatch": [
+            "^tools/ami-cleanup/workflows/.*\\.ya?ml$"
+        ]
+    },
+    "gomod": {
+        "fileMatch": [
+            "^tools/ami-cleanup/src/go\\.mod$"
+        ]
+    },
+    "packageRules": [
+        {
+            "description": "Assign to maintainer",
+            "matchFileNames": [
+                "tools/ami-cleanup"
+            ],
+            "extends": [
+                ":assignAndReview(fheinecke)"
+            ]
+        },
+        {
+            "description": "Group AMI cleanup tool changes",
+            "matchFileNames": [
+                "tools/ami-cleanup"
+            ],
+            "additionalBranchPrefix": "ami-cleanup-",
+            "groupName": "ami-cleanup",
+            "groupSlug": "ami-cleanup",
+            "group": {
+                "commitMessageTopic": "{{{groupName}}} group"
+            }
+        },
+        {
+            "description": "Update AMI cleanup tool changelog",
+            "matchFileNames": [
+                "tools/ami-cleanup"
+            ],
+            "postUpgradeTasks": {
+                "commands": [
+                    "update_changelog \"{{{packageFile}}}\" \"{{{depName}}} from {{{currentVersion}}} to {{{newVersion}}}\""
+                ],
+                "fileFilters": [
+                    "**/CHANGELOG.md"
+                ],
+                "executionMode": "update"
+            }
+        }
+    ],
+    // Required for changelog updating
+    "allowScripts": true
+}

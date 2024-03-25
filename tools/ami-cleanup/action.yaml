@@ -1,0 +1,19 @@
+---
+name: Cleanup old AMI images
+description: Deletes dev tag AMI images more than 30 days old from all AWS regions
+
+inputs:
+  dry-run:
+    description: "true to actually clean up images, false to perform a dry run"
+    default: "false"
+    required: false
+
+branding:
+  icon: type
+  color: purple
+
+runs:
+  using: docker
+  image: ghcr.io/gravitational/shared-workflows/ami-cleanup
+  args:
+    - ${{ inputs.dry-run == 'true' && '--dry-run' || --no-dry-run}}
