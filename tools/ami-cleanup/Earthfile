@@ -1,0 +1,273 @@
+VERSION 0.8
+
+# These args are unlikely to change between runs. If they do change then generally all targets should be reran
+# without caching anyway.
+ARG --global GIT_TAG
+ARG --global PROJECT_NAME="ami-cleanup"
+ARG --global BINARY_NAME="$PROJECT_NAME"
+ARG --global IMAGE_NAME="$PROJECT_NAME"
+ARG --global REPO_NAME="gravitational/shared-workflows"
+ARG --global USEROS
+ARG --global USERARCH
+
+# This target is used to setup a common Go environment used for both builds and tests.
+go-environment:
+    # Native arch is required because otherwise images will default to TARGETARCH,
+    # which is overridden by `--platform`.
+    ARG --required NATIVEARCH
+    
+    # This keeps the Go version set in a single place.
+    # A container is used to pin the `sed` dependency. `LOCALLY` could be used instead, but is
+    # disallowed by the `--strict` Earthly flag which is used to help enfore reproducability.
+    FROM --platform="linux/$NATIVEARCH" alpine:3.19.0
+    WORKDIR /gomod
+    COPY src/go.mod .
+    LET GO_VERSION=$(sed -rn 's/^go (.*)$/\1/p' go.mod)
+    
+    # Run on the native architecture, but setup for cross compilation.
+    FROM --platform="linux/$NATIVEARCH" "golang:$GO_VERSION"
+    # Ensure built binaries are statically linked
+    ENV CGO_ENABLED=0
+    WORKDIR /go/src
+
+    # Load the module file and download the modules
+    COPY src/go.mod .
+    RUN go mod download -x
+
+EXTRACT_VERSION:
+    FUNCTION
+    ARG --required GIT_TAG
+    ENV GIT_VERSION=$(echo "$GIT_TAG" | sed 's/.*-v/v/')
+
+# Produces a single executable binary file for the target platform.
+# This should generally be called as `earthly --GOOS=<linux|darwin> --GOARCH=<amd64|arm64> +binary`.
+binary:
+    # These are automatically mapped to enviroment variables
+    ARG GOOS=$USEROS
+    ARG GOARCH=$USERARCH
+
+    FROM +go-environment
+
+    # Setup for the build
+    # `IF` statements essentially run as shell `if` statements, so a build context must be declared
+    # for them.
+    LET LINKER_FLAGS="-s -w"
+    IF [ -n "$GIT_TAG" ]
+        DO +EXTRACT_VERSION --GIT_TAG=$GIT_TAG
+        ARG EARTHLY_GIT_SHORT_HASH
+        SET LINKER_FLAGS="$LINKER_FLAGS -X 'main.Version=$GIT_VERSION+$EARTHLY_GIT_SHORT_HASH'"
+    END
+    LET BINARY_OUTPUT_PATH="../$BINARY_NAME"
+
+    # Caches are specific to a given target, so the GOCACHE is declared here rather than
+    # in the `go-environment` target. This ensures that the Go cache from a previous
+    # `go build` is reused, minimizing the work that needs to be done for Go code changes.
+    CACHE --sharing shared --id gocache $(go env GOCACHE)
+
+    # Do the actual build
+    COPY src/ .
+    RUN go build -o "$BINARY_OUTPUT_PATH" -ldflags="$LINKER_FLAGS" cmd/main.go
+
+    # Process the outputs
+    SAVE ARTIFACT "$BINARY_OUTPUT_PATH" AS LOCAL "outputs/$GOOS/$GOARCH/$BINARY_NAME"
+
+# Produces a container image and multiarch manifest. These are automatically loaded into the
+# local Docker image cache. If multiple platforms are specified, then they are all added
+# under the same image.
+container-image:
+    # Build args
+    ARG GOARCH=$USERARCH
+    ARG NATIVEARCH
+    ARG OCI_REGISTRY
+
+    # Setup for build
+    FROM --platform="linux/$NATIVEARCH" alpine:3.19.0
+    LET IMAGE_TAG="latest"
+    IF [ -n "$GIT_TAG" ]
+        DO +EXTRACT_VERSION --GIT_TAG=$GIT_TAG
+        SET IMAGE_TAG="$GIT_VERSION"
+    END
+
+    # Do the actual build
+    # Distroless is used instead of `scratch` as root CA certs are required.
+    FROM --platform="linux/$GOARCH" gcr.io/distroless/static-debian12
+    COPY (+binary/* --GOOS="linux" --GOARCH="$GOARCH") /
+    # Unfortunately arg expansion is not supported here, see https://github.com/earthly/earthly/issues/1846
+    ENTRYPOINT [ "/ami-cleanup" ]
+
+    # Process the outputs
+    SAVE IMAGE --push "$OCI_REGISTRY$IMAGE_NAME:$IMAGE_TAG"
+
+# Same as `binary`, but wraps the output in a tarball.
+tarball:
+    ARG GOOS=$USEROS
+    ARG GOARCH=$USERARCH
+    ARG --required NATIVEARCH
+    ARG TARBALL_NAME="$BINARY_NAME-$GOOS-$GOARCH.tar.gz"
+
+    FROM --platform="linux/$NATIVEARCH" alpine:3.19.0
+    WORKDIR /tarball
+    COPY (+binary/* --GOOS="$GOOS" --GOARCH="$GOARCH") .
+    RUN tar -czvf "$TARBALL_NAME" *
+    SAVE ARTIFACT $TARBALL_NAME AS LOCAL outputs/$GOOS/$GOARCH/$TARBALL_NAME
+
+all:
+    BUILD +binary
+    BUILD +tarball
+    BUILD +container-image
+
+# Runs the project's Go tests.
+test:
+    # For options, see
+    # https://github.com/gotestyourself/gotestsum?tab=readme-ov-file#output-format
+    ARG OUTPUT_FORMAT="pkgname-and-test-fails"
+
+    FROM +go-environment
+    WORKDIR /go/src
+    RUN go install gotest.tools/gotestsum@latest
+    COPY src/ .
+    RUN gotestsum --format "$OUTPUT_FORMAT" ./... -- -shuffle on -timeout 2m -race
+
+lint:
+    # For options, see https://golangci-lint.run/usage/configuration/#command-line-options
+    ARG OUTPUT_FORMAT="colored-line-number"
+
+    # Setup the linter and configure the environment
+    FROM +go-environment
+    WORKDIR /go/src
+    RUN go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.55.2
+
+    # Run the linter
+    COPY src/ .
+    RUN golangci-lint run ./... --out-format "$OUTPUT_FORMAT"
+
+# Removes local file and container image artifacts.
+clean:
+    LOCALLY
+
+    # Delete output files
+    RUN rm -rf "outputs/"
+
+    # Delete container images
+    FOR IMAGE IN $(docker image ls --filter "reference=$IMAGE_NAME" --quiet | sort | uniq)
+        RUN docker image rm --force "$IMAGE"
+    END
+
+# Environment with the "chan" tool for operating on changelogs, along with the changelog itself
+changelog-environment:
+    ARG NATIVEARCH
+    FROM --platform="linux/$NATIVEARCH" node:21.6-alpine3.18
+    CACHE --sharing shared --id npm $(echo "$HOME/.npm")
+    RUN npm install --global '@geut/chan@3.2.9'
+    WORKDIR /changelog
+    COPY CHANGELOG.md .
+
+build-release-changelog:
+    ARG --required GIT_TAG
+    FROM +changelog-environment
+    DO +EXTRACT_VERSION --GIT_TAG=$GIT_TAG
+    
+    # Set the correct prerelease-dependent flag for updating the changelog
+    IF [ "${GIT_VERSION#*-}" != "$GIT_VERSION" ]
+        LET FLAGS="--allow-prerelease"
+    ELSE
+        LET FLAGS="--merge-prerelease"
+    END
+
+    # Get a list of the changes, and
+    RUN CH_OUTPUT=$( \
+            chan release \
+                --git-compare-template "https://github.com/$REPO_NAME/compare/[prev]...[next]" \
+                --git-release-template "httpx://github.com/$REPO_NAME/releases/tag/[next]" \
+                $FLAGS \
+                "$GIT_VERSION" \
+    ) && \
+    # Check if the release had any changes
+    echo "$CH_OUTPUT" | grep -qv "not new" || ( \
+        echo -e "\n\n\nChangelog contains no unreleased changes, aborting\n\n\n"; exit 1 \
+    )
+    SAVE ARTIFACT CHANGELOG.md AS LOCAL CHANGELOG.md
+
+# Target to file a release PR, should be ran locally
+create-release-pr:
+    ARG --required GIT_TAG
+
+    LOCALLY
+    IF ! command -v git
+        RUN echo "Missing \`git\` command locally"; exit 1
+    END
+    IF ! command -v gh
+        RUN echo "Missing \`gh\` Github CLI command locally"; exit 1
+    END
+
+    # Create a new release branch
+    RUN git fetch origin && \
+        git checkout main && \
+        git pull && \
+        git checkout -b "release/$GIT_TAG" main && \
+        git checkout .
+
+    # Update the changelog
+    COPY +build-release-changelog/CHANGELOG.md .
+
+    # Push the changes, file a PR, and push a new tag
+    DO +EXTRACT_VERSION --GIT_TAG=$GIT_TAG
+    RUN git add CHANGELOG.md && \
+        git commit -m "Release $PROJECT_NAME $GIT_VERSION ($GIT_TAG)" && \
+        git push origin && \
+        PR_URL=$(gh pr create --fill --base "main" --reviewer "@me" --assignee "@me") && \
+        echo "PR: $PR_URL" && \
+        open --url "$PR_URL" && \
+        while [ "$(gh pr view "$PR_URL" --json 'state' -q '.state')" != "MERGED" ]; do \
+            echo "Waiting for PR to merge..."; \
+            sleep 60; \
+        done && \
+        echo "PR merged, cutting release" && \
+        git fetch origin && \
+        git checkout main && \
+        git pull && \
+        git tag "$GIT_TAG" && \
+        git push origin --tags && \
+        sleep 5 && \    # Naively wait 5s to allow time for the run to be queued
+        gh run list --workflow cd.yaml --event push --branch "$GIT_TAG" && \
+        open --url "$(gh run list --workflow ${PROJECT_NAME}-cd.yaml --event push --branch $GIT_TAG --json 'url' --jq '. | first | .url')"
+
+# Cuts a new GH release and pushes file assets to it. Also pushes container images.
+release:
+    ARG --required GIT_TAG  # This global var is redeclared here to ensure that it is set via `--required`
+    ARG OCI_REGISTRY="ghcr.io/gravitational/"
+    ARG EARTHLY_PUSH
+    ARG NATIVEARCH
+
+    # Validate the changelog and get release notes
+    FROM +changelog-environment
+    DO +EXTRACT_VERSION --GIT_TAG=$GIT_TAG
+    IF grep -qE "## \\[?${GIT_VERSION#v}\\]? - " CHANGELOG.md
+        LET CHANGELOG_ENTRIES=$(chan show "$GIT_VERSION")
+    END
+
+    IF $EARTHLY_PUSH && [ -z "$CHANGELOG_ENTRIES" ]
+        RUN echo "No changelog entry detected for $GIT_VERSION, aborting"; exit 1
+    END
+
+    # Create GH release and upload artifact(s)
+    FROM --platform="linux/$NATIVEARCH" alpine:3.19.0
+
+    # Unfortunately GH does not release a container image for their CLI, see https://github.com/cli/cli/issues/2027
+    RUN apk add github-cli
+    WORKDIR /release_artifacts
+    COPY (+tarball/* --GOOS=linux --GOARCH=amd64) (+tarball/* --GOOS=linux --GOARCH=arm64) (+tarball/* --GOOS=darwin --GOARCH=arm64) .
+
+    # Determine if the prerelease flag should be set
+    IF [ "${GIT_VERSION#*-}" != "$GIT_VERSION" ]
+        LET PRERELEASE_FLAG="--prerelease"
+    END
+
+    # Run commands with "--push" set will only run when the "--push" arg is provided via CLI
+    RUN --push --secret GH_TOKEN \
+        gh release create \
+        --title "gha-exporter $GIT_VERSION" --verify-tag --notes "$CHANGELOG_ENTRIES" $PRERELEASE_FLAG "$GIT_TAG" --repo "$REPO_NAME" \
+        ./*
+
+    # Build container images and push them
+    BUILD --platform=linux/amd64 --platform=linux/arm64 +container-image
