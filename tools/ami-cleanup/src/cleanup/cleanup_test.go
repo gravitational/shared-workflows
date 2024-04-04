@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package internal
+package cleanup
 
 import (
 	"context"
@@ -27,9 +27,9 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/account"
-	accountTypes "github.com/aws/aws-sdk-go-v2/service/account/types"
+	accounttypes "github.com/aws/aws-sdk-go-v2/service/account/types"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
-	ec2Types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/gravitational/trace"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/slices"
@@ -41,49 +41,48 @@ func TestGetEnabledRegions(t *testing.T) {
 	usEast2 := "us-east-2"
 	usWest1 := "us-west-1"
 	usWest2 := "us-west-2"
-	expectedRegions := []accountTypes.Region{
+	expectedRegions := []accounttypes.Region{
 		{
 			RegionName:      &usEast1,
-			RegionOptStatus: accountTypes.RegionOptStatusEnabled,
+			RegionOptStatus: accounttypes.RegionOptStatusEnabled,
 		},
 		{
 			RegionName:      &usEast2,
-			RegionOptStatus: accountTypes.RegionOptStatusEnabledByDefault,
+			RegionOptStatus: accounttypes.RegionOptStatusEnabledByDefault,
 		},
 		{
 			RegionName:      &usWest1,
-			RegionOptStatus: accountTypes.RegionOptStatusEnabledByDefault,
+			RegionOptStatus: accounttypes.RegionOptStatusEnabledByDefault,
 		},
 		{
 			RegionName:      &usWest2,
-			RegionOptStatus: accountTypes.RegionOptStatusEnabled,
+			RegionOptStatus: accounttypes.RegionOptStatusEnabled,
 		},
 	}
 
 	tests := []struct {
 		desc            string
 		mockListRegions func(ctx context.Context, params *account.ListRegionsInput, optFns ...func(*account.Options)) (*account.ListRegionsOutput, error)
-		shouldError     bool
-		expectedRegions []accountTypes.Region
+		expectedRegions []accounttypes.Region
+		checkError      require.ErrorAssertionFunc
 	}{
 		{
 			desc: "fail if API call errors",
 			mockListRegions: func(ctx context.Context, params *account.ListRegionsInput, optFns ...func(*account.Options)) (*account.ListRegionsOutput, error) {
 				return nil, errors.New("some API call error")
 			},
-			shouldError: true,
+			checkError: require.Error,
 		},
 		{
 			desc: "no error when API call does not error",
 			mockListRegions: func(ctx context.Context, params *account.ListRegionsInput, optFns ...func(*account.Options)) (*account.ListRegionsOutput, error) {
 				return &account.ListRegionsOutput{}, nil
 			},
-			shouldError: false,
 		},
 		{
 			desc: "only enabled regions requested",
 			mockListRegions: func(ctx context.Context, params *account.ListRegionsInput, optFns ...func(*account.Options)) (*account.ListRegionsOutput, error) {
-				enabledStatuses := []accountTypes.RegionOptStatus{accountTypes.RegionOptStatusEnabled, accountTypes.RegionOptStatusEnabledByDefault}
+				enabledStatuses := []accounttypes.RegionOptStatus{accounttypes.RegionOptStatusEnabled, accounttypes.RegionOptStatusEnabledByDefault}
 				slices.Sort(enabledStatuses)
 				slices.Sort(params.RegionOptStatusContains)
 				if slices.Compare(enabledStatuses, params.RegionOptStatusContains) != 0 {
@@ -91,7 +90,6 @@ func TestGetEnabledRegions(t *testing.T) {
 				}
 				return &account.ListRegionsOutput{}, nil
 			},
-			shouldError: false,
 		},
 		{
 			desc: "all results are returned",
@@ -106,10 +104,14 @@ func TestGetEnabledRegions(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		if test.checkError == nil {
+			test.checkError = require.NoError
+		}
+
 		t.Run(test.desc, func(t *testing.T) {
 			// Setup the application instance
 			application := &ApplicationInstance{
-				accountClientGenerator: func(cfg *aws.Config) IAccountApi {
+				accountClientGenerator: func(cfg *aws.Config) AccountAPI {
 					return &MockAccountAPI{
 						MockListRegions: test.mockListRegions,
 					}
@@ -120,7 +122,7 @@ func TestGetEnabledRegions(t *testing.T) {
 			regions, err := application.getEnabledRegions(context.Background(), application.accountClientGenerator(nil))
 
 			// Verify the results
-			checkError(t, test.shouldError, err)
+			test.checkError(t, err)
 			require.ElementsMatch(t, regions, test.expectedRegions, "the returned regions did not match the expected regions")
 		})
 	}
@@ -146,19 +148,19 @@ func TestGetAllWithPagination(t *testing.T) {
 		desc            string
 		action          func(previousToken *string) (nextToken *string, results []string, err error)
 		expectedResults []string
-		shouldError     bool
+		checkError      require.ErrorAssertionFunc
 	}{
 		{
 			desc: "fail if action errors",
 			action: func(previousToken *string) (nextToken *string, results []string, err error) {
 				return nil, nil, trace.Errorf("some action error")
 			},
-			shouldError: true,
+			checkError: require.Error,
 		},
 		{
 			desc: "first token is nil",
 			action: func(previousToken *string) (nextToken *string, results []string, err error) {
-				if nextToken != nil {
+				if previousToken != nil {
 					return nil, nil, trace.Errorf("the first token was %q, expected nil", *previousToken)
 				}
 
@@ -203,9 +205,13 @@ func TestGetAllWithPagination(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		if test.checkError == nil {
+			test.checkError = require.NoError
+		}
+
 		t.Run(test.desc, func(t *testing.T) {
 			results, err := getAllWithPagination(test.action)
-			checkError(t, test.shouldError, err)
+			test.checkError(t, err)
 			require.ElementsMatch(t, results, test.expectedResults, "the returned results did not match the expected results")
 		})
 	}
@@ -215,23 +221,22 @@ func TestGetDevImagesInRegion(t *testing.T) {
 	tests := []struct {
 		desc               string
 		mockDescribeImages func(ctx context.Context, params *ec2.DescribeImagesInput, optFns ...func(*ec2.Options)) (*ec2.DescribeImagesOutput, error)
-		shouldError        bool
-		expectedImages     []ec2Types.Image
+		expectedImages     []ec2types.Image
 		doDryRun           bool
+		checkError         require.ErrorAssertionFunc
 	}{
 		{
 			desc: "fail if API call errors",
 			mockDescribeImages: func(ctx context.Context, params *ec2.DescribeImagesInput, optFns ...func(*ec2.Options)) (*ec2.DescribeImagesOutput, error) {
 				return nil, trace.Errorf("some API call error")
 			},
-			shouldError: true,
+			checkError: require.Error,
 		},
 		{
 			desc: "no error when API call does not error",
 			mockDescribeImages: func(ctx context.Context, params *ec2.DescribeImagesInput, optFns ...func(*ec2.Options)) (*ec2.DescribeImagesOutput, error) {
 				return &ec2.DescribeImagesOutput{}, nil
 			},
-			shouldError: false,
 		},
 		{
 			desc: "request only available images",
@@ -348,12 +353,16 @@ func TestGetDevImagesInRegion(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		if test.checkError == nil {
+			test.checkError = require.NoError
+		}
+
 		t.Run(test.desc, func(t *testing.T) {
 			// Setup the application instance
 			application := &ApplicationInstance{
 				shouldDoDryRun: test.doDryRun,
-				ec2ClientGenerator: func(cfg *aws.Config) IEc2Api {
-					return &MockEc2API{
+				ec2ClientGenerator: func(cfg *aws.Config) EC2API {
+					return &MockEC2API{
 						MockDescribeImages: test.mockDescribeImages,
 					}
 				},
@@ -363,7 +372,7 @@ func TestGetDevImagesInRegion(t *testing.T) {
 			images, err := application.getDevImagesInRegion(context.Background(), application.ec2ClientGenerator(nil))
 
 			// Verify the results
-			checkError(t, test.shouldError, err)
+			test.checkError(t, err)
 			require.ElementsMatch(t, images, test.expectedImages, "the returned images did not match the expected images")
 		})
 	}
@@ -374,11 +383,12 @@ func TestDeleteSnapshotsForImage(t *testing.T) {
 	multipleSnapshotImage := generateImageFixture("multiple snapshot image", "", 3)
 
 	tests := []struct {
-		desc               string
-		image              imageFixture
-		mockDeleteSnapshot func(ctx context.Context, params *ec2.DeleteSnapshotInput, optFns ...func(*ec2.Options)) (*ec2.DeleteSnapshotOutput, error)
-		shouldError        bool
-		doDryRun           bool
+		desc                   string
+		image                  imageFixture
+		mockDeleteSnapshot     func(ctx context.Context, params *ec2.DeleteSnapshotInput, optFns ...func(*ec2.Options)) (*ec2.DeleteSnapshotOutput, error)
+		doDryRun               bool
+		checkError             require.ErrorAssertionFunc
+		shouldIgnoreSpaceCheck bool
 	}{
 		{
 			desc:  "fail if API call errors",
@@ -386,14 +396,14 @@ func TestDeleteSnapshotsForImage(t *testing.T) {
 			mockDeleteSnapshot: func(ctx context.Context, params *ec2.DeleteSnapshotInput, optFns ...func(*ec2.Options)) (*ec2.DeleteSnapshotOutput, error) {
 				return nil, trace.Errorf("some API call error")
 			},
-			shouldError: true,
+			checkError:             require.Error,
+			shouldIgnoreSpaceCheck: true,
 		},
 		{
 			desc: "no error when API call does not error",
 			mockDeleteSnapshot: func(ctx context.Context, params *ec2.DeleteSnapshotInput, optFns ...func(*ec2.Options)) (*ec2.DeleteSnapshotOutput, error) {
 				return &ec2.DeleteSnapshotOutput{}, nil
 			},
-			shouldError: false,
 		},
 		{
 			desc:  "correct recovered space reported when single snapshot",
@@ -435,12 +445,16 @@ func TestDeleteSnapshotsForImage(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		if test.checkError == nil {
+			test.checkError = require.NoError
+		}
+
 		t.Run(test.desc, func(t *testing.T) {
 			// Setup the application instance
 			application := &ApplicationInstance{
 				shouldDoDryRun: test.doDryRun,
-				ec2ClientGenerator: func(cfg *aws.Config) IEc2Api {
-					return &MockEc2API{
+				ec2ClientGenerator: func(cfg *aws.Config) EC2API {
+					return &MockEC2API{
 						MockDeleteSnapshot: test.mockDeleteSnapshot,
 					}
 				},
@@ -450,8 +464,8 @@ func TestDeleteSnapshotsForImage(t *testing.T) {
 			recoveredSpace, err := application.deleteSnapshotsForImage(context.Background(), application.ec2ClientGenerator(nil), test.image.Image)
 
 			// Verify the results
-			checkError(t, test.shouldError, err)
-			if !test.shouldError {
+			test.checkError(t, err)
+			if !test.shouldIgnoreSpaceCheck {
 				require.Equal(t, test.image.totalSize, recoveredSpace, "the recovered space did not match the expected recovered space")
 			}
 		})
@@ -463,7 +477,7 @@ func TestCleanupImageIfOld(t *testing.T) {
 
 	tests := []struct {
 		desc                   string
-		shouldError            bool
+		checkError             require.ErrorAssertionFunc
 		doDryRun               bool
 		image                  imageFixture
 		mockDeregisterImage    func(ctx context.Context, params *ec2.DeregisterImageInput, optFns ...func(*ec2.Options)) (*ec2.DeregisterImageOutput, error)
@@ -476,7 +490,8 @@ func TestCleanupImageIfOld(t *testing.T) {
 				return nil, trace.Errorf("some API call error")
 
 			},
-			shouldError: true,
+			checkError:             require.Error,
+			shouldIgnoreSpaceCheck: true,
 		},
 		{
 			desc:  "no error when API call does not error",
@@ -484,7 +499,6 @@ func TestCleanupImageIfOld(t *testing.T) {
 			mockDeregisterImage: func(ctx context.Context, params *ec2.DeregisterImageInput, optFns ...func(*ec2.Options)) (*ec2.DeregisterImageOutput, error) {
 				return &ec2.DeregisterImageOutput{}, nil
 			},
-			shouldError: false,
 		},
 		{
 			desc:  "requests as a dry run when set in the application",
@@ -521,12 +535,16 @@ func TestCleanupImageIfOld(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		if test.checkError == nil {
+			test.checkError = require.NoError
+		}
+
 		t.Run(test.desc, func(t *testing.T) {
 			// Setup the application instance
 			application := &ApplicationInstance{
 				shouldDoDryRun: test.doDryRun,
-				ec2ClientGenerator: func(cfg *aws.Config) IEc2Api {
-					return &MockEc2API{
+				ec2ClientGenerator: func(cfg *aws.Config) EC2API {
+					return &MockEC2API{
 						MockDeleteSnapshot: func(ctx context.Context, params *ec2.DeleteSnapshotInput, optFns ...func(*ec2.Options)) (*ec2.DeleteSnapshotOutput, error) {
 							// Do nothing, just don't error
 							return &ec2.DeleteSnapshotOutput{}, nil
@@ -540,8 +558,8 @@ func TestCleanupImageIfOld(t *testing.T) {
 			recoveredSpace, err := application.cleanupImageIfOld(context.Background(), application.ec2ClientGenerator(nil), test.image.Image)
 
 			// Verify the results
-			checkError(t, test.shouldError, err)
-			if !test.shouldError && !test.shouldIgnoreSpaceCheck {
+			test.checkError(t, err)
+			if !test.shouldIgnoreSpaceCheck {
 				require.Equal(t, test.image.totalSize, recoveredSpace, "the recovered space did not match the expected recovered space")
 			}
 		})
@@ -585,12 +603,12 @@ func TestCleanupRegion(t *testing.T) {
 
 			// Setup the for the test
 			application := &ApplicationInstance{
-				ec2ClientGenerator: func(cfg *aws.Config) IEc2Api {
+				ec2ClientGenerator: func(cfg *aws.Config) EC2API {
 					ec2ClientProvidedConfig = cfg
 
-					return &MockEc2API{
+					return &MockEC2API{
 						MockDescribeImages: func(ctx context.Context, params *ec2.DescribeImagesInput, optFns ...func(*ec2.Options)) (*ec2.DescribeImagesOutput, error) {
-							images := make([]ec2Types.Image, 0, len(test.imageFixtures))
+							images := make([]ec2types.Image, 0, len(test.imageFixtures))
 							for _, imageFixture := range test.imageFixtures {
 								images = append(images, imageFixture.Image)
 							}
@@ -618,7 +636,7 @@ func TestCleanupRegion(t *testing.T) {
 			recoveredSpace, imagesDeleted, err := application.cleanupRegion(context.Background(), aws.Config{}, test.regionName)
 
 			// Verify the results
-			checkError(t, false, err)
+			require.NoError(t, err)
 			require.Equal(t, sizeOfAllImages, recoveredSpace, "the recovered space did not match the expected recovered space")
 			require.Equal(t, len(test.imageFixtures), imagesDeleted, "the number of deleted images did not match the expected number of deleted images")
 			require.NotNil(t, ec2ClientProvidedConfig, "the function did not provide the AWS configuration to the client generator")
@@ -628,13 +646,13 @@ func TestCleanupRegion(t *testing.T) {
 }
 
 type imageFixture struct {
-	ec2Types.Image
+	ec2types.Image
 	totalSize int32
 }
 
 func generateImageFixture(name, creationDate string, snapshotCount int) imageFixture {
 	image := imageFixture{
-		Image: ec2Types.Image{
+		Image: ec2types.Image{
 			Name: &name,
 		},
 	}
@@ -646,8 +664,8 @@ func generateImageFixture(name, creationDate string, snapshotCount int) imageFix
 	for i := 0; i < snapshotCount; i++ {
 		snapshotId := fmt.Sprintf("snap-%0x", i)
 		snapshotSize := int32(1) << i
-		image.BlockDeviceMappings = append(image.BlockDeviceMappings, ec2Types.BlockDeviceMapping{
-			Ebs: &ec2Types.EbsBlockDevice{
+		image.BlockDeviceMappings = append(image.BlockDeviceMappings, ec2types.BlockDeviceMapping{
+			Ebs: &ec2types.EbsBlockDevice{
 				SnapshotId: &snapshotId,
 				VolumeSize: &snapshotSize,
 			},
@@ -656,12 +674,4 @@ func generateImageFixture(name, creationDate string, snapshotCount int) imageFix
 	}
 
 	return image
-}
-
-func checkError(t *testing.T, shouldError bool, err error) {
-	if shouldError {
-		require.Error(t, err)
-	} else {
-		require.NoError(t, err)
-	}
 }

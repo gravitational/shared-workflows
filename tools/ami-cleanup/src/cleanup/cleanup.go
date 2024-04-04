@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package internal
+package cleanup
 
 import (
 	"context"
@@ -24,31 +24,33 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/account"
-	accountTypes "github.com/aws/aws-sdk-go-v2/service/account/types"
+	accounttypes "github.com/aws/aws-sdk-go-v2/service/account/types"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
-	ec2Types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/gravitational/trace"
 	"github.com/relvacode/iso8601"
 )
+
+const maxImageKeepAge = 30 * 24 * time.Hour // Images older than this will be removed, if they match other required criteria.
 
 type ApplicationInstance struct {
 	shouldDoDryRun bool
 
 	// Dependency injection for testing
-	accountClientGenerator func(cfg *aws.Config) IAccountApi
-	ec2ClientGenerator     func(cfg *aws.Config) IEc2Api
+	accountClientGenerator func(cfg *aws.Config) AccountAPI
+	ec2ClientGenerator     func(cfg *aws.Config) EC2API
 }
 
-// Creates a new instance of the tool
+// NewApplicationInstance creates a new instance of the tool
 func NewApplicationInstance(doDryRun bool) *ApplicationInstance {
 	return &ApplicationInstance{
 		shouldDoDryRun:         doDryRun,
-		accountClientGenerator: NewAccountApi,
-		ec2ClientGenerator:     NewEc2Api,
+		accountClientGenerator: NewAccountAPI,
+		ec2ClientGenerator:     NewEC2API,
 	}
 }
 
-// Performs cleanup
+// Run performs cleanup of AMIs in all enabled regions.
 func (ai *ApplicationInstance) Run(ctx context.Context) error {
 	cfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
@@ -64,7 +66,7 @@ func (ai *ApplicationInstance) Run(ctx context.Context) error {
 		return nil
 	}
 
-	totalSpaceRecovered := int32(0)
+	totalBytesRecovered := int32(0)
 	totalImagesDeleted := 0
 	// This would probably run much faster with channels/concurrency, but there isn't much
 	// need with how often this is expected to be ran
@@ -74,11 +76,11 @@ func (ai *ApplicationInstance) Run(ctx context.Context) error {
 			return trace.Wrap(err, "failed to clean up images in region %q", *enabledRegion.RegionName)
 		}
 
-		totalSpaceRecovered += spaceRecovered
+		totalBytesRecovered += spaceRecovered
 		totalImagesDeleted += imagesDeleted
 	}
 
-	log.Printf("Deleted %d GiB of %d images across %d regions", totalSpaceRecovered, totalImagesDeleted, len(enabledRegions))
+	log.Printf("Deleted %d GiB of %d images across %d regions", totalBytesRecovered, totalImagesDeleted, len(enabledRegions))
 	return nil
 }
 
@@ -95,7 +97,7 @@ func (ai ApplicationInstance) cleanupRegion(ctx context.Context, cfg aws.Config,
 		return 0, 0, trace.Wrap(err, "failed to get a list of dev images for %q", regionName)
 	}
 
-	var totalSpaceRecovered int32
+	var totalBytesRecovered int32
 	totalImagesDeleted := 0
 	totalSnapshotCount := 0
 	for _, devImage := range devImages {
@@ -108,21 +110,21 @@ func (ai ApplicationInstance) cleanupRegion(ctx context.Context, cfg aws.Config,
 			continue
 		}
 
-		totalSpaceRecovered += imageSpace
+		totalBytesRecovered += imageSpace
 		totalImagesDeleted++
 		totalSnapshotCount += len(devImage.BlockDeviceMappings)
 	}
 
-	return totalSpaceRecovered, totalImagesDeleted, nil
+	return totalBytesRecovered, totalImagesDeleted, nil
 }
 
-func (ai *ApplicationInstance) getEnabledRegions(ctx context.Context, client IAccountApi) ([]accountTypes.Region, error) {
+func (ai *ApplicationInstance) getEnabledRegions(ctx context.Context, client AccountAPI) ([]accounttypes.Region, error) {
 	return getAllWithPagination(
-		func(previousToken *string) (*string, []accountTypes.Region, error) {
+		func(previousToken *string) (*string, []accounttypes.Region, error) {
 			results, err := client.ListRegions(ctx, &account.ListRegionsInput{
-				RegionOptStatusContains: []accountTypes.RegionOptStatus{
-					accountTypes.RegionOptStatusEnabled,
-					accountTypes.RegionOptStatusEnabledByDefault,
+				RegionOptStatusContains: []accounttypes.RegionOptStatus{
+					accounttypes.RegionOptStatusEnabled,
+					accounttypes.RegionOptStatusEnabledByDefault,
 				},
 				NextToken: previousToken,
 			})
@@ -135,29 +137,25 @@ func (ai *ApplicationInstance) getEnabledRegions(ctx context.Context, client IAc
 	)
 }
 
-func (ai *ApplicationInstance) getDevImagesInRegion(ctx context.Context, client IEc2Api) ([]ec2Types.Image, error) {
-	// These are a weird language workaround for getting a pointer to a boolean literal
-	includeTrue := true
-	nameFilterName := "name"
-	stateFilterName := "state"
+func (ai *ApplicationInstance) getDevImagesInRegion(ctx context.Context, client EC2API) ([]ec2types.Image, error) {
 	requestInput := &ec2.DescribeImagesInput{
-		Filters: []ec2Types.Filter{
+		Filters: []ec2types.Filter{
 			{
-				Name:   &nameFilterName,
+				Name:   aws.String("name"),
 				Values: []string{"*dev*"},
 			},
 			{
-				Name:   &stateFilterName,
-				Values: []string{string(ec2Types.ImageStateAvailable)},
+				Name:   aws.String("state"),
+				Values: []string{string(ec2types.ImageStateAvailable)},
 			},
 		},
-		IncludeDeprecated: &includeTrue,
-		IncludeDisabled:   &includeTrue,
+		IncludeDeprecated: aws.Bool(true),
+		IncludeDisabled:   aws.Bool(true),
 		Owners:            []string{"self"},
 	}
 
 	return getAllWithPagination(
-		func(previousToken *string) (*string, []ec2Types.Image, error) {
+		func(previousToken *string) (*string, []ec2types.Image, error) {
 
 			requestInput.NextToken = previousToken
 			results, err := client.DescribeImages(ctx, requestInput)
@@ -189,7 +187,7 @@ func getAllWithPagination[T any](action func(previousToken *string) (nextToken *
 	}
 }
 
-func (ai *ApplicationInstance) cleanupImageIfOld(ctx context.Context, client IEc2Api, image ec2Types.Image) (int32, error) {
+func (ai *ApplicationInstance) cleanupImageIfOld(ctx context.Context, client EC2API, image ec2types.Image) (int32, error) {
 	creationDate, err := iso8601.ParseString(*image.CreationDate)
 	if err != nil {
 		return 0, trace.Wrap(err, "failed to parse image %q creation timestamp %q as an ISO 8601 value", *image.Name, *image.CreationDate)
@@ -197,7 +195,7 @@ func (ai *ApplicationInstance) cleanupImageIfOld(ctx context.Context, client IEc
 
 	// If the image is less than a month old, don't do anything
 	imageAge := time.Since(creationDate)
-	if imageAge <= 30*24*time.Hour {
+	if imageAge <= maxImageKeepAge {
 		return 0, nil
 	}
 
@@ -218,7 +216,7 @@ func (ai *ApplicationInstance) cleanupImageIfOld(ctx context.Context, client IEc
 }
 
 // Deletes all the snapshots for the given image, returning their cumulative snapshot size in GiB.
-func (ai *ApplicationInstance) deleteSnapshotsForImage(ctx context.Context, client IEc2Api, image ec2Types.Image) (int32, error) {
+func (ai *ApplicationInstance) deleteSnapshotsForImage(ctx context.Context, client EC2API, image ec2types.Image) (int32, error) {
 	deletedImageSize := int32(0)
 	for _, blockDevice := range image.BlockDeviceMappings {
 		log.Printf("\t\tDeleting snapshot %q for AMI %q", *blockDevice.Ebs.SnapshotId, *image.Name)

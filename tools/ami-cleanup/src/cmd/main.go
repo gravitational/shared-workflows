@@ -21,8 +21,7 @@ import (
 	"log"
 
 	"github.com/alecthomas/kingpin/v2"
-
-	"github.com/gravitational/shared-workflows/tools/ami-cleanup/internal"
+	"github.com/gravitational/shared-workflows/tools/ami-cleanup/cleanup"
 )
 
 var (
@@ -35,7 +34,7 @@ func main() {
 	kingpin.Parse()
 
 	ctx := context.Background()
-	err := internal.NewApplicationInstance(*dryRun).Run(ctx)
+	err := cleanup.NewApplicationInstance(*dryRun).Run(ctx)
 	if err != nil {
 		log.Fatalf("%v", err)
 	}

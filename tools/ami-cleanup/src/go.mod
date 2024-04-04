@@ -1,6 +1,6 @@
 module github.com/gravitational/shared-workflows/tools/ami-cleanup
 
-go 1.22.1
+go 1.21.6
 
 require (
 	github.com/aws/aws-sdk-go-v2/config v1.27.9

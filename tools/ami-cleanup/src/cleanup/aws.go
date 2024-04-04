@@ -16,7 +16,7 @@
 
 // TODO move this under /libs at some point, however it is nowhere near
 // large enough to justify separate module today
-package internal
+package cleanup
 
 import (
 	"context"
@@ -56,76 +56,41 @@ func IsDryRunError(err error) bool {
 // of hand if used frequently.
 
 // region Account API
-type IAccountApi interface {
+type AccountAPI interface {
 	ListRegions(ctx context.Context, params *account.ListRegionsInput, optFns ...func(*account.Options)) (*account.ListRegionsOutput, error)
 }
 
-type AccountApi struct {
+type AWSAccountAPI struct {
 	cfg *aws.Config
 	*account.Client
 }
 
-func NewAccountApi(cfg *aws.Config) IAccountApi {
-	return &AccountApi{
+func NewAccountAPI(cfg *aws.Config) AccountAPI {
+	return &AWSAccountAPI{
 		cfg:    cfg,
 		Client: account.NewFromConfig(*cfg),
 	}
 }
 
-type MockAccountAPI struct {
-	MockListRegions func(ctx context.Context, params *account.ListRegionsInput, optFns ...func(*account.Options)) (*account.ListRegionsOutput, error)
-}
-
-func (maa *MockAccountAPI) ListRegions(ctx context.Context, params *account.ListRegionsInput, optFns ...func(*account.Options)) (*account.ListRegionsOutput, error) {
-	return runMock(maa.MockListRegions, ctx, params, optFns)
-}
-
 // endregion
 
 // region EC2 API
-type IEc2Api interface {
+type EC2API interface {
 	DescribeImages(ctx context.Context, params *ec2.DescribeImagesInput, optFns ...func(*ec2.Options)) (*ec2.DescribeImagesOutput, error)
 	DeregisterImage(ctx context.Context, params *ec2.DeregisterImageInput, optFns ...func(*ec2.Options)) (*ec2.DeregisterImageOutput, error)
 	DeleteSnapshot(ctx context.Context, params *ec2.DeleteSnapshotInput, optFns ...func(*ec2.Options)) (*ec2.DeleteSnapshotOutput, error)
 }
 
-type Ec2Api struct {
+type AWSEC2API struct {
 	cfg *aws.Config
 	*ec2.Client
 }
 
-func NewEc2Api(cfg *aws.Config) IEc2Api {
-	return &Ec2Api{
+func NewEC2API(cfg *aws.Config) EC2API {
+	return &AWSEC2API{
 		cfg:    cfg,
 		Client: ec2.NewFromConfig(*cfg),
 	}
 }
 
-type MockEc2API struct {
-	MockDescribeImages  func(ctx context.Context, params *ec2.DescribeImagesInput, optFns ...func(*ec2.Options)) (*ec2.DescribeImagesOutput, error)
-	MockDeregisterImage func(ctx context.Context, params *ec2.DeregisterImageInput, optFns ...func(*ec2.Options)) (*ec2.DeregisterImageOutput, error)
-	MockDeleteSnapshot  func(ctx context.Context, params *ec2.DeleteSnapshotInput, optFns ...func(*ec2.Options)) (*ec2.DeleteSnapshotOutput, error)
-}
-
-func (mea *MockEc2API) DescribeImages(ctx context.Context, params *ec2.DescribeImagesInput, optFns ...func(*ec2.Options)) (*ec2.DescribeImagesOutput, error) {
-	return runMock(mea.MockDescribeImages, ctx, params, optFns)
-}
-
-func (mea *MockEc2API) DeregisterImage(ctx context.Context, params *ec2.DeregisterImageInput, optFns ...func(*ec2.Options)) (*ec2.DeregisterImageOutput, error) {
-	return runMock(mea.MockDeregisterImage, ctx, params, optFns)
-}
-
-func (mea *MockEc2API) DeleteSnapshot(ctx context.Context, params *ec2.DeleteSnapshotInput, optFns ...func(*ec2.Options)) (*ec2.DeleteSnapshotOutput, error) {
-	return runMock(mea.MockDeleteSnapshot, ctx, params, optFns)
-}
-
 // endregion
-
-// Do common error checking for every mock and then run it
-func runMock[TParameters, TInvocationOptions, TResult any](mock func(context.Context, TParameters, ...TInvocationOptions) (TResult, error),
-	ctx context.Context, params TParameters, optFns []TInvocationOptions) (TResult, error) {
-	if mock == nil {
-		panic("Mock API function was called but not implemented")
-	}
-	return mock(ctx, params, optFns...)
-}

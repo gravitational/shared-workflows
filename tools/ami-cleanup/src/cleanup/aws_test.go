@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package internal
+package cleanup
 
 import (
 	"errors"
@@ -60,7 +60,6 @@ func TestIsDryRunError(t *testing.T) {
 	for _, test := range tests {
 		testCap := test // Capture the loop var, unnecessary in upcoming go 1.22
 		t.Run(test.desc, func(t *testing.T) {
-			t.Parallel()
 			result := IsDryRunError(testCap.testError)
 			require.Equal(t, testCap.expectedResult, result)
 		})
