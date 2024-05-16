@@ -278,6 +278,7 @@ func skipFileForSizeCheck(name string) bool {
 		strings.HasSuffix(name, "_pb.grpc-server.ts") ||
 		strings.HasSuffix(name, "_pb.client.ts") ||
 		strings.HasSuffix(name, ".json") ||
+		strings.HasSuffix(name, ".snap") ||
 		strings.Contains(name, "webassets/") ||
 		strings.Contains(name, "vendor/") ||
 		isCRDRegex.MatchString(name)
