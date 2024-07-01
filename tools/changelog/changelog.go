@@ -26,7 +26,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/gravitational/shared-workflows/bot/internal/gh"
+	"github.com/gravitational/shared-workflows/libs/gh"
 	"github.com/gravitational/trace"
 )
 

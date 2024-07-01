@@ -25,7 +25,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/gravitational/shared-workflows/bot/internal/gh"
+	"github.com/gravitational/shared-workflows/libs/gh"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
