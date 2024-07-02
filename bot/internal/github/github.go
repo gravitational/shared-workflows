@@ -615,7 +615,7 @@ type Comment struct {
 func (c *Client) ListComments(ctx context.Context, organization string, repository string, number int) ([]Comment, error) {
 	var result []Comment
 
-	opts := &go_github.IssueListOptions{
+	opts := &go_github.IssueListCommentsOptions{
 		ListOptions: go_github.ListOptions{
 			Page:    0,
 			PerPage: perPage,
@@ -627,7 +627,7 @@ func (c *Client) ListComments(ctx context.Context, organization string, reposito
 			organization,
 			repository,
 			number,
-			&go_github.IssueListCommentsOptions{},
+			opts,
 		)
 		if err != nil {
 			return nil, trace.Wrap(err)
