@@ -14,7 +14,7 @@ func IsAvailable() error {
 	return err
 }
 
-// RunCmd runs git and returns output (stdout/stderr, depends on the cmd result) and error
+// RunCmd runs the GitHub CLI returns output (stdout/stderr, depends on the cmd result) and error
 func RunCmd(dir string, args ...string) (string, error) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
