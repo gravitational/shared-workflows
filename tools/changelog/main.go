@@ -28,8 +28,8 @@ import (
 	"github.com/alecthomas/kingpin/v2"
 	"github.com/gravitational/trace"
 
-	"github.com/gravitational/shared-workflows/libs/gh"
 	"github.com/gravitational/shared-workflows/libs/git"
+	"github.com/gravitational/shared-workflows/libs/github"
 )
 
 var (

@@ -4,7 +4,7 @@ This script generates a changelog for a release.
 
 ## Usage
 
-```
+```shell
 usage: changelog [<flags>]
 
 Flags:
@@ -54,12 +54,12 @@ base branch and save it: `make changelog > /tmp/changelog`. If any PRs are
 merged to the base branch after you have created your release PR but before
 you have merged it, you can see any new entries with:
 
-```
+```shell
 git checkout branch/vNN
 diff -u /tmp/changelog $(make changelog)
 ```
 If there are changes, you can update your changelog and rebase your branch:
-```
+```shell
 git pull on branch/vNN
 make changelog > /tmp/changelog
 git checkout release/XX.Y.Z

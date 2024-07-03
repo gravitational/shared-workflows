@@ -24,7 +24,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/gravitational/shared-workflows/libs/gh"
+	"github.com/gravitational/shared-workflows/libs/github"
 	"github.com/gravitational/trace"
 )
 
