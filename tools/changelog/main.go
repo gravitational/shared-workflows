@@ -153,7 +153,7 @@ func getLastVersion(baseTag, dir string) (string, error) {
 
 	lastVersion, err := makePrintVersion(dir)
 	if err != nil {
-		return "", trace.Wrap(err, "base-tag was not provided, make does not have 'version' target")
+		return "", trace.Wrap(err, "base-tag was not set, defaulted to invoking 'make version' but failed")
 	}
 
 	return lastVersion, nil
