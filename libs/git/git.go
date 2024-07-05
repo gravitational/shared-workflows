@@ -25,14 +25,15 @@ import (
 	"github.com/gravitational/trace"
 )
 
-// Repo provides utility functions around a git repository.
-// It wraps the go-git library and also provides a method for executing
-// git commands on the same repository.
+// Repo provides a collection of functions to query and modify a single git repository.
+// Wrapper around the go-git library that also includes methods to execute git commands
+// on the system for missing compatability.
 type Repo struct {
 	dir        string
 	Repository *go_git.Repository
 }
 
+// NewRepoFromDirectory initializes [Repo] from a directory.
 func NewRepoFromDirectory(dir string) (*Repo, error) {
 	inner, err := go_git.PlainOpen(dir)
 	if err != nil {
