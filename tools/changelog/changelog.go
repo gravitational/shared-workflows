@@ -23,6 +23,7 @@ import (
 	"regexp"
 	"strings"
 	"text/template"
+	"time"
 
 	"github.com/gravitational/shared-workflows/libs/github"
 	"github.com/gravitational/trace"
@@ -70,7 +71,7 @@ type changelogGenerator struct {
 }
 
 // generateChangelog will pull a PRs from branch between two points in time and generate a changelog from them.
-func (c *changelogGenerator) generateChangelog(branch, fromTime, toTime string) (string, error) {
+func (c *changelogGenerator) generateChangelog(branch string, fromTime, toTime time.Time) (string, error) {
 	// Search github for changelog pull requests
 	prs, err := c.ghclient.ListChangelogPullRequests(
 		context.Background(),

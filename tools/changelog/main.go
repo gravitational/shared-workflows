@@ -24,6 +24,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/alecthomas/kingpin/v2"
 	"github.com/go-git/go-git/v5"
@@ -51,11 +52,7 @@ var (
 func main() {
 	kingpin.Parse()
 
-	if err := prereqCheck(); err != nil {
-		log.Fatal(err)
-	}
-
-	ossRepo, _, err := initGit(*dir)
+	ossRepo, entRepo, err := initGit(*dir)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -72,7 +69,11 @@ func main() {
 	}
 
 	// Determine timestamps of releases which is used to limit Github search
-	timeLastRelease, timeLastEntRelease, timeLastEntMod, err := getTimestamps(*dir, filepath.Join(*dir, "e"), lastVersion)
+	timeLastRelease, err := ossTimestamp(ossRepo, lastVersion)
+	if err != nil {
+		log.Fatal(err)
+	}
+	timeLastEntRelease, timeLastEntMod, err := entTimestamps(entRepo, lastVersion)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -93,7 +94,7 @@ func main() {
 		ghclient: cl,
 		repo:     "teleport.e",
 	}
-	ossCL, err := ossCLGen.generateChangelog(branch, timeLastRelease, timeNow)
+	ossCL, err := ossCLGen.generateChangelog(branch, timeLastRelease, github.SearchTimeNow)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -107,13 +108,6 @@ func main() {
 		fmt.Println("Enterprise:")
 		fmt.Println(entCL)
 	}
-}
-
-func prereqCheck() error {
-	if err := gitexec.IsAvailable(); err != nil {
-		return trace.Wrap(err)
-	}
-	return nil
 }
 
 // initGit will initialize git repo for teleport OSS and Enterprise.
@@ -182,7 +176,7 @@ func getLastVersion(baseTag, dir string) (string, error) {
 
 	lastVersion, err := makePrintVersion(dir)
 	if err != nil {
-		return "", trace.Wrap(err)
+		return "", trace.Wrap(err, "base-tag was not provided, make does not have 'version' target")
 	}
 
 	return lastVersion, nil
@@ -208,21 +202,41 @@ func makePrintVersion(dir string) (string, error) {
 	return "v" + out, nil
 }
 
-func getTimestamps(dir string, entDir string, lastVersion string) (lastRelease, lastEnterpriseRelease, lastEnterpriseModify string, err error) {
+func ossTimestamp(ossRepo *git.Repository, tag string) (time.Time, error) {
+	var timestamp time.Time
 	// get timestamp since last release
-	since, err := gitexec.RunCmd(dir, "show", "-s", "--date=format:%Y-%m-%dT%H:%M:%S%z", "--format=%cd", lastVersion)
+	t, err := ossRepo.Tag(tag)
 	if err != nil {
-		return "", "", "", trace.Wrap(err, "can't get timestamp of last release")
+		return timestamp, trace.Wrap(err, fmt.Sprintf("tag %q not found, use a valid git tag", tag))
 	}
-	// get timestamp of last enterprise release
-	sinceEnt, err := gitexec.RunCmd(dir, "-C", "e", "show", "-s", "--date=format:%Y-%m-%dT%H:%M:%S%z", "--format=%cd", lastVersion)
+	versionCommit, err := ossRepo.CommitObject(t.Hash())
 	if err != nil {
-		return "", "", "", trace.Wrap(err, "can't get timestamp of last enterprise release")
+		return timestamp, trace.Wrap(err, "can't get timestamp of last release")
 	}
-	// get timestamp of last commit of enterprise
-	entTime, err := gitexec.RunCmd(entDir, "log", "-n", "1", "--date=format:%Y-%m-%dT%H:%M:%S%z", "--format=%cd")
+	timestamp = versionCommit.Author.When
+	return timestamp, nil
+}
+
+func entTimestamps(entRepo *git.Repository, tag string) (lastRelease, lastCommit time.Time, err error) {
+	// get timestamp since last release
+	t, err := entRepo.Tag(tag)
 	if err != nil {
-		return "", "", "", trace.Wrap(err, "can't get last modified time of e")
+		return lastRelease, lastCommit, trace.Wrap(err, fmt.Sprintf("tag %q not found, use a valid git tag", tag))
 	}
-	return since, sinceEnt, entTime, nil
+	versionCommit, err := entRepo.CommitObject(t.Hash())
+	if err != nil {
+		return lastRelease, lastCommit, trace.Wrap(err, "can't get timestamp of last release")
+	}
+	lastRelease = versionCommit.Author.When
+
+	// get timestamp of last commit
+	ref, err := entRepo.Reference(plumbing.HEAD, false)
+	if err != nil {
+		return lastRelease, lastCommit, trace.Wrap(err, "can't get latest reference for ent")
+	}
+	comm, err := entRepo.CommitObject(ref.Hash())
+	lastCommit = comm.Author.When
+
+	return lastRelease, lastCommit, nil
+
 }

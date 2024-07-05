@@ -18,10 +18,16 @@ package github
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/gravitational/trace"
 	"github.com/shurcooL/githubv4"
 )
+
+var SearchTimeNow = time.Unix(0, 0)
+
+// %Y-%m-%dT%H:%M:%S%z
+const searchTimeLayout = "2006-01-02T15:04:05-0700"
 
 // ChangelogPR contains all the data necessary for a changelog from the PR
 type ChangelogPR struct {
@@ -34,8 +40,8 @@ type ChangelogPR struct {
 // ListChangelogPullRequestsOpts contains options for searching for changelog pull requests.
 type ListChangelogPullRequestsOpts struct {
 	Branch   string
-	FromDate string
-	ToDate   string
+	FromDate time.Time
+	ToDate   time.Time
 }
 
 // ListChangelogPullRequests will search for pull requests that provide changelog information.
@@ -67,9 +73,9 @@ func (c *Client) ListChangelogPullRequests(ctx context.Context, org, repo string
 
 // dateRangeFormat takes in a date range and will format it for GitHub search syntax.
 // to can be empty and the format will be to search everything after from
-func dateRangeFormat(from, to string) string {
-	if to == "" {
-		return fmt.Sprintf(">%s", from)
+func dateRangeFormat(from, to time.Time) string {
+	if to == SearchTimeNow {
+		return fmt.Sprintf(">%s", from.Format(searchTimeLayout))
 	}
-	return fmt.Sprintf("%s..%s", from, to)
+	return fmt.Sprintf("%s..%s", from.Format(searchTimeLayout), to.Format(searchTimeLayout))
 }
