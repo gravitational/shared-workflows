@@ -21,7 +21,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -43,6 +42,8 @@ var (
 		"base-tag",
 		"The tag/version to generate the changelog from. It will be of the form vXX.Y.Z, e.g. v15.1.1",
 	).Envar("BASE_TAG").String()
+
+	dir = kingpin.Arg("dir", "directory of the teleport repo.").Required().String()
 )
 
 func main() {
@@ -52,30 +53,21 @@ func main() {
 		log.Fatal(err)
 	}
 
-	workDir, err := os.Getwd()
-	if err != nil {
-		log.Fatal(trace.Wrap(err, "failed to get working directory"))
-	}
-
-	topDir, err := gitexec.RepoRoot(workDir)
-	if err != nil {
-		log.Fatal(err)
-	}
-	entDir := filepath.Join(topDir, "e")
+	entDir := filepath.Join(*dir, "e")
 
 	// Figure out the branch and last version released for that branch
-	branch, err := getBranch(*baseBranch, workDir)
+	branch, err := getBranch(*baseBranch, *dir)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	lastVersion, err := getLastVersion(*baseTag, workDir)
+	lastVersion, err := getLastVersion(*baseTag, *dir)
 	if err != nil {
 		log.Fatal(trace.Wrap(err, "failed to determine last version"))
 	}
 
 	// Determine timestamps of releases which is used to limit Github search
-	timeLastRelease, timeLastEntRelease, timeLastEntMod, err := getTimestamps(topDir, entDir, lastVersion)
+	timeLastRelease, timeLastEntRelease, timeLastEntMod, err := getTimestamps(*dir, entDir, lastVersion)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -170,12 +162,7 @@ func getLastVersion(baseTag, dir string) (string, error) {
 		return baseTag, nil
 	}
 
-	// get root dir of repo
-	topDir, err := gitexec.RunCmd(dir, "rev-parse", "--show-toplevel")
-	if err != nil {
-		return "", trace.Wrap(err)
-	}
-	lastVersion, err := makePrintVersion(topDir)
+	lastVersion, err := makePrintVersion(dir)
 	if err != nil {
 		return "", trace.Wrap(err)
 	}
