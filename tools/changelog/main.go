@@ -27,11 +27,9 @@ import (
 	"time"
 
 	"github.com/alecthomas/kingpin/v2"
-	"github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/gravitational/trace"
 
-	"github.com/gravitational/shared-workflows/libs/gitexec"
+	"github.com/gravitational/shared-workflows/libs/git"
 	"github.com/gravitational/shared-workflows/libs/github"
 )
 
@@ -111,13 +109,13 @@ func main() {
 }
 
 // initGit will initialize git repo for teleport OSS and Enterprise.
-func initGit(repoRootDir string) (oss, ent *git.Repository, err error) {
-	oss, err = git.PlainOpen(repoRootDir)
+func initGit(repoRootDir string) (oss, ent *git.Repo, err error) {
+	oss, err = git.NewRepoFromDirectory(repoRootDir)
 	if err != nil {
 		return oss, ent, trace.Wrap(err)
 	}
 
-	ent, err = git.PlainOpen(filepath.Join(repoRootDir, "e"))
+	ent, err = git.NewRepoFromDirectory(filepath.Join(repoRootDir, "e"))
 	if err != nil {
 		return oss, ent, trace.Wrap(err)
 	}
@@ -126,24 +124,19 @@ func initGit(repoRootDir string) (oss, ent *git.Repository, err error) {
 
 // getBranch will return branch if parsed otherwise will attempt to find it
 // Branch should be in the format "branch/v*"
-func getBranch(branch string, repo *git.Repository) (string, error) {
+func getBranch(branch string, repo *git.Repo) (string, error) {
 	if branch != "" {
 		return branch, nil
 	}
-	// symbolic-ref HEAD
-	ref, err := repo.Reference(plumbing.HEAD, true)
-	if err != nil {
-		return "", trace.Wrap(err, "not on a branch")
-	}
 
-	if !ref.Name().IsBranch() {
-		return "", trace.BadParameter("not on a branch: %s", ref)
+	branch, err := repo.GetCurrentBranch()
+	if err != nil {
+		return "", trace.Wrap(err)
 	}
-	branch = ref.Name().String()
 
 	// if the branch is not in the branch/v* format then check it's root
 	if !strings.HasPrefix(branch, "branch/v") {
-		fbranch, err := getForkedBranch(*dir)
+		fbranch, err := getForkedBranch(repo)
 		if err != nil {
 			return "", trace.Wrap(err, "could not determine a root branch")
 		}
@@ -154,12 +147,12 @@ func getBranch(branch string, repo *git.Repository) (string, error) {
 }
 
 // getForkedBranch will attempt to find a root branch for the current one that is in the format branch/v*
-func getForkedBranch(dir string) (string, error) {
-	forkPointRef, err := gitexec.RunCmd(dir, "merge-base", "--fork-point", "HEAD")
+func getForkedBranch(repo *git.Repo) (string, error) {
+	forkPointRef, err := repo.RunCmd("merge-base", "--fork-point", "HEAD")
 	if err != nil {
 		return "", trace.Wrap(err)
 	}
-	fbranch, err := gitexec.RunCmd(dir, "branch", "--list", "branch/v*", "--contains", forkPointRef, "--format", "%(refname:short)")
+	fbranch, err := repo.RunCmd("branch", "--list", "branch/v*", "--contains", forkPointRef, "--format", "%(refname:short)")
 	if err != nil {
 		return "", trace.Wrap(err)
 	}
@@ -202,41 +195,29 @@ func makePrintVersion(dir string) (string, error) {
 	return "v" + out, nil
 }
 
-func ossTimestamp(ossRepo *git.Repository, tag string) (time.Time, error) {
+func ossTimestamp(ossRepo *git.Repo, tag string) (time.Time, error) {
 	var timestamp time.Time
 	// get timestamp since last release
-	t, err := ossRepo.Tag(tag)
+	versionCommit, err := ossRepo.GetCommitForTag(tag)
 	if err != nil {
-		return timestamp, trace.Wrap(err, fmt.Sprintf("tag %q not found, use a valid git tag", tag))
-	}
-	versionCommit, err := ossRepo.CommitObject(t.Hash())
-	if err != nil {
-		return timestamp, trace.Wrap(err, "can't get timestamp of last release")
+		return timestamp, err
 	}
 	timestamp = versionCommit.Author.When
 	return timestamp, nil
 }
 
-func entTimestamps(entRepo *git.Repository, tag string) (lastRelease, lastCommit time.Time, err error) {
+func entTimestamps(entRepo *git.Repo, tag string) (lastRelease, lastCommit time.Time, err error) {
 	// get timestamp since last release
-	t, err := entRepo.Tag(tag)
+	versionCommit, err := entRepo.GetCommitForTag(tag)
 	if err != nil {
-		return lastRelease, lastCommit, trace.Wrap(err, fmt.Sprintf("tag %q not found, use a valid git tag", tag))
-	}
-	versionCommit, err := entRepo.CommitObject(t.Hash())
-	if err != nil {
-		return lastRelease, lastCommit, trace.Wrap(err, "can't get timestamp of last release")
+		return lastRelease, lastCommit, trace.Wrap(err, "can't get commit for tag")
 	}
 	lastRelease = versionCommit.Author.When
 
 	// get timestamp of last commit
-	ref, err := entRepo.Reference(plumbing.HEAD, false)
+	comm, err := entRepo.GetCommitForHEAD()
 	if err != nil {
-		return lastRelease, lastCommit, trace.Wrap(err, "can't get latest reference for ent")
-	}
-	comm, err := entRepo.CommitObject(ref.Hash())
-	if err != nil {
-		return lastRelease, lastCommit, trace.Wrap(err, "can't get latest commit for HEAD")
+		return lastRelease, lastCommit, trace.Wrap(err, "can't get timestamp for ent")
 	}
 	lastCommit = comm.Author.When
 

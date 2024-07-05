@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package gitexec
+package git
 
 import (
 	"bytes"
@@ -31,14 +31,14 @@ func IsAvailable() error {
 }
 
 // RunCmd runs git and returns output (stdout/stderr, depends on the cmd result) and error
-func RunCmd(dir string, args ...string) (string, error) {
+func (r *Repo) RunCmd(args ...string) (string, error) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
 	cmd := exec.Command("git", args...)
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	cmd.Dir = dir
+	cmd.Dir = r.dir
 
 	err := cmd.Run()
 
@@ -47,10 +47,4 @@ func RunCmd(dir string, args ...string) (string, error) {
 	}
 
 	return strings.TrimSpace(stdout.String()), nil
-}
-
-// RepoRoot will find the root of the git repository of the given directory.
-// e.g. given $HOME/teleport/lib/auth should return $HOME/teleport
-func RepoRoot(dir string) (string, error) {
-	return RunCmd(dir, "rev-parse", "--show-toplevel")
 }
