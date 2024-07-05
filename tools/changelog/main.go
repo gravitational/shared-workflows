@@ -36,7 +36,7 @@ import (
 var (
 	baseBranch = kingpin.Flag(
 		"base-branch",
-		"The base release branch to generate the changelog for.  It will be of the form branch/v*",
+		"The base release branch to generate the changelog for. It will be of the form branch/v*",
 	).Envar("BASE_BRANCH").String()
 
 	baseTag = kingpin.Flag(
