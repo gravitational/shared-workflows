@@ -26,6 +26,8 @@ import (
 	"strings"
 
 	"github.com/alecthomas/kingpin/v2"
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/gravitational/trace"
 
 	"github.com/gravitational/shared-workflows/libs/gitexec"
@@ -53,10 +55,13 @@ func main() {
 		log.Fatal(err)
 	}
 
-	entDir := filepath.Join(*dir, "e")
+	ossRepo, _, err := initGit(*dir)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	// Figure out the branch and last version released for that branch
-	branch, err := getBranch(*baseBranch, *dir)
+	branch, err := getBranch(*baseBranch, ossRepo)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -67,7 +72,7 @@ func main() {
 	}
 
 	// Determine timestamps of releases which is used to limit Github search
-	timeLastRelease, timeLastEntRelease, timeLastEntMod, err := getTimestamps(*dir, entDir, lastVersion)
+	timeLastRelease, timeLastEntRelease, timeLastEntMod, err := getTimestamps(*dir, filepath.Join(*dir, "e"), lastVersion)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -111,27 +116,40 @@ func prereqCheck() error {
 	return nil
 }
 
+// initGit will initialize git repo for teleport OSS and Enterprise.
+func initGit(repoRootDir string) (oss, ent *git.Repository, err error) {
+	oss, err = git.PlainOpen(repoRootDir)
+	if err != nil {
+		return oss, ent, trace.Wrap(err)
+	}
+
+	ent, err = git.PlainOpen(filepath.Join(repoRootDir, "e"))
+	if err != nil {
+		return oss, ent, trace.Wrap(err)
+	}
+	return
+}
+
 // getBranch will return branch if parsed otherwise will attempt to find it
 // Branch should be in the format "branch/v*"
-func getBranch(branch, dir string) (string, error) {
+func getBranch(branch string, repo *git.Repository) (string, error) {
 	if branch != "" {
 		return branch, nil
 	}
-	// get ref
-	ref, err := gitexec.RunCmd(dir, "symbolic-ref", "HEAD")
+	// symbolic-ref HEAD
+	ref, err := repo.Reference(plumbing.HEAD, true)
 	if err != nil {
 		return "", trace.Wrap(err, "not on a branch")
 	}
 
-	// remove prefix and ensure that branch is in expected format
-	branch, _ = strings.CutPrefix(ref, "refs/heads/")
-	if branch == ref {
+	if !ref.Name().IsBranch() {
 		return "", trace.BadParameter("not on a branch: %s", ref)
 	}
+	branch = ref.Name().String()
 
 	// if the branch is not in the branch/v* format then check it's root
 	if !strings.HasPrefix(branch, "branch/v") {
-		fbranch, err := getForkedBranch(dir)
+		fbranch, err := getForkedBranch(*dir)
 		if err != nil {
 			return "", trace.Wrap(err, "could not determine a root branch")
 		}
