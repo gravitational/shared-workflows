@@ -29,11 +29,6 @@ import (
 	"github.com/gravitational/trace"
 )
 
-const (
-	// timeNow is a convenience variable to signal that search should include PRs up to current time
-	timeNow = ""
-)
-
 // changelogInfo is used for the changelog template format.
 type changelogInfo struct {
 	// Summary is the changelog summary extracted from a PR

@@ -235,8 +235,10 @@ func entTimestamps(entRepo *git.Repository, tag string) (lastRelease, lastCommit
 		return lastRelease, lastCommit, trace.Wrap(err, "can't get latest reference for ent")
 	}
 	comm, err := entRepo.CommitObject(ref.Hash())
+	if err != nil {
+		return lastRelease, lastCommit, trace.Wrap(err, "can't get latest commit for HEAD")
+	}
 	lastCommit = comm.Author.When
 
 	return lastRelease, lastCommit, nil
-
 }
