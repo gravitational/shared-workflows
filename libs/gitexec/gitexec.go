@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package git
+package gitexec
 
 import (
 	"bytes"
@@ -47,4 +47,10 @@ func RunCmd(dir string, args ...string) (string, error) {
 	}
 
 	return strings.TrimSpace(stdout.String()), nil
+}
+
+// RepoRoot will find the root of the git repository of the given directory.
+// e.g. given $HOME/teleport/lib/auth should return $HOME/teleport
+func RepoRoot(dir string) (string, error) {
+	return RunCmd(dir, "rev-parse", "--show-toplevel")
 }

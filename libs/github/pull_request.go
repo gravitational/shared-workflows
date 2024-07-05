@@ -13,15 +13,14 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-package gh
+package github
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/gravitational/trace"
+	"github.com/shurcooL/githubv4"
 )
 
 // ChangelogPR contains all the data necessary for a changelog from the PR
@@ -29,7 +28,7 @@ type ChangelogPR struct {
 	Body   string `json:"body,omitempty"`
 	Number int    `json:"number,omitempty"`
 	Title  string `json:"title,omitempty"`
-	URL    string `json:"url,omitempty"`
+	URL    string `json:"url,omitempty" graphql:"url"`
 }
 
 // ListChangelogPullRequestsOpts contains options for searching for changelog pull requests.
@@ -40,19 +39,29 @@ type ListChangelogPullRequestsOpts struct {
 }
 
 // ListChangelogPullRequests will search for pull requests that provide changelog information.
-func ListChangelogPullRequests(ctx context.Context, dir string, opts *ListChangelogPullRequestsOpts) ([]ChangelogPR, error) {
+func (c *Client) ListChangelogPullRequests(ctx context.Context, org, repo string, opts *ListChangelogPullRequestsOpts) ([]ChangelogPR, error) {
 	var prs []ChangelogPR
-	query := fmt.Sprintf("base:%s merged:%s -label:no-changelog", opts.Branch, dateRangeFormat(opts.FromDate, opts.ToDate))
-
-	data, err := RunCmd(dir, "pr", "list", "--search", query, "--limit", "200", "--json", "number,url,title,body")
-	if err != nil {
-		return prs, trace.Wrap(err)
+	query := fmt.Sprintf(`repo:"%s/%s" base:%s merged:%s -label:no-changelog`,
+		org, repo, opts.Branch, dateRangeFormat(opts.FromDate, opts.ToDate))
+	var q struct {
+		Search struct {
+			IssueCount int
+			Nodes      []struct {
+				PullRequest ChangelogPR `graphql:"... on PullRequest"`
+			}
+		} `graphql:"search(query: $q, type: ISSUE, first: 100)"`
+	}
+	variables := map[string]interface{}{
+		"q": githubv4.String(query),
+	}
+	if err := c.v4api.Query(ctx, &q, variables); err != nil {
+		return prs, trace.Wrap(err, "query failed")
 	}
 
-	dec := json.NewDecoder(strings.NewReader(data))
-	if err := dec.Decode(&prs); err != nil {
-		return prs, trace.Wrap(err)
+	for _, v := range q.Search.Nodes {
+		prs = append(prs, v.PullRequest)
 	}
+
 	return prs, nil
 }
 

@@ -64,22 +64,25 @@ var (
 )
 
 type changelogGenerator struct {
-	isEnt bool
-	dir   string
+	isEnt    bool
+	repo     string
+	ghclient *github.Client
 }
 
 // generateChangelog will pull a PRs from branch between two points in time and generate a changelog from them.
 func (c *changelogGenerator) generateChangelog(branch, fromTime, toTime string) (string, error) {
 	// Search github for changelog pull requests
-	prs, err := gh.ListChangelogPullRequests(
+	prs, err := c.ghclient.ListChangelogPullRequests(
 		context.Background(),
-		c.dir,
-		&gh.ListChangelogPullRequestsOpts{
+		"gravitational",
+		c.repo,
+		&github.ListChangelogPullRequestsOpts{
 			Branch:   branch,
 			FromDate: fromTime,
 			ToDate:   toTime,
 		},
 	)
+	fmt.Printf("%v\n", prs)
 	if err != nil {
 		return "", trace.Wrap(err)
 	}
@@ -88,7 +91,7 @@ func (c *changelogGenerator) generateChangelog(branch, fromTime, toTime string) 
 }
 
 // toChangelog will take the output from the search and format it into a changelog.
-func (c *changelogGenerator) toChangelog(prs []gh.ChangelogPR) (string, error) {
+func (c *changelogGenerator) toChangelog(prs []github.ChangelogPR) (string, error) {
 	var clList []changelogInfo
 	for _, pr := range prs {
 		clList = append(clList, newChangelogInfoFromPR(pr))
@@ -110,7 +113,7 @@ func (c *changelogGenerator) toChangelog(prs []gh.ChangelogPR) (string, error) {
 }
 
 // convertPRToChangelog will convert the list of PRs to a nicer format.
-func newChangelogInfoFromPR(pr gh.ChangelogPR) changelogInfo {
+func newChangelogInfoFromPR(pr github.ChangelogPR) changelogInfo {
 	found, clSummary := findChangelog(pr.Body)
 	if !found {
 		// Pull out title and indicate no changelog found

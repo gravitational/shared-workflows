@@ -28,8 +28,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func decodeTestData(t *testing.T, data []byte) []gh.ChangelogPR {
-	prs := []gh.ChangelogPR{}
+func decodeTestData(t *testing.T, data []byte) []github.ChangelogPR {
+	prs := []github.ChangelogPR{}
 	dec := json.NewDecoder(bytes.NewReader(data))
 	require.NoError(t, dec.Decode(&prs))
 	return prs

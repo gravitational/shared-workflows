@@ -13,37 +13,25 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-package gh
+package github
 
 import (
-	"bytes"
-	"os/exec"
-	"strings"
+	"context"
+	"errors"
 
-	"github.com/gravitational/trace"
+	"github.com/cli/go-gh/v2/pkg/auth"
 )
 
-// IsAvailable returns status of git
-func IsAvailable() error {
-	_, err := exec.LookPath("gh")
-	return err
-}
+var ErrTokenNotFound = errors.New("could not find a GitHub token configured on system")
 
-// RunCmd runs the GitHub CLI returns output (stdout/stderr, depends on the cmd result) and error
-func RunCmd(dir string, args ...string) (string, error) {
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-
-	cmd := exec.Command("gh", args...)
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	cmd.Dir = dir
-
-	err := cmd.Run()
-
-	if err != nil {
-		return strings.TrimSpace(stderr.String()), trace.Wrap(err)
+// NewClientFromGHAuth will use the gh credential chain to initialize the client.
+// Useful for initialization both in CI and in user environments.
+// Will check in order: GITHUB_TOKEN env var, gh config file, gh system keyring (gh auth login).
+func NewClientFromGHAuth(ctx context.Context) (*Client, error) {
+	token, _ := auth.TokenForHost("github.com")
+	if token == "" {
+		return &Client{}, ErrTokenNotFound
 	}
 
-	return strings.TrimSpace(stdout.String()), nil
+	return New(ctx, token)
 }

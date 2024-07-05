@@ -18,6 +18,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -28,7 +29,7 @@ import (
 	"github.com/alecthomas/kingpin/v2"
 	"github.com/gravitational/trace"
 
-	"github.com/gravitational/shared-workflows/libs/git"
+	"github.com/gravitational/shared-workflows/libs/gitexec"
 	"github.com/gravitational/shared-workflows/libs/github"
 )
 
@@ -56,7 +57,7 @@ func main() {
 		log.Fatal(trace.Wrap(err, "failed to get working directory"))
 	}
 
-	topDir, err := git.RunCmd(workDir, "rev-parse", "--show-toplevel")
+	topDir, err := gitexec.RepoRoot(workDir)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -79,14 +80,21 @@ func main() {
 		log.Fatal(err)
 	}
 
+	cl, err := github.NewClientFromGHAuth(context.Background())
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	// Generate changelogs
 	ossCLGen := &changelogGenerator{
-		isEnt: false,
-		dir:   topDir,
+		isEnt:    false,
+		ghclient: cl,
+		repo:     "teleport",
 	}
 	entCLGen := &changelogGenerator{
-		isEnt: true,
-		dir:   entDir,
+		isEnt:    true,
+		ghclient: cl,
+		repo:     "teleport.e",
 	}
 	ossCL, err := ossCLGen.generateChangelog(branch, timeLastRelease, timeNow)
 	if err != nil {
@@ -105,10 +113,7 @@ func main() {
 }
 
 func prereqCheck() error {
-	if err := git.IsAvailable(); err != nil {
-		return trace.Wrap(err)
-	}
-	if err := gh.IsAvailable(); err != nil {
+	if err := gitexec.IsAvailable(); err != nil {
 		return trace.Wrap(err)
 	}
 	return nil
@@ -121,7 +126,7 @@ func getBranch(branch, dir string) (string, error) {
 		return branch, nil
 	}
 	// get ref
-	ref, err := git.RunCmd(dir, "symbolic-ref", "HEAD")
+	ref, err := gitexec.RunCmd(dir, "symbolic-ref", "HEAD")
 	if err != nil {
 		return "", trace.Wrap(err, "not on a branch")
 	}
@@ -146,11 +151,11 @@ func getBranch(branch, dir string) (string, error) {
 
 // getForkedBranch will attempt to find a root branch for the current one that is in the format branch/v*
 func getForkedBranch(dir string) (string, error) {
-	forkPointRef, err := git.RunCmd(dir, "merge-base", "--fork-point", "HEAD")
+	forkPointRef, err := gitexec.RunCmd(dir, "merge-base", "--fork-point", "HEAD")
 	if err != nil {
 		return "", trace.Wrap(err)
 	}
-	fbranch, err := git.RunCmd(dir, "branch", "--list", "branch/v*", "--contains", forkPointRef, "--format", "%(refname:short)")
+	fbranch, err := gitexec.RunCmd(dir, "branch", "--list", "branch/v*", "--contains", forkPointRef, "--format", "%(refname:short)")
 	if err != nil {
 		return "", trace.Wrap(err)
 	}
@@ -166,7 +171,7 @@ func getLastVersion(baseTag, dir string) (string, error) {
 	}
 
 	// get root dir of repo
-	topDir, err := git.RunCmd(dir, "rev-parse", "--show-toplevel")
+	topDir, err := gitexec.RunCmd(dir, "rev-parse", "--show-toplevel")
 	if err != nil {
 		return "", trace.Wrap(err)
 	}
@@ -200,17 +205,17 @@ func makePrintVersion(dir string) (string, error) {
 
 func getTimestamps(dir string, entDir string, lastVersion string) (lastRelease, lastEnterpriseRelease, lastEnterpriseModify string, err error) {
 	// get timestamp since last release
-	since, err := git.RunCmd(dir, "show", "-s", "--date=format:%Y-%m-%dT%H:%M:%S%z", "--format=%cd", lastVersion)
+	since, err := gitexec.RunCmd(dir, "show", "-s", "--date=format:%Y-%m-%dT%H:%M:%S%z", "--format=%cd", lastVersion)
 	if err != nil {
 		return "", "", "", trace.Wrap(err, "can't get timestamp of last release")
 	}
 	// get timestamp of last enterprise release
-	sinceEnt, err := git.RunCmd(dir, "-C", "e", "show", "-s", "--date=format:%Y-%m-%dT%H:%M:%S%z", "--format=%cd", lastVersion)
+	sinceEnt, err := gitexec.RunCmd(dir, "-C", "e", "show", "-s", "--date=format:%Y-%m-%dT%H:%M:%S%z", "--format=%cd", lastVersion)
 	if err != nil {
 		return "", "", "", trace.Wrap(err, "can't get timestamp of last enterprise release")
 	}
 	// get timestamp of last commit of enterprise
-	entTime, err := git.RunCmd(entDir, "log", "-n", "1", "--date=format:%Y-%m-%dT%H:%M:%S%z", "--format=%cd")
+	entTime, err := gitexec.RunCmd(entDir, "log", "-n", "1", "--date=format:%Y-%m-%dT%H:%M:%S%z", "--format=%cd")
 	if err != nil {
 		return "", "", "", trace.Wrap(err, "can't get last modified time of e")
 	}
