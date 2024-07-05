@@ -129,14 +129,14 @@ func getBranch(branch string, repo *git.Repo) (string, error) {
 		return branch, nil
 	}
 
-	branch, err := repo.GetCurrentBranch()
+	branch, err := repo.GetBranchNameForHead()
 	if err != nil {
 		return "", trace.Wrap(err)
 	}
 
 	// if the branch is not in the branch/v* format then check it's root
 	if !strings.HasPrefix(branch, "branch/v") {
-		fbranch, err := getForkedBranch(repo)
+		fbranch, err := repo.GetParentReleaseBranch()
 		if err != nil {
 			return "", trace.Wrap(err, "could not determine a root branch")
 		}
@@ -144,22 +144,6 @@ func getBranch(branch string, repo *git.Repo) (string, error) {
 	}
 
 	return branch, nil
-}
-
-// getForkedBranch will attempt to find a root branch for the current one that is in the format branch/v*
-func getForkedBranch(repo *git.Repo) (string, error) {
-	forkPointRef, err := repo.RunCmd("merge-base", "--fork-point", "HEAD")
-	if err != nil {
-		return "", trace.Wrap(err)
-	}
-	fbranch, err := repo.RunCmd("branch", "--list", "branch/v*", "--contains", forkPointRef, "--format", "%(refname:short)")
-	if err != nil {
-		return "", trace.Wrap(err)
-	}
-	if fbranch == "" { // stdout is empty indicating the search failed
-		return "", trace.Errorf("could not find a valid root branch")
-	}
-	return fbranch, nil
 }
 
 func getLastVersion(baseTag, dir string) (string, error) {
@@ -215,7 +199,7 @@ func entTimestamps(entRepo *git.Repo, tag string) (lastRelease, lastCommit time.
 	lastRelease = versionCommit.Author.When
 
 	// get timestamp of last commit
-	comm, err := entRepo.GetCommitForHEAD()
+	comm, err := entRepo.GetCommitForHead()
 	if err != nil {
 		return lastRelease, lastCommit, trace.Wrap(err, "can't get timestamp for ent")
 	}
