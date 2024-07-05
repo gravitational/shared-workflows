@@ -82,7 +82,6 @@ func (c *changelogGenerator) generateChangelog(branch, fromTime, toTime string) 
 			ToDate:   toTime,
 		},
 	)
-	fmt.Printf("%v\n", prs)
 	if err != nil {
 		return "", trace.Wrap(err)
 	}

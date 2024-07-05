@@ -41,7 +41,7 @@ type ListChangelogPullRequestsOpts struct {
 // ListChangelogPullRequests will search for pull requests that provide changelog information.
 func (c *Client) ListChangelogPullRequests(ctx context.Context, org, repo string, opts *ListChangelogPullRequestsOpts) ([]ChangelogPR, error) {
 	var prs []ChangelogPR
-	query := fmt.Sprintf(`repo:"%s/%s" base:%s merged:%s -label:no-changelog`,
+	query := fmt.Sprintf(`repo:%s/%s base:%s merged:%s -label:no-changelog`,
 		org, repo, opts.Branch, dateRangeFormat(opts.FromDate, opts.ToDate))
 	var q struct {
 		Search struct {
