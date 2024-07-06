@@ -20,8 +20,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gravitational/trace"
-	"github.com/shurcooL/githubv4"
+	"github.com/google/go-github/v37/github"
 )
 
 var SearchTimeNow = time.Unix(0, 0)
@@ -49,23 +48,27 @@ func (c *Client) ListChangelogPullRequests(ctx context.Context, org, repo string
 	var prs []ChangelogPR
 	query := fmt.Sprintf(`repo:%s/%s base:%s merged:%s -label:no-changelog`,
 		org, repo, opts.Branch, dateRangeFormat(opts.FromDate, opts.ToDate))
-	var q struct {
-		Search struct {
-			IssueCount int
-			Nodes      []struct {
-				PullRequest ChangelogPR `graphql:"... on PullRequest"`
-			}
-		} `graphql:"search(query: $q, type: ISSUE, first: 100)"`
-	}
-	variables := map[string]interface{}{
-		"q": githubv4.String(query),
-	}
-	if err := c.v4api.Query(ctx, &q, variables); err != nil {
-		return prs, trace.Wrap(err, "query failed")
-	}
+	page, _, _ := c.client.Search.Issues(
+		ctx,
+		query,
+		&github.SearchOptions{
+			Sort:      "",
+			Order:     "",
+			TextMatch: false,
+			ListOptions: github.ListOptions{
+				Page:    0,
+				PerPage: 100,
+			},
+		},
+	)
 
-	for _, v := range q.Search.Nodes {
-		prs = append(prs, v.PullRequest)
+	for _, pull := range page.Issues {
+		prs = append(prs, ChangelogPR{
+			Body:   *pull.Body,
+			Number: *pull.Number,
+			Title:  *pull.Title,
+			URL:    *pull.URL,
+		})
 	}
 
 	return prs, nil
