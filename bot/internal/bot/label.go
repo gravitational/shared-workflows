@@ -66,6 +66,11 @@ func (b *Bot) labels(ctx context.Context, files []github.PullRequestFile) ([]str
 		labels = append(labels, string(prSize(files)))
 	}
 
+	if !requiresChangelog(files) {
+		log.Println("Label: Adding no-changelog.")
+		labels = append(labels, "no-changelog")
+	}
+
 	// The branch name is unsafe, but here we are simply adding a label.
 	if b.c.Environment.Repository != env.CloudRepo && isReleaseBranch(b.c.Environment.UnsafeBase) {
 		log.Println("Label: Found backport branch.")
@@ -100,6 +105,17 @@ func deduplicate(s []string) []string {
 	}
 
 	return out
+}
+
+// requiresChangelog indicates whether, based on the files in a pull request,
+// the PR should have the "no-changelog" label.
+func requiresChangelog(files []github.PullRequestFile) bool {
+	for _, f := range files {
+		if !strings.HasPrefix(f.Name, "docs/") {
+			return true
+		}
+	}
+	return false
 }
 
 var prefixes = map[string]map[string][]string{
