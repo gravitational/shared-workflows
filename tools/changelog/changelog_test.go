@@ -43,26 +43,8 @@ func TestToChangelog(t *testing.T) {
 
 	prs := decodeTestData(t, prsText)
 
-	gen := &changelogGenerator{
-		isEnt: false,
-	}
+	gen := &changelogGenerator{}
 	got, err := gen.toChangelog(prs)
 	assert.NoError(t, err)
-	assert.Equal(t, string(expectedCL), got)
-}
-
-func TestToChangelogEnterprise(t *testing.T) {
-	prsText, err := os.ReadFile(filepath.Join("testdata", "ent-listed-prs.json"))
-	require.NoError(t, err)
-	expectedCL, err := os.ReadFile(filepath.Join("testdata", "ent-expected-cl.md"))
-	require.NoError(t, err)
-
-	prs := decodeTestData(t, prsText)
-
-	gen := &changelogGenerator{
-		isEnt: true,
-	}
-	got, err := gen.toChangelog(prs)
-	require.NoError(t, err)
 	assert.Equal(t, string(expectedCL), got)
 }

@@ -38,14 +38,9 @@ type changelogInfo struct {
 }
 
 const (
-	ossCLTemplate = `
+	clTemplate = `
 {{- range . -}}
 * {{.Summary}} [#{{.Number}}]({{.URL}})
-{{ end -}}
-`
-	entCLTemplate = `
-{{- range . -}}
-* {{.Summary}}
 {{ end -}}
 `
 )
@@ -55,21 +50,19 @@ var (
 	// e.g. will match a line "changelog: this is a changelog" with subgroup "this is a changelog".
 	clPattern = regexp.MustCompile(`[Cc]hangelog: +(.*)`)
 
-	ossCLParsedTmpl = template.Must(template.New("oss cl").Parse(ossCLTemplate))
-	entCLParsedTmpl = template.Must(template.New("enterprise cl").Parse(entCLTemplate))
+	clParsedTmpl = template.Must(template.New("oss cl").Parse(clTemplate))
 )
 
 type changelogGenerator struct {
-	isEnt    bool
 	repo     string
 	ghclient *github.Client
 }
 
 // generateChangelog will pull a PRs from branch between two points in time and generate a changelog from them.
-func (c *changelogGenerator) generateChangelog(branch string, fromTime, toTime time.Time) (string, error) {
+func (c *changelogGenerator) generateChangelog(ctx context.Context, branch string, fromTime, toTime time.Time) (string, error) {
 	// Search github for changelog pull requests
 	prs, err := c.ghclient.ListChangelogPullRequests(
-		context.Background(),
+		ctx,
 		"gravitational",
 		c.repo,
 		&github.ListChangelogPullRequestsOpts{
@@ -92,15 +85,8 @@ func (c *changelogGenerator) toChangelog(prs []github.ChangelogPR) (string, erro
 		clList = append(clList, newChangelogInfoFromPR(pr))
 	}
 
-	var tmpl *template.Template
-	if c.isEnt {
-		tmpl = entCLParsedTmpl
-	} else {
-		tmpl = ossCLParsedTmpl
-	}
-
 	var buff bytes.Buffer
-	if err := tmpl.Execute(&buff, clList); err != nil {
+	if err := clParsedTmpl.Execute(&buff, clList); err != nil {
 		return "", trace.Wrap(err)
 	}
 

@@ -82,21 +82,20 @@ func main() {
 	}
 
 	// Generate changelogs
+	ctx := context.Background()
 	ossCLGen := &changelogGenerator{
-		isEnt:    false,
 		ghclient: cl,
 		repo:     "teleport",
 	}
 	entCLGen := &changelogGenerator{
-		isEnt:    true,
 		ghclient: cl,
 		repo:     "teleport.e",
 	}
-	ossCL, err := ossCLGen.generateChangelog(branch, timeLastRelease, github.SearchTimeNow)
+	ossCL, err := ossCLGen.generateChangelog(ctx, branch, timeLastRelease, github.SearchTimeNow)
 	if err != nil {
 		log.Fatal(err)
 	}
-	entCL, err := entCLGen.generateChangelog(branch, timeLastEntRelease, timeLastEntMod)
+	entCL, err := entCLGen.generateChangelog(ctx, branch, timeLastEntRelease, timeLastEntMod)
 	if err != nil {
 		log.Fatal(err)
 	}
