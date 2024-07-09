@@ -17,11 +17,9 @@ limitations under the License.
 package git
 
 import (
-	"fmt"
+	"strings"
+	"time"
 
-	go_git "github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/gravitational/trace"
 )
 
@@ -29,53 +27,54 @@ import (
 // Wrapper around the go-git library that also includes methods to execute git commands
 // on the system for missing compatability.
 type Repo struct {
-	dir        string
-	Repository *go_git.Repository
+	dir string
 }
+
+const (
+	gitTimeFormat = "Mon Jan 02 15:04:05 2006 -0700"
+)
 
 // NewRepoFromDirectory initializes [Repo] from a directory.
 func NewRepoFromDirectory(dir string) (*Repo, error) {
-	inner, err := go_git.PlainOpen(dir)
-	if err != nil {
-		return &Repo{}, trace.Wrap(err)
-	}
-
 	return &Repo{
-		dir:        dir,
-		Repository: inner,
+		dir: dir,
 	}, nil
 }
 
-// GetCommitForTag attempts to get the resolved commit for a given tag.
-func (r *Repo) GetCommitForTag(tag string) (*object.Commit, error) {
-	t, err := r.Repository.Tag(tag)
-	if err != nil {
-		return &object.Commit{}, trace.Wrap(err, fmt.Sprintf("tag %q not found, use a valid git tag", tag))
-	}
-	return r.Repository.CommitObject(t.Hash())
-}
-
-// GetCommitForHead attempts to get the resolved commit for head.
-func (r *Repo) GetCommitForHead() (*object.Commit, error) {
-	ref, err := r.Repository.Reference(plumbing.HEAD, false)
-	if err != nil {
-		return &object.Commit{}, trace.Wrap(err, "can't get latest reference for ent")
-	}
-	return r.Repository.CommitObject(ref.Hash())
-}
-
-// GetBranchForHead attempts to get the resolved branch of HEAD.
-func (r *Repo) GetBranchNameForHead() (string, error) {
-	// symbolic-ref HEAD
-	ref, err := r.Repository.Reference(plumbing.HEAD, true)
+// BranchNameForHead will get the name of branch currently on.
+// If not on a branch will return an error.
+func (r *Repo) BranchNameForHead() (string, error) {
+	// get ref
+	ref, err := r.RunCmd("symbolic-ref", "HEAD")
 	if err != nil {
 		return "", trace.Wrap(err, "not on a branch")
 	}
 
-	if !ref.Name().IsBranch() {
+	// remove prefix and ensure that branch is in expected format
+	branch, _ := strings.CutPrefix(ref, "refs/heads/")
+	if branch == ref {
 		return "", trace.BadParameter("not on a branch: %s", ref)
 	}
-	return ref.Name().String(), nil
+	return branch, nil
+}
+
+// TimestampForRef will get the timestamp for the given reference.
+// Will work for symbolic references such as tags, HEAD, branches
+func (r *Repo) TimestampForRef(ref string) (time.Time, error) {
+	t, err := r.RunCmd("show", "-s", "--format=%cd", ref)
+	if err != nil {
+		return time.Time{}, trace.Wrap(err, "can't get timestamp for ref")
+	}
+	return time.Parse(gitTimeFormat, t)
+}
+
+// TimestampForLatestCommit will get the timestamp for the last commit.
+func (r *Repo) TimestampForLatestCommit() (time.Time, error) {
+	t, err := r.RunCmd("log", "-n", "1", "--format=%cd")
+	if err != nil {
+		return time.Time{}, trace.Wrap(err, "can't get timestamp for latest commit")
+	}
+	return time.Parse(gitTimeFormat, t)
 }
 
 // GetParentReleaseBranch will attempt to find a parent branch for HEAD.

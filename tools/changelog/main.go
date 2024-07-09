@@ -67,7 +67,7 @@ func main() {
 	}
 
 	// Determine timestamps of releases which is used to limit Github search
-	timeLastRelease, err := ossTimestamp(ossRepo, lastVersion)
+	timeLastRelease, err := ossRepo.TimestampForRef(lastVersion)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -128,7 +128,7 @@ func getBranch(branch string, repo *git.Repo) (string, error) {
 		return branch, nil
 	}
 
-	branch, err := repo.GetBranchNameForHead()
+	branch, err := repo.BranchNameForHead()
 	if err != nil {
 		return "", trace.Wrap(err)
 	}
@@ -178,31 +178,18 @@ func makePrintVersion(dir string) (string, error) {
 	return "v" + out, nil
 }
 
-func ossTimestamp(ossRepo *git.Repo, tag string) (time.Time, error) {
-	var timestamp time.Time
-	// get timestamp since last release
-	versionCommit, err := ossRepo.GetCommitForTag(tag)
-	if err != nil {
-		return timestamp, err
-	}
-	timestamp = versionCommit.Author.When
-	return timestamp, nil
-}
-
 func entTimestamps(entRepo *git.Repo, tag string) (lastRelease, lastCommit time.Time, err error) {
 	// get timestamp since last release
-	versionCommit, err := entRepo.GetCommitForTag(tag)
+	lastRelease, err = entRepo.TimestampForRef(tag)
 	if err != nil {
 		return lastRelease, lastCommit, trace.Wrap(err, "can't get commit for tag")
 	}
-	lastRelease = versionCommit.Author.When
 
 	// get timestamp of last commit
-	comm, err := entRepo.GetCommitForHead()
+	lastCommit, err = entRepo.TimestampForLatestCommit()
 	if err != nil {
 		return lastRelease, lastCommit, trace.Wrap(err, "can't get timestamp for ent")
 	}
-	lastCommit = comm.Author.When
 
 	return lastRelease, lastCommit, nil
 }
