@@ -24,6 +24,7 @@ import (
 	"strings"
 	"text/template"
 	"time"
+	"unicode"
 
 	"github.com/gravitational/shared-workflows/libs/github"
 	"github.com/gravitational/trace"
@@ -120,9 +121,16 @@ func findChangelog(commentBody string) (found bool, summary string) {
 }
 
 func prettierSummary(cl string) string {
+	// Clean whitespace and add a period at end
 	cl = strings.TrimSpace(cl)
 	if !strings.HasSuffix(cl, ".") {
 		cl += "."
 	}
+
+	// Uppercase first letter
+	r := []rune(cl)
+	r[0] = unicode.ToUpper(r[0])
+	cl = string(r)
+
 	return cl
 }
