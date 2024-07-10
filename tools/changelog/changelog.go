@@ -51,7 +51,7 @@ var (
 	// e.g. will match a line "changelog: this is a changelog" with subgroup "this is a changelog".
 	clPattern = regexp.MustCompile(`[Cc]hangelog: +(.*)`)
 
-	clParsedTmpl = template.Must(template.New("oss cl").Parse(clTemplate))
+	clParsedTmpl = template.Must(template.New("cl").Parse(clTemplate))
 )
 
 type changelogGenerator struct {
