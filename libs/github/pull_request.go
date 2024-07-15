@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/go-github/v37/github"
+	"github.com/google/go-github/v63/github"
 )
 
 var SearchTimeNow = time.Unix(0, 0)
