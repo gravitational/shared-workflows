@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/google/go-github/v63/github"
+	"github.com/gravitational/trace"
 )
 
 var SearchTimeNow = time.Unix(0, 0)
@@ -48,7 +49,7 @@ func (c *Client) ListChangelogPullRequests(ctx context.Context, org, repo string
 	var prs []ChangelogPR
 	query := fmt.Sprintf(`repo:%s/%s base:%s merged:%s -label:no-changelog`,
 		org, repo, opts.Branch, dateRangeFormat(opts.FromDate, opts.ToDate))
-	page, _, _ := c.client.Search.Issues(
+	page, _, err := c.client.Search.Issues(
 		ctx,
 		query,
 		&github.SearchOptions{
@@ -62,12 +63,16 @@ func (c *Client) ListChangelogPullRequests(ctx context.Context, org, repo string
 		},
 	)
 
+	if err != nil {
+		return prs, trace.Wrap(err)
+	}
+
 	for _, pull := range page.Issues {
 		prs = append(prs, ChangelogPR{
-			Body:   *pull.Body,
-			Number: *pull.Number,
-			Title:  *pull.Title,
-			URL:    *pull.URL,
+			Body:   pull.GetBody(),
+			Number: pull.GetNumber(),
+			Title:  pull.GetTitle(),
+			URL:    pull.GetURL(),
 		})
 	}
 
