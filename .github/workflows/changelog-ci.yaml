@@ -1,0 +1,52 @@
+---
+name: Changelog generator CI
+
+on:
+  pull_request:
+
+env:
+  TOOL_DIRECTORY: tools/changelog
+
+jobs:
+  test:
+    name: Run tests
+    runs-on: ubuntu-latest
+    steps:
+      # Determine if tests should run
+      # This is a monorepo and GH checks cannot be required for only specific
+      # paths, so this is required instead of a trigger `paths` filter.
+      - name: Check if relavent files have changed
+        id: changes
+        uses: dorny/paths-filter@v3.0.2
+        with:
+          filters: |
+            tool:
+              - 'tools/changelog/**'
+
+      # Setup
+      - name: Checkout repository
+        if: steps.changes.outputs.tool == 'true'
+        uses: actions/checkout@v4
+      - name: Setup Go
+        if: steps.changes.outputs.tool == 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: "${{ env.TOOL_DIRECTORY }}/go.mod"
+
+      # Linting
+      - name: Install golangci-lint
+        if: steps.changes.outputs.tool == 'true'
+        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.59.1
+      - name: Lint
+        if: steps.changes.outputs.tool == 'true'
+        working-directory: ${{ env.TOOL_DIRECTORY }}
+        run: make lint
+
+      # Tests
+      - name: Install gotestsum
+        if: steps.changes.outputs.tool == 'true'
+        run: go install gotest.tools/gotestsum@v1.12.0
+      - name: Run tests
+        if: steps.changes.outputs.tool == 'true'
+        working-directory: ${{ env.TOOL_DIRECTORY }}
+        run: make test

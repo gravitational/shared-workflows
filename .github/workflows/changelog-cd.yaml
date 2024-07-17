@@ -1,0 +1,134 @@
+---
+name: Changelog generator CD
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - tools/changelog
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+**-changelog"
+  pull_request:
+    paths:
+      - tools/changelog/workflows/cd.yaml
+
+env:
+  TOOL_DIRECTORY: tools/changelog
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Needed to create the release
+      packages: write # Needed to upload the images to GHCR
+    steps:
+      # Setup
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Create event-specific values
+        id: setup
+        run: |
+          # Determine if the workflow was triggered via a push to main or a tag
+          # and get the version based off of that
+          if [[ "${GITHUB_REF}" =~ refs/tags/.* ]]; then
+            # Transforms tag refs like refs/tags/v1.2.3-changelog into v1.2.3
+            TAG="${GITHUB_REF#refs/tags/}"
+            echo "version=${TAG%-changelog}" >> "${GITHUB_OUTPUT}"
+
+            # Eventually the parse-version action from the teleport.e repo
+            # should move into this repo and replace this logic
+            echo "should-release=true" >> "${GITHUB_OUTPUT}"
+            
+            if [[ "${GITHUB_REF%-*}" == "${GITHUB_REF}" ]]; then
+              echo "is-prerelease=true" >> "${GITHUB_OUTPUT}"
+            fi
+          fi
+
+      # Build the binaries
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: '${{ env.TOOL_DIRECTORY }}/go.mod'
+
+      - name: Build the project
+        working-directory: ${{ env.TOOL_DIRECTORY }}
+        run: |
+          make tarball OS=linux ARCH=amd64
+          make tarball OS=linux ARCH=arm64
+          make tarball OS=darwin ARCH=amd64
+          make tarball OS=darwin ARCH=arm64
+
+      # Build and push the image
+      - name: Install docker buildx
+        uses: docker/setup-buildx-action@v3.4.0
+
+      - name: Login to GitHub Container Registry
+        id: login-ghcr
+        uses: docker/login-action@v3.2.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Prepare container image labels and tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ghcr.io/${{ github.repository_owner }}/changelog
+          flavor: |
+            latest=false
+          # Enable sha tag on branch push events and pull requests.
+          # Enable semver tags on tag push events, but don't overwrite major/minor tags for prereleases.
+          # Semver tags won't be generated except upon tag events.
+          tags: |
+            type=sha,prefix=v0.0.0-{{branch}}-,enable=${{ startsWith(github.ref, 'refs/heads/') }}
+            type=sha,prefix=v0.0.0-{{base_ref}}-,enable=${{ github.event_name == 'pull_request' }}
+            type=semver,pattern={{major}},value=${{ steps.setup.outputs.version }},enable=${{ steps.setup.outputs.is-prerelease != 'true' }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ steps.setup.outputs.version }},enable=${{ steps.setup.outputs.is-prerelease != 'true' }}
+            type=semver,pattern={{version}},value=${{ steps.setup.outputs.version }}
+
+      - name: Build the container image and push
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ env.TOOL_DIRECTORY }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: |
+            linux/amd64
+            linux/arm64
+          provenance: true
+          sbom: true
+
+      # File a new release with the tarballs attached
+      - name: Create a new GitHub release
+        if: ${{ steps.setup.outputs.should-release == 'true' }}
+        working-directory: ${{ env.TOOL_DIRECTORY }}
+        env:
+          VERSION: ${{ steps.setup.outputs.version }}
+          IS_PRERELEASE: ${{ steps.setup.outputs.is-prerelease }}
+        run: |
+          if [[ "${IS_PRERELEASE}" == 'true' ]]; then
+            EXTRA_FLAGS=("--prerelease")
+          else
+            EXTRA_FLAGS=("--latest")
+          fi
+
+          readarray -d '' RELEASE_TARBALLS < <(
+            find . -name '*.tar.gz' -print0
+          )
+
+          echo "Creating a release for ${VERSION} with files:"
+          for file in "${RELEASE_TARBALLS[@]}"; do
+            ls -lh "${file}"
+          done
+
+          gh release create --title "changelog ${VERSION}" --verify-tag \
+            --generate-notes "${EXTRA_FLAGS[@]}" "${GITHUB_REF_NAME}" \
+            "${RELEASE_TARBALLS[@]}"
