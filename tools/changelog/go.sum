@@ -779,8 +779,8 @@ github.com/googleapis/gax-go/v2 v2.7.0/go.mod h1:TEop28CZZQ2y+c0VxMUmu1lV+fQx57Q
 github.com/googleapis/gax-go/v2 v2.7.1/go.mod h1:4orTrqY6hXxxaUL4LHIPl6lGo8vAE38/qKbhSAKP6QI=
 github.com/googleapis/go-type-adapters v1.0.0/go.mod h1:zHW75FOG2aur7gAO2B+MLby+cLsWGBF62rFAi7WjWO4=
 github.com/googleapis/google-cloud-go-testing v0.0.0-20200911160855-bcd43fbb19e8/go.mod h1:dvDLG8qkwmyD9a/MJJN3XJcT3xFxOKAvTZGvuZmac9g=
-github.com/gravitational/shared-workflows/libs v0.0.0-20240715190115-2c75aae471da h1:ZKUyfk06xYi8fv4hsyPlLg9foSNhyzfyKk7gi4zBI8w=
-github.com/gravitational/shared-workflows/libs v0.0.0-20240715190115-2c75aae471da/go.mod h1:5VNHqqY7IYvHwipxa9FBxQondXSaKJ2W23ZrUzkS9zk=
+github.com/gravitational/shared-workflows/libs v0.1.0 h1:F+YN1uRw6Si/5/p3J+TwDs6JoPVf6CCqABCBTThtrPk=
+github.com/gravitational/shared-workflows/libs v0.1.0/go.mod h1:ZIbzcw44BXUXF1GGt/+3sA9lhku6FrxvAXTgFOCJRsM=
 github.com/gravitational/trace v1.4.0 h1:TtTeMElVwMX21Udb1nmK2tpWYAAMJoyjevzKOaxIFZQ=
 github.com/gravitational/trace v1.4.0/go.mod h1:g79NZzwCjWS/VVubYowaFAQsTjVTohGi0hFbIWSyGoY=
 github.com/grpc-ecosystem/grpc-gateway v1.16.0/go.mod h1:BDjrQk3hbvj6Nolgz8mAMFbcEtjT1g+wF4CSlocrBnw=
