@@ -31,7 +31,8 @@ type Repo struct {
 }
 
 const (
-	gitTimeFormat = "Mon Jan 02 15:04:05 2006 -0700"
+	// git should be expected to to output in strict ISO 8601 format
+	gitTimeFormat = "2006-01-02T15:04:05-07:00"
 )
 
 // NewRepoFromDirectory initializes [Repo] from a directory.
@@ -61,18 +62,18 @@ func (r *Repo) BranchNameForHead() (string, error) {
 // TimestampForRef will get the timestamp for the given reference.
 // Will work for symbolic references such as tags, HEAD, branches
 func (r *Repo) TimestampForRef(ref string) (time.Time, error) {
-	t, err := r.RunCmd("show", "-s", "--format=%cd", ref)
+	t, err := r.RunCmd("show", "-s", "--format=%cI", ref)
 	if err != nil {
-		return time.Time{}, trace.Wrap(err, "can't get timestamp for ref")
+		return time.Time{}, trace.Wrap(err, trace.BadParameter("can't get timestamp for ref: %q", ref))
 	}
 	return time.Parse(gitTimeFormat, t)
 }
 
 // TimestampForLatestCommit will get the timestamp for the last commit.
 func (r *Repo) TimestampForLatestCommit() (time.Time, error) {
-	t, err := r.RunCmd("log", "-n", "1", "--format=%cd")
+	t, err := r.RunCmd("log", "-n", "1", "--format=%cI")
 	if err != nil {
-		return time.Time{}, trace.Wrap(err, "can't get timestamp for latest commit")
+		return time.Time{}, trace.Wrap(err, trace.BadParameter("can't get timestamp for latest commit on repo: %q", r.dir))
 	}
 	return time.Parse(gitTimeFormat, t)
 }
