@@ -72,7 +72,7 @@ func (c *Client) ListChangelogPullRequests(ctx context.Context, org, repo string
 			Body:   pull.GetBody(),
 			Number: pull.GetNumber(),
 			Title:  pull.GetTitle(),
-			URL:    pull.GetURL(),
+			URL:    pull.GetHTMLURL(),
 		})
 	}
 
