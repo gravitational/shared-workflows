@@ -49,7 +49,7 @@ func (c *Client) ListChangelogPullRequests(ctx context.Context, org, repo string
 	var prs []ChangelogPR
 	query := fmt.Sprintf(`repo:%s/%s base:%s merged:%s -label:no-changelog`,
 		org, repo, opts.Branch, dateRangeFormat(opts.FromDate, opts.ToDate))
-	page, _, err := c.client.Search.Issues(
+	page, _, err := c.search.Issues(
 		ctx,
 		query,
 		&github.SearchOptions{
