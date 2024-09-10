@@ -31,6 +31,11 @@ const (
 
 type Client struct {
 	client *go_github.Client
+	search searchService
+}
+
+type searchService interface {
+	Issues(ctx context.Context, query string, opts *go_github.SearchOptions) (*go_github.IssuesSearchResult, *go_github.Response, error)
 }
 
 // New returns a new GitHub Client.
@@ -38,8 +43,9 @@ func New(ctx context.Context, token string) (*Client, error) {
 	clt := oauth2.NewClient(ctx, oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token}))
 
 	clt.Timeout = ClientTimeout
-
+	cl := go_github.NewClient(clt)
 	return &Client{
-		client: go_github.NewClient(clt),
+		client: cl,
+		search: cl.Search,
 	}, nil
 }
