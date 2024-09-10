@@ -33,6 +33,11 @@ func TestListChangelogPullRequests(t *testing.T) {
 
 	prs, err := cl.ListChangelogPullRequests(context.TODO(), "test", "test", &ListChangelogPullRequestsOpts{})
 	require.NoError(t, err)
+
+	// Just a quick sanity test to ensure that things don't break
 	assert.Len(t, prs, 13)
 	assert.Equal(t, prs[0].URL, "https://github.com/gravitational/teleport.e/pull/4449")
+	assert.Equal(t, prs[0].Number, 4449)
+	assert.Equal(t, prs[0].Title, "[v16] Web UI: Validate GCP resource name, update label copy")
+	assert.Equal(t, prs[0].Body, "Backports https://github.com/gravitational/teleport.e/pull/4375 and https://github.com/gravitational/teleport.e/pull/4423 to Branch/v16")
 }
