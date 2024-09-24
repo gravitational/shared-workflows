@@ -17,11 +17,11 @@ func TestTimestampForRef(t *testing.T) {
 	}{
 		{
 			name:         "ISO 8601 with offset",
-			gitTimestamp: "2024-09-10T13:05:11-05:00",
+			gitTimestamp: "2024-09-10T13:30:47-05:00",
 		},
 		{
 			name:         "ISO 8601 in UTC",
-			gitTimestamp: "2024-09-10T13:05:11Z",
+			gitTimestamp: "2024-09-10T18:30:47Z",
 		},
 	}
 	for _, tt := range tests {
