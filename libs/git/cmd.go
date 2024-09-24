@@ -40,11 +40,23 @@ func (r *Repo) RunCmd(args ...string) (string, error) {
 	cmd.Stderr = &stderr
 	cmd.Dir = r.dir
 
-	err := cmd.Run()
+	err := r.runner.Run(cmd)
 
 	if err != nil {
 		return strings.TrimSpace(stderr.String()), trace.Wrap(err)
 	}
 
 	return strings.TrimSpace(stdout.String()), nil
+}
+
+// commandRunner is a small interface that wraps the actual execution of the process.
+// This allows us to easily swap out the implementation for testing.
+type commandRunner interface {
+	Run(*exec.Cmd) error
+}
+
+type defaultRunner struct{}
+
+func (r *defaultRunner) Run(cmd *exec.Cmd) error {
+	return cmd.Run()
 }

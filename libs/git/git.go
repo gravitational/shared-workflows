@@ -27,18 +27,20 @@ import (
 // Wrapper around the go-git library that also includes methods to execute git commands
 // on the system for missing compatability.
 type Repo struct {
-	dir string
+	dir    string
+	runner commandRunner
 }
 
 const (
 	// git should be expected to to output in strict ISO 8601 format
-	gitTimeFormat = "2006-01-02T15:04:05-07:00"
+	gitTimeFormat = "2006-01-02T15:04:05Z07:00"
 )
 
 // NewRepoFromDirectory initializes [Repo] from a directory.
 func NewRepoFromDirectory(dir string) (*Repo, error) {
 	return &Repo{
-		dir: dir,
+		dir:    dir,
+		runner: &defaultRunner{},
 	}, nil
 }
 
