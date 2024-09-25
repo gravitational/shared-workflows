@@ -80,10 +80,10 @@ func (c *Client) ListChangelogPullRequests(ctx context.Context, org, repo string
 }
 
 // dateRangeFormat takes in a date range and will format it for GitHub search syntax.
-// to can be empty and the format will be to search everything after from
+// to can be empty and the format will be to search everything after and including from.
 func dateRangeFormat(from, to time.Time) string {
 	if to == SearchTimeNow {
-		return fmt.Sprintf(">%s", from.Format(searchTimeLayout))
+		return fmt.Sprintf(">=%s", from.Format(searchTimeLayout))
 	}
 	return fmt.Sprintf("%s..%s", from.Format(searchTimeLayout), to.Format(searchTimeLayout))
 }
