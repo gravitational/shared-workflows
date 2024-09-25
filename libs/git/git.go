@@ -30,11 +30,6 @@ type Repo struct {
 	dir string
 }
 
-const (
-	// git should be expected to to output in strict ISO 8601 format
-	gitTimeFormat = "2006-01-02T15:04:05-07:00"
-)
-
 // NewRepoFromDirectory initializes [Repo] from a directory.
 func NewRepoFromDirectory(dir string) (*Repo, error) {
 	return &Repo{
@@ -66,7 +61,7 @@ func (r *Repo) TimestampForRef(ref string) (time.Time, error) {
 	if err != nil {
 		return time.Time{}, trace.Wrap(err, trace.BadParameter("can't get timestamp for ref: %q", ref))
 	}
-	return time.Parse(gitTimeFormat, t)
+	return time.Parse(time.RFC3339, t)
 }
 
 // TimestampForLatestCommit will get the timestamp for the last commit.
@@ -75,7 +70,7 @@ func (r *Repo) TimestampForLatestCommit() (time.Time, error) {
 	if err != nil {
 		return time.Time{}, trace.Wrap(err, trace.BadParameter("can't get timestamp for latest commit on repo: %q", r.dir))
 	}
-	return time.Parse(gitTimeFormat, t)
+	return time.Parse(time.RFC3339, t)
 }
 
 // GetParentReleaseBranch will attempt to find a parent branch for HEAD.
