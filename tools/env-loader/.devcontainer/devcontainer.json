@@ -1,0 +1,16 @@
+// For format details, see https://aka.ms/devcontainer.json.
+{
+  "name": "aws-sm-env-loader",
+  "image": "mcr.microsoft.com/vscode/devcontainers/go",
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "github.vscode-github-actions",
+        "redhat.vscode-yaml"
+      ]
+    }
+  }
+}
