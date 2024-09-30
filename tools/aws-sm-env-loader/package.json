@@ -1,0 +1,35 @@
+{
+  "name": "aws-sm-env-loader",
+  "version": "0.0.0-dev",
+  "license": "Apache-2.0",
+  "repository": "https://github.com/gravitational/shared-workflows.git",
+  "packageManager": "yarn@4.4.1+sha512.f825273d0689cc9ead3259c14998037662f1dcd06912637b21a450e8da7cfeb4b1965bbee73d16927baa1201054126bc385c6f43ff4aa705c8631d26e12460f1",
+  "scripts": {
+    "build": "ncc build ./src/index.ts -o dist",
+    "eslint": "eslint ./src",
+    "lint": "yarn eslint && yarn prettier-check",
+    "prettier-write": "yarn prettier --write .",
+    "prettier-check": "yarn prettier --check ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.9.1",
+    "@types/node": "^22.5.3",
+    "@typescript-eslint/eslint-plugin": "^8.4.0",
+    "@typescript-eslint/parser": "^8.4.0",
+    "@vercel/ncc": "^0.38.1",
+    "eslint": "^9.9.1",
+    "eslint-plugin-import": "^2.30.0",
+    "globals": "^15.9.0",
+    "ncc": "^0.3.6",
+    "prettier": "^3.3.3",
+    "typescript": "^5.5.4",
+    "typescript-eslint": "^8.4.0"
+  },
+  "dependencies": {
+    "@actions/core": "^1.10.1",
+    "@actions/github": "^6.0.0",
+    "@aws-sdk/client-secrets-manager": "^3.645.0",
+    "@octokit/core": "^6.1.2",
+    "@octokit/plugin-paginate-graphql": "^5.2.2"
+  }
+}
