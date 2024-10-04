@@ -81,6 +81,12 @@ func main() {
 		log.Fatal(err)
 	}
 
+	// Bump the time of the last release (both OSS and Enterprise) by 1 second
+	// as we do not want to include the commit in the last release.
+	timeLastRelease = timeLastRelease.Add(1 * time.Second)
+	timeLastEntRelease = timeLastEntRelease.Add(1 * time.Second)
+	timeLastEntMod = timeLastEntMod.Add(1 * time.Second)
+
 	// Generate changelogs
 	ctx := context.Background()
 	ossCLGen := &changelogGenerator{
