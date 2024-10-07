@@ -4,7 +4,7 @@ go 1.22.4
 
 require (
 	github.com/alecthomas/kingpin/v2 v2.4.0
-	github.com/gravitational/shared-workflows/libs v0.1.2
+	github.com/gravitational/shared-workflows/libs v0.1.3
 	github.com/gravitational/trace v1.4.0
 	github.com/stretchr/testify v1.8.3
 )
