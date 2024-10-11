@@ -18,7 +18,6 @@ package bot
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"regexp"
 	"strings"
@@ -53,9 +52,7 @@ func (b *Bot) CheckChangelog(ctx context.Context) error {
 
 	changelogEntries := b.getChangelogEntries(pull.UnsafeBody)
 	if len(changelogEntries) == 0 {
-		return trace.Wrap(
-			b.logFailedCheck(ctx, "Changelog entry not found in the PR body. Please add a %q label to the PR, or changelog lines starting with `%s` followed by the changelog entries for the PR.", NoChangelogLabel, ChangelogPrefix),
-			"failed to get changelog entry")
+		return trace.BadParameter("Changelog entry not found in the PR body. Please add a %q label to the PR, or changelog lines starting with `%s` followed by the changelog entries for the PR.", NoChangelogLabel, ChangelogPrefix)
 	}
 
 	for _, changelogEntry := range changelogEntries {
@@ -87,43 +84,29 @@ func (b *Bot) getChangelogEntries(prBody string) []string {
 func (b *Bot) validateChangelogEntry(ctx context.Context, changelogEntry string) error {
 	changelogEntry = strings.ToLower(strings.TrimSpace(changelogEntry)) // Format the entry for easy validation
 	if changelogEntry == "" {
-		return b.logFailedCheck(ctx, "The changelog entry must contain one or more non-whitespace characters.")
+		return trace.BadParameter("The changelog entry must contain one or more non-whitespace characters.")
 	}
 
 	if !unicode.IsLetter([]rune(changelogEntry)[0]) {
-		return b.logFailedCheck(ctx, "The changelog entry must start with a letter.")
+		return trace.BadParameter("The changelog entry must start with a letter.")
 	}
 
 	if strings.HasPrefix(changelogEntry, "backport of") ||
 		strings.HasPrefix(changelogEntry, "backports") {
-		return b.logFailedCheck(ctx, "The changelog entry must contain the actual change, not a reference to the source PR of the backport.")
+		return trace.BadParameter("The changelog entry must contain the actual change, not a reference to the source PR of the backport.")
 	}
 
 	if strings.Contains(changelogEntry, "](") {
-		return b.logFailedCheck(ctx, "The changelog entry must not contain a Markdown link or image.")
+		return trace.BadParameter("The changelog entry must not contain a Markdown link or image.")
 	}
 
 	if strings.Contains(changelogEntry, "```") {
-		return b.logFailedCheck(ctx, "The changelog entry must not contain a multiline code block.")
+		return trace.BadParameter("The changelog entry must not contain a multiline code block.")
 	}
 
 	if changelogEntry == "none" {
-		return b.logFailedCheck(ctx, "The %q label must be set instead of listing 'none' as the changelog entry.", NoChangelogLabel)
+		return trace.BadParameter("The %q label must be set instead of listing 'none' as the changelog entry.", NoChangelogLabel)
 	}
 
 	return nil
-}
-
-func (b *Bot) logFailedCheck(ctx context.Context, format string, args ...interface{}) error {
-	err := b.c.GitHub.CreateComment(ctx,
-		b.c.Environment.Organization,
-		b.c.Environment.Repository,
-		b.c.Environment.Number,
-		fmt.Sprintf("The PR changelog entry failed validation: %s", fmt.Sprintf(format, args...)),
-	)
-	if err != nil {
-		return trace.Wrap(err, "failed to create or update the changelog comment")
-	}
-
-	return trace.Errorf(format, args...)
 }
