@@ -190,15 +190,6 @@ func TestValidateGetChangelogEntry(t *testing.T) {
 	}
 }
 
-func TestLogFailedCheck(t *testing.T) {
-	t.Run("fail-contains-passed-message", func(t *testing.T) {
-		b, ctx := buildTestingFixtures()
-
-		err := b.logFailedCheck(ctx, "error %s", "message")
-		require.ErrorContains(t, err, "error message")
-	})
-}
-
 func buildTestingFixtures() (*Bot, context.Context) {
 	return &Bot{
 		c: &Config{
