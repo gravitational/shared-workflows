@@ -1,5 +1,5 @@
 /*
- *  Copyright 2023 Gravitational, Inc
+ *  Copyright 2024 Gravitational, Inc
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -28,7 +28,7 @@ import (
 	"github.com/gravitational/trace"
 )
 
-const ENV_VAR_PREFIX = "ENV_LOADER_"
+const EnvVarPrefix = "ENV_LOADER_"
 
 type config struct {
 	Environment string
@@ -37,28 +37,28 @@ type config struct {
 	Writer      string
 }
 
-func parseCli() *config {
+func parseCLI() *config {
 	c := &config{}
 
 	kingpin.Flag("environment", "Name of the environment containing the values to load").
-		Envar(ENV_VAR_PREFIX + "ENVIRONMENT").
+		Envar(EnvVarPrefix + "ENVIRONMENT").
 		Short('e').
 		Default("local").
 		StringVar(&c.Environment)
 
 	kingpin.Flag("value-set", "Name of the value set to load").
 		Short('s').
-		Envar(ENV_VAR_PREFIX + "VALUE_SET").
+		Envar(EnvVarPrefix + "VALUE_SET").
 		StringVar(&c.ValueSet)
 
 	kingpin.Flag("values", "Name of the specific value to output").
 		Short('v').
-		Envar(ENV_VAR_PREFIX + "VALUE").
+		Envar(EnvVarPrefix + "VALUE").
 		StringsVar(&c.Values)
 
 	kingpin.Flag("format", "Output format of the value(s)").
 		Short('f').
-		Envar(ENV_VAR_PREFIX+"FORMAT").
+		Envar(EnvVarPrefix+"FORMAT").
 		Default("dotenv").
 		EnumVar(&c.Writer, slices.Collect(maps.Keys(writers.AllWriters))...)
 
@@ -92,7 +92,7 @@ func run(c *config) error {
 }
 
 func main() {
-	c := parseCli()
+	c := parseCLI()
 
 	err := run(c)
 	if err != nil {

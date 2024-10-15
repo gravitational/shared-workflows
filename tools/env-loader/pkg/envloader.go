@@ -1,5 +1,5 @@
 /*
- *  Copyright 2023 Gravitational, Inc
+ *  Copyright 2024 Gravitational, Inc
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@ import (
 
 // This is the path, relative to the git repo root, where environment
 // directories can be found.
-const CiDirectoryRelativePath = ".environments"
+const CIDirectoryRelativePath = ".environments"
 
 func findGitRepoRoot() (string, error) {
 	cwd, err := os.Getwd()
@@ -110,7 +110,7 @@ func FindEnvironmentFiles(environment, valueSet string) ([]string, error) {
 		return nil, trace.Wrap(err, "failed to find repo root")
 	}
 
-	environmentsPath := filepath.Join(repoRoot, CiDirectoryRelativePath)
+	environmentsPath := filepath.Join(repoRoot, CIDirectoryRelativePath)
 	if _, err := os.Stat(environmentsPath); err != nil {
 		return nil, trace.Wrap(err, "failed to find environments path at %q", environmentsPath)
 	}

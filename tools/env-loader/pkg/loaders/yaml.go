@@ -1,5 +1,5 @@
 /*
- *  Copyright 2023 Gravitational, Inc
+ *  Copyright 2024 Gravitational, Inc
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -18,14 +18,14 @@ package loaders
 
 import (
 	"github.com/getsops/sops/v3/decrypt"
-	sopsYaml "github.com/getsops/sops/v3/stores/yaml"
+	sopsyaml "github.com/getsops/sops/v3/stores/yaml"
 	"github.com/gravitational/trace"
 	"gopkg.in/yaml.v3"
 )
 
-type plainYamlSubloader struct{}
+type plainYAMLSubloader struct{}
 
-func (*plainYamlSubloader) GetEnvironmentValues(yamlBytes []byte) (map[string]string, error) {
+func (*plainYAMLSubloader) GetEnvironmentValues(yamlBytes []byte) (map[string]string, error) {
 	var environmentValues map[string]string
 	err := yaml.Unmarshal(yamlBytes, &environmentValues)
 	if err != nil {
@@ -41,7 +41,7 @@ func (*plainYamlSubloader) GetEnvironmentValues(yamlBytes []byte) (map[string]st
 	return environmentValues, nil
 }
 
-func (pys *plainYamlSubloader) CanGetEnvironmentValues(yamlBytes []byte) bool {
+func (pys *plainYAMLSubloader) CanGetEnvironmentValues(yamlBytes []byte) bool {
 	if len(yamlBytes) == 0 {
 		return false
 	}
@@ -50,28 +50,28 @@ func (pys *plainYamlSubloader) CanGetEnvironmentValues(yamlBytes []byte) bool {
 	return err == nil
 }
 
-func (*plainYamlSubloader) Name() string {
+func (*plainYAMLSubloader) Name() string {
 	return "plain"
 }
 
-type sopsYamlSubloader struct{}
+type sopsYAMLSubloader struct{}
 
-func (*sopsYamlSubloader) GetEnvironmentValues(yamlBytes []byte) (map[string]string, error) {
+func (*sopsYAMLSubloader) GetEnvironmentValues(yamlBytes []byte) (map[string]string, error) {
 	yamlBytes, err := decrypt.Data(yamlBytes, "yaml")
 	if err != nil {
 		return nil, trace.Wrap(err, "failed to decrypt YAML SOPS content")
 	}
 
-	return (&plainYamlSubloader{}).GetEnvironmentValues(yamlBytes)
+	return (&plainYAMLSubloader{}).GetEnvironmentValues(yamlBytes)
 }
 
-func (*sopsYamlSubloader) CanGetEnvironmentValues(yamlBytes []byte) bool {
+func (*sopsYAMLSubloader) CanGetEnvironmentValues(yamlBytes []byte) bool {
 	// Attempt to unmarshal SOPS-specific fields to test if this is a SOPS document
-	_, err := (&sopsYaml.Store{}).LoadEncryptedFile(yamlBytes)
+	_, err := (&sopsyaml.Store{}).LoadEncryptedFile(yamlBytes)
 	return err == nil
 }
 
-func (*sopsYamlSubloader) Name() string {
+func (*sopsYAMLSubloader) Name() string {
 	return "SOPS"
 }
 
@@ -82,8 +82,8 @@ type YamlLoader struct {
 func NewYamlLoader() *YamlLoader {
 	return &YamlLoader{
 		SubLoader: NewSubLoader(
-			&sopsYamlSubloader{},
-			&plainYamlSubloader{},
+			&sopsYAMLSubloader{},
+			&plainYAMLSubloader{},
 		),
 	}
 }

@@ -1,5 +1,5 @@
 /*
- *  Copyright 2023 Gravitational, Inc
+ *  Copyright 2024 Gravitational, Inc
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -38,7 +38,7 @@ func (sl *SubLoader) GetEnvironmentValues(bytes []byte) (map[string]string, erro
 
 	environmentValues, err := subloader.GetEnvironmentValues(bytes)
 	if err != nil {
-		return nil, trace.Wrap(err, "failed to unmarshal YAML bytes with %q YAML loader", subloader.Name())
+		return nil, trace.Wrap(err, "failed to unmarshal bytes with %q loader", subloader.Name())
 	}
 
 	return environmentValues, nil
