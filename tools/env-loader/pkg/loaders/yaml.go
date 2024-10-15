@@ -54,9 +54,9 @@ func (*plainYAMLSubloader) Name() string {
 	return "plain"
 }
 
-type sopsYAMLSubloader struct{}
+type SOPSYAMLSubloader struct{}
 
-func (*sopsYAMLSubloader) GetEnvironmentValues(yamlBytes []byte) (map[string]string, error) {
+func (*SOPSYAMLSubloader) GetEnvironmentValues(yamlBytes []byte) (map[string]string, error) {
 	yamlBytes, err := decrypt.Data(yamlBytes, "yaml")
 	if err != nil {
 		return nil, trace.Wrap(err, "failed to decrypt YAML SOPS content")
@@ -65,13 +65,13 @@ func (*sopsYAMLSubloader) GetEnvironmentValues(yamlBytes []byte) (map[string]str
 	return (&plainYAMLSubloader{}).GetEnvironmentValues(yamlBytes)
 }
 
-func (*sopsYAMLSubloader) CanGetEnvironmentValues(yamlBytes []byte) bool {
+func (*SOPSYAMLSubloader) CanGetEnvironmentValues(yamlBytes []byte) bool {
 	// Attempt to unmarshal SOPS-specific fields to test if this is a SOPS document
 	_, err := (&sopsyaml.Store{}).LoadEncryptedFile(yamlBytes)
 	return err == nil
 }
 
-func (*sopsYAMLSubloader) Name() string {
+func (*SOPSYAMLSubloader) Name() string {
 	return "SOPS"
 }
 
@@ -82,7 +82,7 @@ type YAMLLoader struct {
 func NewYAMLLoader() *YAMLLoader {
 	return &YAMLLoader{
 		SubLoader: NewSubLoader(
-			&sopsYAMLSubloader{},
+			&SOPSYAMLSubloader{},
 			&plainYAMLSubloader{},
 		),
 	}
