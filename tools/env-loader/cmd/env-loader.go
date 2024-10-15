@@ -60,7 +60,9 @@ func parseCLI() *config {
 		Short('f').
 		Envar(EnvVarPrefix+"FORMAT").
 		Default("dotenv").
-		EnumVar(&c.Writer, slices.Collect(maps.Keys(writers.AllWriters))...)
+		EnumVar(&c.Writer, slices.Collect(maps.Keys(writers.FromName))...)
+
+	kingpin.Parse()
 
 	return c
 }
@@ -73,15 +75,13 @@ func run(c *config) error {
 	}
 
 	// Filter out values not requested
-	if len(c.Values) > 0 {
-		maps.DeleteFunc(envValues, func(key, _ string) bool {
-			return !slices.Contains(c.Values, key)
-		})
-	}
+	maps.DeleteFunc(envValues, func(key, _ string) bool {
+		return !slices.Contains(c.Values, key)
+	})
 
 	// Build the output string
-	writer := writers.AllWriters[c.Writer]
-	envValueOutput, err := writer.FormatEnvironmentValues(envValues)
+	writer := writers.FromName[c.Writer]
+	envValueOutput, err := writer.FormatEnvironmentValues(map[string]string{})
 	if err != nil {
 		return trace.Wrap(err, "failed to format output values with writer %q", c.Writer)
 	}

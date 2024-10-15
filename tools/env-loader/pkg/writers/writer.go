@@ -30,7 +30,7 @@ var (
 	DefaultWriter = dotenvWriter
 
 	// A map of all writers available.
-	AllWriters = map[string]Writer{
+	FromName = map[string]Writer{
 		dotenvWriter.Name(): dotenvWriter,
 	}
 )
