@@ -11,7 +11,7 @@ import (
 const AGE_KEY_ENV_VAR_NAME = "SOPS_AGE_KEY_FILE"
 
 func TestYamlSubloader_Names(t *testing.T) {
-	loaders := NewYamlLoader().SubLoaders
+	loaders := NewYAMLLoader().SubLoaders
 	for _, loader := range loaders {
 		require.NotEmpty(t, loader.Name(), "%#v", loader)
 	}
@@ -80,7 +80,7 @@ func TestPlainYamlSubloader_GetEnvironmentValues(t *testing.T) {
 
 	for _, testCase := range testCases {
 		// Setup
-		loader := plainYamlSubloader{}
+		loader := plainYAMLSubloader{}
 
 		rawContent := readTestFile(t, testCase.testFileName)
 
@@ -129,7 +129,7 @@ func TestPlainYamlSubloader_CanEnvironmentValues(t *testing.T) {
 
 	for _, testCase := range testCases {
 		// Setup
-		loader := plainYamlSubloader{}
+		loader := plainYAMLSubloader{}
 
 		if testCase.testBytes == nil && testCase.testFileName != "" {
 			testCase.testBytes = readTestFile(t, testCase.testFileName)
@@ -210,7 +210,7 @@ func TestSOPSYamlSubloader_GetEnvironmentValues(t *testing.T) {
 
 	for _, testCase := range testCases {
 		// Setup
-		loader := sopsYamlSubloader{}
+		loader := SOPSYAMLSubloader{}
 
 		rawContent := readTestFile(t, testCase.testFileName)
 
@@ -276,7 +276,7 @@ func TestSOPSYamlSubloader_CanEnvironmentValues(t *testing.T) {
 
 	for _, testCase := range testCases {
 		// Setup
-		loader := sopsYamlSubloader{}
+		loader := SOPSYAMLSubloader{}
 
 		if testCase.testBytes == nil && testCase.testFileName != "" {
 			testFilePath := filepath.Join("testdata", testCase.testFileName)
@@ -292,6 +292,6 @@ func TestSOPSYamlSubloader_CanEnvironmentValues(t *testing.T) {
 }
 
 func TestYaml_Name(t *testing.T) {
-	loader := NewYamlLoader()
+	loader := NewYAMLLoader()
 	require.NotEmpty(t, loader.Name())
 }
