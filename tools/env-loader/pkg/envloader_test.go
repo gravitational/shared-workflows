@@ -8,6 +8,47 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Ensure that the .git fs objects exist. Git won't commit these, so they
+// need to be created by the tests.
+func ensureGitFSObjectExist(t *testing.T, repoPath, FSObjectType string, createFunc func(gitPath string) error) {
+	gitParentPath := filepath.Join(getTestDataDir(t, "repos"), repoPath)
+	gitPath := filepath.Join(gitParentPath, ".git")
+	_, err := os.Lstat(gitPath)
+	if err == nil {
+		return
+	}
+
+	if os.IsNotExist(err) {
+		err = os.MkdirAll(gitParentPath, 0500)
+		require.NoError(t, err, "failed to create .git parent directory at %q", gitParentPath)
+
+		err = createFunc(gitPath)
+		require.NoError(t, err, "failed to create .git %s at %q", FSObjectType, gitPath)
+	} else {
+		t.Fatalf("failed to check if .git %s at %q exists", FSObjectType, gitPath)
+	}
+}
+
+func ensureGitFSObjectsExist(t *testing.T) {
+	createGitFile := func(gitPath string) error {
+		return os.Mkdir(gitPath, 0500)
+	}
+
+	ensureGitFSObjectExist(t, "basic repo", "directory", createGitFile)
+
+	ensureGitFSObjectExist(t, "symlinked repo", "symlink", func(gitPath string) error {
+		return os.Symlink("actual.git", gitPath)
+	})
+
+	ensureGitFSObjectExist(t, "git file repo", "directory", createGitFile)
+	ensureGitFSObjectExist(t, filepath.Join("git file repo", "subdirectory"), "file", func(gitPath string) error {
+		return os.WriteFile(gitPath, nil, 0400)
+	})
+
+	ensureGitFSObjectExist(t, "nested repos", "directory", createGitFile)
+	ensureGitFSObjectExist(t, filepath.Join("nested repos", "subdirectory"), "directory", createGitFile)
+}
+
 // This ensures that tests that change working directories don't affect each other
 func getInitialCwd(t *testing.T) string {
 	initialWorkingDir, err := os.Getwd()
@@ -59,7 +100,8 @@ func TestFindGitRepoRoot(t *testing.T) {
 		},
 	}
 
-	testDataDirectory := getTestDataDir(t, "repos")
+	reposDirectory := getTestDataDir(t, "repos")
+	ensureGitFSObjectsExist(t)
 
 	for _, testCase := range testCases {
 		if testCase.checkError == nil {
@@ -67,11 +109,11 @@ func TestFindGitRepoRoot(t *testing.T) {
 		}
 
 		if !filepath.IsAbs(testCase.workingDirectory) {
-			testCase.workingDirectory = filepath.Join(testDataDirectory, testCase.workingDirectory)
+			testCase.workingDirectory = filepath.Join(reposDirectory, testCase.workingDirectory)
 		}
 
 		if testCase.expectedRoot != "" && !filepath.IsAbs(testCase.expectedRoot) {
-			testCase.expectedRoot = filepath.Join(testDataDirectory, testCase.expectedRoot)
+			testCase.expectedRoot = filepath.Join(reposDirectory, testCase.expectedRoot)
 		}
 
 		err := os.Chdir(testCase.workingDirectory)
@@ -208,6 +250,7 @@ func TestFindEnvironmentFiles(t *testing.T) {
 	}
 
 	initialWorkingDir := getInitialCwd(t)
+	ensureGitFSObjectsExist(t)
 
 	for _, testCase := range testCases {
 		// Setup
@@ -257,6 +300,7 @@ func TestLoadEnvironmentValues(t *testing.T) {
 	}
 
 	initialWorkingDir := getInitialCwd(t)
+	ensureGitFSObjectsExist(t)
 
 	for _, testCase := range testCases {
 		// Setup
