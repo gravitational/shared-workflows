@@ -200,9 +200,9 @@ func TestFindEnvironmentFiles(t *testing.T) {
 			valueSet:        "testing1",
 			expectedFileNames: []string{
 				// Order is important here
-				filepath.Join("repos", "basic repo", "environments", "common.def"),
-				filepath.Join("repos", "basic repo", "environments", "env1", "common.abc"),
-				filepath.Join("repos", "basic repo", "environments", "env1", "testing1.abc"),
+				filepath.Join("repos", "basic repo", ".environments", "common.def"),
+				filepath.Join("repos", "basic repo", ".environments", "env1", "common.abc"),
+				filepath.Join("repos", "basic repo", ".environments", "env1", "testing1.abc"),
 			},
 		},
 	}
