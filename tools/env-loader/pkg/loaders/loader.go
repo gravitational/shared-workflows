@@ -27,4 +27,4 @@ type Loader interface {
 }
 
 // Generic loader that can load values of any supported format
-var DefaultLoader = NewSubLoader(NewYamlLoader())
+var DefaultLoader = NewSubLoader(NewYAMLLoader())

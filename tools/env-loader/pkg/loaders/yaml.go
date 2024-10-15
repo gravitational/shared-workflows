@@ -75,12 +75,12 @@ func (*sopsYAMLSubloader) Name() string {
 	return "SOPS"
 }
 
-type YamlLoader struct {
+type YAMLLoader struct {
 	*SubLoader
 }
 
-func NewYamlLoader() *YamlLoader {
-	return &YamlLoader{
+func NewYAMLLoader() *YAMLLoader {
+	return &YAMLLoader{
 		SubLoader: NewSubLoader(
 			&sopsYAMLSubloader{},
 			&plainYAMLSubloader{},
@@ -88,6 +88,6 @@ func NewYamlLoader() *YamlLoader {
 	}
 }
 
-func (*YamlLoader) Name() string {
+func (*YAMLLoader) Name() string {
 	return "YAML"
 }
