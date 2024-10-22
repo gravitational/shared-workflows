@@ -25,6 +25,6 @@ container-image: binary
 
 clean:
 	@rm -rf build/
-	@docker image rm -f "$(TOOL_NAME):$(VERSION)"
+	@docker image rm -f "$(TOOL_NAME):$(VERSION)" 2> /dev/null
 
 .PHONY: lint test binary tarball container-image clean
