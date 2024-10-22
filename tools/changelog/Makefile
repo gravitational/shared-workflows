@@ -1,8 +1,8 @@
 OS ?= $(shell uname -s | tr '[[:upper:]]' '[[:lower:]]')
 ARCH ?= $(shell uname -m)
-TOOL_NAME ?= changelog
-BUILD_DIR ?= build/$(OS)/$(ARCH)/
-VERSION ?= v0.0.0-dev
+TOOL_NAME = changelog
+BUILD_DIR = build/$(OS)/$(ARCH)/
+VERSION = v0.0.0-dev
 
 lint:
 	@golangci-lint run ./... --out-format colored-line-number
@@ -15,7 +15,7 @@ binary:
 	@mkdir -p "$(BUILD_DIR)"
 	@GOOS=$(OS) GOARCH=$(ARCH) go build -o "$(BUILD_DIR)/" -ldflags="-s -w"
 
-tarball: TARBALL_NAME = "$(TOOL_NAME)-$(VERSION)-$(OS)-$(ARCH).tar.gz"
+tarball: TARBALL_NAME = $(TOOL_NAME)-$(VERSION)-$(OS)-$(ARCH).tar.gz
 tarball: binary
 	@tar -C "$(BUILD_DIR)" -czvf "$(BUILD_DIR)/$(TARBALL_NAME)" "$(TOOL_NAME)" > /dev/null
 
@@ -25,8 +25,6 @@ container-image: binary
 
 clean:
 	@rm -rf build/
-	@if [ -n "$(shell docker image ls --quiet --filter "reference=$(TOOL_NAME):$(VERSION)" )" ]; then \
-		docker image rm -f "$(TOOL_NAME):$(VERSION)"; \
-	fi
+	@docker image rm -f "$(TOOL_NAME):$(VERSION)"
 
 .PHONY: lint test binary tarball container-image clean
