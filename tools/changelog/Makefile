@@ -1,8 +1,12 @@
 OS ?= $(shell uname -s | tr '[[:upper:]]' '[[:lower:]]')
 ARCH ?= $(shell uname -m)
 TOOL_NAME = changelog
-BUILD_DIR = build/$(OS)/$(ARCH)/
+BUILD_DIR = build/$(OS)/$(ARCH)
 VERSION = v0.0.0-dev
+BINARY_NAME = $(TOOL_NAME)
+ifeq ($(OS),windows)
+BINARY_NAME := $(BINARY_NAME).exe
+endif
 
 lint:
 	@golangci-lint run ./... --out-format colored-line-number
@@ -17,7 +21,7 @@ binary:
 
 tarball: TARBALL_NAME = $(TOOL_NAME)-$(VERSION)-$(OS)-$(ARCH).tar.gz
 tarball: binary
-	@tar -C "$(BUILD_DIR)" -czvf "$(BUILD_DIR)/$(TARBALL_NAME)" "$(TOOL_NAME)" > /dev/null
+	tar -C "$(BUILD_DIR)" -czvf "$(BUILD_DIR)/$(TARBALL_NAME)" "$(BINARY_NAME)" > /dev/null
 
 container-image: OS = linux
 container-image: binary
