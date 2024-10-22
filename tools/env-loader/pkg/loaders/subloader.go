@@ -33,7 +33,7 @@ func NewSubLoader(loaders ...Loader) *SubLoader {
 func (sl *SubLoader) GetEnvironmentValues(bytes []byte) (map[string]string, error) {
 	subloader := sl.getSubloader(bytes)
 	if subloader == nil {
-		return nil, trace.Errorf("found no YAML loaders for the provided content")
+		return nil, trace.Errorf("found no loaders for the provided content")
 	}
 
 	environmentValues, err := subloader.GetEnvironmentValues(bytes)

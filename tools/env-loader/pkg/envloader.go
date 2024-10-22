@@ -28,6 +28,11 @@ import (
 // directories can be found.
 const CIDirectoryRelativePath = ".environments"
 
+// Glob that matches "common" files which should always be loaded. The
+// values in these files have a lower "preference" than more specific
+// value files.
+const CommonFileGlob = "common.*"
+
 func findGitRepoRoot() (string, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -67,8 +72,7 @@ func findGitRepoRoot() (string, error) {
 // Finds environment value files for the given environment and value set, under the given directory.
 // File names will be returned in order of priority, with the lowest priority names first.
 func FindEnvironmentFilesInDirectory(environmentsDirectoryPath, environmentName, valueSet string) ([]string, error) {
-	commonFileGlob := "common.*"
-	commonFiles, err := filepath.Glob(filepath.Join(environmentsDirectoryPath, commonFileGlob))
+	commonFiles, err := filepath.Glob(filepath.Join(environmentsDirectoryPath, CommonFileGlob))
 	if err != nil {
 		return nil, trace.Wrap(err, "failed to find common value files")
 	}
@@ -78,7 +82,7 @@ func FindEnvironmentFilesInDirectory(environmentsDirectoryPath, environmentName,
 	}
 
 	environmentDirectoryPath := filepath.Join(environmentsDirectoryPath, environmentName)
-	environmentCommonFiles, err := filepath.Glob(filepath.Join(environmentDirectoryPath, commonFileGlob))
+	environmentCommonFiles, err := filepath.Glob(filepath.Join(environmentDirectoryPath, CommonFileGlob))
 	if err != nil {
 		return nil, trace.Wrap(err, "failed to find common environment value files")
 	}
@@ -93,12 +97,7 @@ func FindEnvironmentFilesInDirectory(environmentsDirectoryPath, environmentName,
 		return nil, trace.Wrap(err, "failed to find %q value files", valueSet)
 	}
 
-	matchedFiles := append(commonFiles, valueSetFiles...)
-	if matchedFiles == nil {
-		matchedFiles = []string{}
-	}
-
-	return matchedFiles, nil
+	return append(commonFiles, valueSetFiles...), nil
 }
 
 // Finds environment value files for the given environment and value set, under the "environments"

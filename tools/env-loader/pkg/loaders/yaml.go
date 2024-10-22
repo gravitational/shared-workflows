@@ -51,7 +51,7 @@ func (pys *plainYAMLSubloader) CanGetEnvironmentValues(yamlBytes []byte) bool {
 }
 
 func (*plainYAMLSubloader) Name() string {
-	return "plain"
+	return "plain YAML"
 }
 
 type SOPSYAMLSubloader struct{}
@@ -72,7 +72,7 @@ func (*SOPSYAMLSubloader) CanGetEnvironmentValues(yamlBytes []byte) bool {
 }
 
 func (*SOPSYAMLSubloader) Name() string {
-	return "SOPS"
+	return "SOPS YAML"
 }
 
 type YAMLLoader struct {
