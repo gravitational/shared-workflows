@@ -80,7 +80,7 @@ func findGitRepoRoot() (string, error) {
 // NOTE: this assumes '/' is used a directory separator character. This is important so that
 // the same results are produced on multiple platforms.
 func findCommonFilesInPath(basePath, relativeSubdirectoryPath string) ([]string, error) {
-	relativeSubdirectoryPath = filepath.Clean(relativeSubdirectoryPath)
+	relativeSubdirectoryPath = filepath.Clean(filepath.ToSlash(relativeSubdirectoryPath))
 	subdirectoryNames := strings.Split(relativeSubdirectoryPath, EnvironmentNameDirectorySeparator)
 	directoryNamesToCheck := append([]string{"."}, subdirectoryNames...)
 
