@@ -19,6 +19,7 @@ package envloader
 import (
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/gravitational/shared-workflows/tools/env-loader/pkg/loaders"
 	"github.com/gravitational/trace"
@@ -27,6 +28,10 @@ import (
 // This is the path, relative to the git repo root, where environment
 // directories can be found.
 const CIDirectoryRelativePath = ".environments"
+
+// Character used to separate directories in an environment name. This must be
+// consistent across multiple platforms.
+const EnvironmentNameDirectorySeparator = "/"
 
 // Glob that matches "common" files which should always be loaded. The
 // values in these files have a lower "preference" than more specific
@@ -69,35 +74,59 @@ func findGitRepoRoot() (string, error) {
 	}
 }
 
+// Given a base path (typically the environments directory) and a relative subdirectory path
+// (typically an environment name), find all common value files in every directory between
+// the two, inclusively.
+// NOTE: this assumes '/' is used a directory separator character. This is important so that
+// the same results are produced on multiple platforms.
+func findCommonFilesInPath(basePath, relativeSubdirectoryPath string) ([]string, error) {
+	relativeSubdirectoryPath = filepath.Clean(relativeSubdirectoryPath)
+	subdirectoryNames := strings.Split(relativeSubdirectoryPath, EnvironmentNameDirectorySeparator)
+	directoryNamesToCheck := append([]string{"."}, subdirectoryNames...)
+
+	var commonFilePaths []string
+	currentDirectoryPath := basePath
+	for _, directoryNameToCheck := range directoryNamesToCheck {
+		currentDirectoryPath := filepath.Join(currentDirectoryPath, directoryNameToCheck)
+
+		fileInfo, err := os.Lstat(currentDirectoryPath)
+		if err != nil {
+			return nil, trace.Wrap(err, "failed to lstat %q", currentDirectoryPath)
+		}
+		if !fileInfo.IsDir() {
+			return nil, trace.Errorf("the filesystem object at %q is not a directory", currentDirectoryPath)
+		}
+
+		foundCommonFilePaths, err := filepath.Glob(filepath.Join(currentDirectoryPath, CommonFileGlob))
+		if err != nil {
+			return nil, trace.Wrap(err, "failed to find common value files in directory %q", currentDirectoryPath)
+		}
+
+		commonFilePaths = append(commonFilePaths, foundCommonFilePaths...)
+	}
+
+	return commonFilePaths, nil
+}
+
 // Finds environment value files for the given environment and value set, under the given directory.
 // File names will be returned in order of priority, with the lowest priority names first.
+// If the environment name includes '/', it is split and each component is searched for common files.
 func FindEnvironmentFilesInDirectory(environmentsDirectoryPath, environmentName, valueSet string) ([]string, error) {
-	commonFiles, err := filepath.Glob(filepath.Join(environmentsDirectoryPath, CommonFileGlob))
+	commonFilePaths, err := findCommonFilesInPath(environmentsDirectoryPath, environmentName)
 	if err != nil {
-		return nil, trace.Wrap(err, "failed to find common value files")
+		return nil, trace.Wrap(err, "failed to find all common files for environment %q", environmentName)
 	}
-
-	if environmentName == "" {
-		return commonFiles, nil
-	}
-
-	environmentDirectoryPath := filepath.Join(environmentsDirectoryPath, environmentName)
-	environmentCommonFiles, err := filepath.Glob(filepath.Join(environmentDirectoryPath, CommonFileGlob))
-	if err != nil {
-		return nil, trace.Wrap(err, "failed to find common environment value files")
-	}
-	commonFiles = append(commonFiles, environmentCommonFiles...)
 
 	if valueSet == "" {
-		return commonFiles, nil
+		return commonFilePaths, nil
 	}
 
-	valueSetFiles, err := filepath.Glob(filepath.Join(environmentDirectoryPath, valueSet+".*"))
+	valueSetFilePaths, err := filepath.Glob(filepath.Join(environmentsDirectoryPath, environmentName, valueSet+".*"))
 	if err != nil {
 		return nil, trace.Wrap(err, "failed to find %q value files", valueSet)
 	}
 
-	return append(commonFiles, valueSetFiles...), nil
+	return append(commonFilePaths, valueSetFilePaths...), nil
 }
 
 // Finds environment value files for the given environment and value set, under the "environments"
