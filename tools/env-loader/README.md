@@ -20,6 +20,11 @@ for and load the following files in order:
 * `<root path>/<env name>/<value set name>.*` (value set, specifically
   requested values)
 
+If the environment name contains a '/', the name is split and each component is
+searched for common files. That is, for an environment name of `publish/prod`,
+`<root path>/publish/common.*` and `<root path>/publish/prod/common.*` will
+also be loaded.
+
 The root path is typically the `environments` directory directly under the git
 repo root.
 
