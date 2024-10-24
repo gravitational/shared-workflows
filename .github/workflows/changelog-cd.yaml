@@ -41,7 +41,8 @@ jobs:
             # should move into this repo and replace this logic
             echo "should-release=true" >> "${GITHUB_OUTPUT}"
             
-            if [[ "${GITHUB_REF%-*}" == "${GITHUB_REF}" ]]; then
+            # Any '-' character means in a tag ref means that it is a prerelease
+            if [[ "${GITHUB_REF}" == *-* ]]; then
               echo "is-prerelease=true" >> "${GITHUB_OUTPUT}"
             fi
           fi
@@ -126,9 +127,7 @@ jobs:
           )
 
           echo "Creating a release for ${VERSION} with files:"
-          for file in "${RELEASE_TARBALLS[@]}"; do
-            ls -lh "${file}"
-          done
+          ls -lh "${RELEASE_TARBALLS[@]}"
 
           gh release create --title "changelog ${VERSION}" --verify-tag \
             --generate-notes "${EXTRA_FLAGS[@]}" "${GITHUB_REF_NAME}" \
