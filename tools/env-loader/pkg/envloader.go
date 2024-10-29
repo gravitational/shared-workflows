@@ -82,11 +82,14 @@ func findGitRepoRoot() (string, error) {
 func findCommonFilesInPath(basePath, relativeSubdirectoryPath string) ([]string, error) {
 	relativeSubdirectoryPath = filepath.ToSlash(filepath.Clean(relativeSubdirectoryPath))
 	subdirectoryNames := strings.Split(relativeSubdirectoryPath, EnvironmentNameDirectorySeparator)
-	directoryNamesToCheck := append([]string{"."}, subdirectoryNames...)
+	// Ensure the base path is checked
+	if relativeSubdirectoryPath != "." {
+		subdirectoryNames = append([]string{"."}, subdirectoryNames...)
+	}
 
 	var commonFilePaths []string
 	currentDirectoryPath := basePath
-	for _, directoryNameToCheck := range directoryNamesToCheck {
+	for _, directoryNameToCheck := range subdirectoryNames {
 		currentDirectoryPath := filepath.Join(currentDirectoryPath, directoryNameToCheck)
 
 		fileInfo, err := os.Lstat(currentDirectoryPath)

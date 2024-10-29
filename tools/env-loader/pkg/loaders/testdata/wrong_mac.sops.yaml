@@ -1,0 +1,22 @@
+key1: ENC[AES256_GCM,data:LhdPM9XS,iv:jLvJ9yPw0KeLKB4kvmwiBvC5P9lTMAdWkLyX2zVx5QM=,tag:jh2rSEIdEzjWsB16wJhG1A==,type:str]
+key2_unencrypted: Changed to invalidate MAC
+sops:
+    kms: []
+    gcp_kms: []
+    azure_kv: []
+    hc_vault: []
+    age:
+        - recipient: age1wmh7avs6m22xjhq570lchw3dc23w8yk4vad0jcwemrn8nzq5rdnqqpplwu
+          enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBGSWdwWitHb0JoQkxveGZM
+            czdyaktETS84UnZNMFVQYmhyWEprTndXT0JrCk50TTBkZXBkUzQyam9TVjMyRlh6
+            WWpTZ3phVEs0THJ1aXJYUHVjdHVjWkEKLS0tIHZHdm42cnBxRENkOXpYNVVnNDRZ
+            L3NySVlmOUl5OGhXM2xTN1FoUk9pTFkKT0trCRlHcmExeW+fvUGC5bekCUU6m5N1
+            a8hQLH0XeegDMQBjz9jLfFNRiVCYWk6M/hEjUralZ6CBjMFEvpw6bg==
+            -----END AGE ENCRYPTED FILE-----
+    lastmodified: "2024-10-09T19:15:51Z"
+    mac: ENC[AES256_GCM,data:zAlK+B9YyAId3QEK4aTQoyJoV4JgzYlHCyBroRrsa5z99Tv3hUSJKBin7CmnbEO3nhJd5R68nAmLNTtdx6ZYLYfR7YIBDO1BUMC/5dVs82aVg7piJuTFc8JEI+i8NISwmwEp1JFifSc7wd+O6ppB/3N+tr36eK4sEBN/8t6ocd4=,iv:lhlb2tAO6NNfyTSSNvzyHLRRYIHQ7k113jofwewTdSM=,tag:4UliuzEYLAj6pWNG+U5qXg==,type:str]
+    pgp: []
+    unencrypted_suffix: _unencrypted
+    version: 3.9.1
