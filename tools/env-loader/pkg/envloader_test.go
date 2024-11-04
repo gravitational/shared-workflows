@@ -54,7 +54,10 @@ func getInitialCwd(t *testing.T) string {
 	initialWorkingDir, err := os.Getwd()
 	require.NoError(t, err, "unable to get initial working directory")
 	t.Cleanup(func() {
-		os.Chdir(initialWorkingDir)
+		err := os.Chdir(initialWorkingDir)
+		if err != nil {
+			t.Fatalf("failed to change directory during cleanup: %#v", err)
+		}
 	})
 
 	return initialWorkingDir
