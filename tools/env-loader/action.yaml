@@ -5,8 +5,8 @@ description: Load environment values
 inputs:
   environment-name:
     description: Name of the environment to load
-  value-set:
-    description: Name of the value set to load
+  value-sets:
+    description: Name of the value sets to load, separated by new line
   tool-version:
     description: Version of the env-loader tool to use
     default: ${{ github.action_ref }}
@@ -60,5 +60,5 @@ runs:
       shell: bash
       env:
         ENV_LOADER_ENVIRONMENT: "${{ inputs.environment-name }}"
-        ENV_LOADER_VALUE_SET: "${{ inputs.value-set }}"
+        ENV_LOADER_VALUE_SETS: "${{ inputs.value-set }}"
       run: env-loader >> "${GITHUB_ENV}"
