@@ -114,28 +114,37 @@ func findCommonFilesInPath(basePath, relativeSubdirectoryPath string) ([]string,
 // Finds environment value files for the given environment and value set, under the given directory.
 // File names will be returned in order of priority, with the lowest priority names first.
 // If the environment name includes '/', it is split and each component is searched for common files.
-func FindEnvironmentFilesInDirectory(environmentsDirectoryPath, environmentName, valueSet string) ([]string, error) {
-	commonFilePaths, err := findCommonFilesInPath(environmentsDirectoryPath, environmentName)
+func FindEnvironmentFilesInDirectory(environmentsDirectoryPath, environmentName string, valueSets []string) ([]string, error) {
+	filePaths, err := findCommonFilesInPath(environmentsDirectoryPath, environmentName)
 	if err != nil {
 		return nil, trace.Wrap(err, "failed to find all common files for environment %q", environmentName)
 	}
 
-	if valueSet == "" {
-		return commonFilePaths, nil
+	if len(valueSets) == 0 {
+		return filePaths, nil
 	}
 
-	valueSetFilePaths, err := filepath.Glob(filepath.Join(environmentsDirectoryPath, environmentName, valueSet+".*"))
-	if err != nil {
-		return nil, trace.Wrap(err, "failed to find %q value files", valueSet)
+	for _, valueSet := range valueSets {
+		globPath := filepath.Join(environmentsDirectoryPath, environmentName, valueSet+".*")
+		valueSetFilePaths, err := filepath.Glob(globPath)
+		if err != nil {
+			return nil, trace.Wrap(err, "failed to find %q value files", valueSet)
+		}
+
+		if len(valueSetFilePaths) == 0 {
+			return nil, trace.Errorf("failed to find any value files for %q matching %q", valueSet, globPath)
+		}
+
+		filePaths = append(filePaths, valueSetFilePaths...)
 	}
 
-	return append(commonFilePaths, valueSetFilePaths...), nil
+	return filePaths, nil
 }
 
 // Finds environment value files for the given environment and value set, under the "environments"
 // directory in the repo root. File names will be returned in order of priority, with the lowest
 // priority names first.
-func FindEnvironmentFiles(environment, valueSet string) ([]string, error) {
+func FindEnvironmentFiles(environment string, valueSets []string) ([]string, error) {
 	repoRoot, err := findGitRepoRoot()
 	if err != nil {
 		return nil, trace.Wrap(err, "failed to find repo root")
@@ -146,7 +155,7 @@ func FindEnvironmentFiles(environment, valueSet string) ([]string, error) {
 		return nil, trace.Wrap(err, "failed to find environments path at %q", environmentsPath)
 	}
 
-	return FindEnvironmentFilesInDirectory(environmentsPath, environment, valueSet)
+	return FindEnvironmentFilesInDirectory(environmentsPath, environment, valueSets)
 }
 
 func loadEnvironmentValuesFromPaths(valueFilePaths []string, err error) (map[string]string, error) {
@@ -176,14 +185,14 @@ func loadEnvironmentValuesFromPaths(valueFilePaths []string, err error) (map[str
 
 // Finds environment value files for the given environment and value set, under the "environments"
 // directory in the repo root, and loads them. Lower priority files (common files) will have values
-// replaced by values from higher priority files (value set files).
-func LoadEnvironmentValues(environment, valueSet string) (map[string]string, error) {
-	return loadEnvironmentValuesFromPaths(FindEnvironmentFiles(environment, valueSet))
+// replaced by values from higher priority files (value set files, last provided being highest priority).
+func LoadEnvironmentValues(environment string, valueSets []string) (map[string]string, error) {
+	return loadEnvironmentValuesFromPaths(FindEnvironmentFiles(environment, valueSets))
 }
 
 // Finds environment value files for the given environment and value set, under the given directory,
 // and loads them. Lower priority files (common files) will have values replaced by values from higher
-// priority files (value set files).
-func LoadEnvironmentValuesInDirectory(directory, environment, valueSet string) (map[string]string, error) {
-	return loadEnvironmentValuesFromPaths(FindEnvironmentFilesInDirectory(directory, environment, valueSet))
+// priority files (value set files, last provided being highest priority).
+func LoadEnvironmentValuesInDirectory(directory, environment string, valueSets []string) (map[string]string, error) {
+	return loadEnvironmentValuesFromPaths(FindEnvironmentFilesInDirectory(directory, environment, valueSets))
 }

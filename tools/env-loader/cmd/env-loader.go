@@ -32,7 +32,7 @@ const EnvVarPrefix = "ENV_LOADER_"
 
 type config struct {
 	Environment string
-	ValueSet    string
+	ValueSets   []string
 	Values      []string
 	Writer      string
 }
@@ -49,7 +49,7 @@ func parseCLI() *config {
 	kingpin.Flag("value-set", "Name of the value set to load").
 		Short('s').
 		Envar(EnvVarPrefix + "VALUE_SET").
-		StringVar(&c.ValueSet)
+		StringsVar(&c.ValueSets)
 
 	kingpin.Flag("values", "Name of the specific value to output").
 		Short('v').
@@ -69,7 +69,7 @@ func parseCLI() *config {
 
 func run(c *config) error {
 	// Load in values
-	envValues, err := envloader.LoadEnvironmentValues(c.Environment, c.ValueSet)
+	envValues, err := envloader.LoadEnvironmentValues(c.Environment, c.ValueSets)
 	if err != nil {
 		return trace.Wrap(err, "failed to load all environment values")
 	}

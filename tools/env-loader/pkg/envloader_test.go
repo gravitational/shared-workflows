@@ -130,14 +130,15 @@ func TestFindEnvironmentFilesInDirectory(t *testing.T) {
 		desc string
 		// This will be prepended by the environments directory path (abs)
 		environmentName string
-		valueSet        string
+		valueSets       []string
 		// This will be prepended by the environments directory path (abs)
 		expectedFileNames []string
+		checkError        require.ErrorAssertionFunc
 	}{
 		{
 			desc:            "only common file",
 			environmentName: "",
-			valueSet:        "",
+			valueSets:       nil,
 			expectedFileNames: []string{
 				"common.abc",
 			},
@@ -145,7 +146,7 @@ func TestFindEnvironmentFilesInDirectory(t *testing.T) {
 		{
 			desc:            "only environment common file",
 			environmentName: "env2",
-			valueSet:        "",
+			valueSets:       nil,
 			expectedFileNames: []string{
 				"common.abc",
 				filepath.Join("env2", "common.abc"),
@@ -154,16 +155,22 @@ func TestFindEnvironmentFilesInDirectory(t *testing.T) {
 		{
 			desc:            "single file",
 			environmentName: "env1",
-			valueSet:        "testing",
+			valueSets:       []string{"testing"},
 			expectedFileNames: []string{
 				"common.abc",
 				filepath.Join("env1", "testing.abc"),
 			},
 		},
 		{
+			desc:            "missing file",
+			environmentName: "env1",
+			valueSets:       []string{"non existent set"},
+			checkError:      require.Error,
+		},
+		{
 			desc:            "multiple value sets in path",
 			environmentName: "env2",
-			valueSet:        "testing1",
+			valueSets:       []string{"testing1"},
 			expectedFileNames: []string{
 				"common.abc",
 				filepath.Join("env2", "common.abc"),
@@ -173,7 +180,7 @@ func TestFindEnvironmentFilesInDirectory(t *testing.T) {
 		{
 			desc:            "multiple files for value set",
 			environmentName: "env2",
-			valueSet:        "testing2",
+			valueSets:       []string{"testing2"},
 			expectedFileNames: []string{
 				"common.abc",
 				filepath.Join("env2", "common.abc"),
@@ -184,7 +191,7 @@ func TestFindEnvironmentFilesInDirectory(t *testing.T) {
 		{
 			desc:            "multiple file extensions",
 			environmentName: "env2",
-			valueSet:        "testing3",
+			valueSets:       []string{"testing3"},
 			expectedFileNames: []string{
 				"common.abc",
 				filepath.Join("env2", "common.abc"),
@@ -192,18 +199,27 @@ func TestFindEnvironmentFilesInDirectory(t *testing.T) {
 			},
 		},
 		{
-			desc:            "no file extension",
+			desc:            "multiple value sets",
 			environmentName: "env2",
-			valueSet:        "testing4",
+			valueSets:       []string{"testing2", "testing3"},
 			expectedFileNames: []string{
 				"common.abc",
 				filepath.Join("env2", "common.abc"),
+				filepath.Join("env2", "testing2.abc"),
+				filepath.Join("env2", "testing2.def"),
+				filepath.Join("env2", "testing3.abc.def"),
 			},
+		},
+		{
+			desc:            "no file extension",
+			environmentName: "env2",
+			valueSets:       []string{"testing4"},
+			checkError:      require.Error,
 		},
 		{
 			desc:            "common file exists",
 			environmentName: "env3",
-			valueSet:        "testing",
+			valueSets:       []string{"testing"},
 			expectedFileNames: []string{
 				"common.abc",
 				filepath.Join("env3", "common.abc"),
@@ -219,8 +235,12 @@ func TestFindEnvironmentFilesInDirectory(t *testing.T) {
 			testCase.expectedFileNames[i] = filepath.Join(environmentsDirPath, expectedFileName)
 		}
 
-		actualFileNames, err := FindEnvironmentFilesInDirectory(environmentsDirPath, testCase.environmentName, testCase.valueSet)
-		require.NoError(t, err, testCase.desc)
+		if testCase.checkError == nil {
+			testCase.checkError = require.NoError
+		}
+
+		actualFileNames, err := FindEnvironmentFilesInDirectory(environmentsDirPath, testCase.environmentName, testCase.valueSets)
+		testCase.checkError(t, err, testCase.desc)
 		require.Equal(t, testCase.expectedFileNames, actualFileNames, testCase.desc)
 	}
 }
@@ -231,20 +251,20 @@ func TestFindEnvironmentFiles(t *testing.T) {
 		// This will be prepended by the testdata directory path (abs)
 		workingDir      string
 		environmentName string
-		valueSet        string
+		valueSets       []string
 		// This will be prepended by the testdata directory path (abs)
 		expectedFileNames []string
 	}{
 		{
 			desc:            "in repo",
 			workingDir:      filepath.Join("repos", "basic repo", "subdirectory 1", "subdirectory 2"),
-			environmentName: "env1",
-			valueSet:        "testing1",
+			environmentName: "env2",
+			valueSets:       []string{"testing2", "testing1"},
 			expectedFileNames: []string{
 				// Order is important here
 				filepath.Join("repos", "basic repo", ".environments", "common.def"),
-				filepath.Join("repos", "basic repo", ".environments", "env1", "common.abc"),
-				filepath.Join("repos", "basic repo", ".environments", "env1", "testing1.abc"),
+				filepath.Join("repos", "basic repo", ".environments", "env2", "testing2.abc"),
+				filepath.Join("repos", "basic repo", ".environments", "env2", "testing1.abc"),
 			},
 		},
 	}
@@ -265,7 +285,7 @@ func TestFindEnvironmentFiles(t *testing.T) {
 		require.NoError(t, err, "unable to get change to test working directory")
 
 		// Run the tests
-		actualFileNames, err := FindEnvironmentFiles(testCase.environmentName, testCase.valueSet)
+		actualFileNames, err := FindEnvironmentFiles(testCase.environmentName, testCase.valueSets)
 		require.NoError(t, err, testCase.desc)
 		require.Equal(t, testCase.expectedFileNames, actualFileNames, testCase.desc)
 
@@ -281,19 +301,20 @@ func TestLoadEnvironmentValues(t *testing.T) {
 		// This will be prepended by the testdata directory path (abs)
 		workingDir      string
 		environmentName string
-		valueSet        string
+		valueSets       []string
 		expectedValues  map[string]string
 	}{
 		{
 			desc:            "lower priority values are overwritten",
 			workingDir:      filepath.Join("repos", "basic repo", "subdirectory 1"),
 			environmentName: "env1",
-			valueSet:        "testing1",
+			valueSets:       []string{"testing2", "testing1"},
 			expectedValues: map[string]string{
 				"topLevelCommon1": "top level",
 				"topLevelCommon2": "env level",
 				"envLevelCommon1": "env level",
 				"envLevelCommon2": "set level",
+				"setLevelCommon":  "testing1 level",
 				"setLevel":        "set level",
 			},
 		},
@@ -311,7 +332,7 @@ func TestLoadEnvironmentValues(t *testing.T) {
 		require.NoError(t, err, "unable to get change to test working directory")
 
 		// Run the tests
-		actualValues, err := LoadEnvironmentValues(testCase.environmentName, testCase.valueSet)
+		actualValues, err := LoadEnvironmentValues(testCase.environmentName, testCase.valueSets)
 		require.NoError(t, err, testCase.desc)
 		require.Equal(t, testCase.expectedValues, actualValues, testCase.desc)
 
