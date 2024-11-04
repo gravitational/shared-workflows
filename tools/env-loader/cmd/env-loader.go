@@ -48,7 +48,7 @@ func parseCLI() *config {
 
 	kingpin.Flag("value-set", "Name of the value set to load").
 		Short('s').
-		Envar(EnvVarPrefix + "VALUE_SET").
+		Envar(EnvVarPrefix + "VALUE_SETS").
 		StringsVar(&c.ValueSets)
 
 	kingpin.Flag("values", "Name of the specific value to output").
