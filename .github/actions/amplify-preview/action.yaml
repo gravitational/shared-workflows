@@ -2,7 +2,7 @@ name: Amplify Preview
 description: Prepare Amplify Preview URL and post it in PR comments
 inputs:
   app_ids:
-    description: 'Comma separated list of Amplify App IDs'
+    description: "Comma separated list of Amplify App IDs"
     required: true
   create_branches:
     description: 'Create preview branches using this actions instead of "auto-build" feature on AWS Amplify'
@@ -16,11 +16,11 @@ runs:
       run: echo "branch=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}" >> $GITHUB_OUTPUT
       id: extract_branch
 
-    - name: Get/Create Amplify branch
+    - name: Get or create Amplify branch
       id: get_amplify_branch
-      env: 
+      env:
         AMPLIFY_APP_IDS: ${{ inputs.app_ids }}
-        BRANCH_NAME: ${{ steps.extract_branch.outputs.branch }} 
+        BRANCH_NAME: ${{ steps.extract_branch.outputs.branch }}
         CREATE_BRANCHES: ${{ inputs.create_branches }}
       shell: bash
       run: |
@@ -53,10 +53,6 @@ runs:
               found_in_app_id=$app_id
               save_outputs $app_id "$branch_info"
               echo "✅ ${BRANCH_NAME} was successfully connected to app ${app_id}" >&2
-              job_info=$(aws amplify start-job --app-id ${app_id} --branch-name ${BRANCH_NAME} --job-type RELEASE --job-reason "GHA Workflow #${GITHUB_WORKFLOW}" --query 'jobSummary')
-              if [ $? -eq 0 ]; then
-                echo "🚀 Successfully triggered job $(jq -r '.jobId' <<< "$jobSummary") for ${BRANCH_NAME} on app ${app_id}" >&2
-              fi
               break
             fi
           done
@@ -67,26 +63,36 @@ runs:
           exit 1
         fi
 
-    - name: Describe Amplify Deployment
+    - name: Get or create Amplify deployment
       id: get_amplify_job
-      env: 
+      env:
         APP_ID: ${{ steps.get_amplify_branch.outputs.APP_ID }}
         JOB_ID: ${{ steps.get_amplify_branch.outputs.JOB_ID }}
-        BRANCH_NAME: ${{ steps.extract_branch.outputs.branch }} 
+        BRANCH_NAME: ${{ steps.extract_branch.outputs.branch }}
+        CREATE_BRANCHES: ${{ inputs.create_branches }}
       shell: bash
       continue-on-error: true
       run: |
+        if [ ${CREATE_BRANCHES} = "true" ] && ([ -z "${JOB_ID}" ] || [ ${JOB_ID} = "null" ]); then
+          job_info=$(aws amplify start-job --app-id ${app_id} --branch-name ${BRANCH_NAME} --job-type RELEASE --job-reason "${GITHUB_WORKFLOW} (${GITHUB_RUN_ID}) - ${GITHUB_REF_NAME}" --query 'jobSummary')
+          if [ $? -eq 0 ]; then
+            JOB_ID=$(jq -r '.jobId' <<< "$job_info")
+            echo "🚀 Successfully triggered job "JOB_ID" for ${BRANCH_NAME} on app ${app_id}" >&2
+          fi
+        fi
+
         job_info=$(aws amplify get-job --app-id ${APP_ID} --branch-name ${BRANCH_NAME} --job-id ${JOB_ID} --query 'job.summary')
+        echo "JOB_ID=${JOB_ID}" >> $GITHUB_OUTPUT
         echo "JOB_STATUS=$(jq -r '.status' <<< "$job_info")" >> $GITHUB_OUTPUT
         echo "COMMIT_ID=$(jq -r '.commitId' <<< "$job_info")" >> $GITHUB_OUTPUT
 
     - uses: actions/github-script@v7
       env:
         PREVIEW_URL: ${{ steps.get_amplify_branch.outputs.PREVIEW_URL }}
-        UPDATE_TIME:  ${{ steps.get_amplify_branch.outputs.UPDATE_TIME }}
-        JOB_ID:      ${{ steps.get_amplify_branch.outputs.JOB_ID }}
-        JOB_STATUS:  ${{ steps.get_amplify_job.outputs.JOB_STATUS }}
-        COMMIT_ID:  ${{ steps.get_amplify_job.outputs.COMMIT_ID }}
+        UPDATE_TIME: ${{ steps.get_amplify_branch.outputs.UPDATE_TIME }}
+        JOB_ID: ${{ steps.get_amplify_branch.outputs.JOB_ID || steps.get_amplify_job.outputs.JOB_ID  }}
+        JOB_STATUS: ${{ steps.get_amplify_job.outputs.JOB_STATUS }}
+        COMMIT_ID: ${{ steps.get_amplify_job.outputs.COMMIT_ID }}
       with:
         script: |
           const previewUrl = process.env.PREVIEW_URL;
