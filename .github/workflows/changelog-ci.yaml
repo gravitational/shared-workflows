@@ -6,7 +6,7 @@ on:
 
 jobs:
   release:
-    uses: ./tools/repo-release-tooling/workflows/reusable-ci.yaml
+    uses: ./.github/workflows/reusable-ci.yaml
     permissions:
       contents: write
       packages: write

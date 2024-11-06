@@ -13,11 +13,11 @@ on:
     paths:
       - tools/env-loader/workflows/cd.yaml
       - .github/workflows/env-loader-cd.yaml
-      - tools/repo-release-tooling/workflows/reusable-cd.yaml
+      - .github/workflows/reusable-cd.yaml
 
 jobs:
   release:
-    uses: ./tools/repo-release-tooling/workflows/reusable-cd.yaml
+    uses: ./.github/workflows/reusable-cd.yaml
     permissions:
       contents: write
       packages: write
