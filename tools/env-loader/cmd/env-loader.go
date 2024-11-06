@@ -31,14 +31,20 @@ import (
 const EnvVarPrefix = "ENV_LOADER_"
 
 type config struct {
-	Environment string
-	ValueSets   []string
-	Values      []string
-	Writer      string
+	EnvironmentsDirectory string
+	Environment           string
+	ValueSets             []string
+	Values                []string
+	Writer                string
 }
 
 func parseCLI() *config {
 	c := &config{}
+
+	kingpin.Flag("environments-directory", "Path to the directory containing all environments, defaulting to the repo root").
+		Short('d').
+		Envar(EnvVarPrefix + "ENVIRONMENT").
+		StringVar(&c.EnvironmentsDirectory)
 
 	kingpin.Flag("environment", "Name of the environment containing the values to load").
 		Envar(EnvVarPrefix + "ENVIRONMENT").
@@ -69,7 +75,14 @@ func parseCLI() *config {
 
 func run(c *config) error {
 	// Load in values
-	envValues, err := envloader.LoadEnvironmentValues(c.Environment, c.ValueSets)
+	var envValues map[string]string
+	var err error
+	if c.EnvironmentsDirectory != "" {
+		envValues, err = envloader.LoadEnvironmentValuesInDirectory(c.EnvironmentsDirectory, c.Environment, c.ValueSets)
+	} else {
+		envValues, err = envloader.LoadEnvironmentValues(c.Environment, c.ValueSets)
+	}
+
 	if err != nil {
 		return trace.Wrap(err, "failed to load all environment values")
 	}
