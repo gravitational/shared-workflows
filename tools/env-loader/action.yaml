@@ -3,6 +3,8 @@ name: Load environment values
 description: Load environment values
 
 inputs:
+  environments-directory:
+    description: Path to the directory containing environments files, defaulting to repo root
   environment-name:
     description: Name of the environment to load
   value-sets:
@@ -59,6 +61,7 @@ runs:
     - name: Load environment values into environment variables
       shell: bash
       env:
+        ENV_LOADER_ENVIRONMENTS_DIRECTORY: "${{ inputs.environments-directory }}"
         ENV_LOADER_ENVIRONMENT: "${{ inputs.environment-name }}"
         ENV_LOADER_VALUE_SETS: "${{ inputs.value-set }}"
       run: env-loader >> "${GITHUB_ENV}"
