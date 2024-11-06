@@ -1,0 +1,120 @@
+name: Amplify Preview
+description: Prepare Amplify Preview URL and post it in PR comments
+inputs:
+  app_ids:
+    description: 'Comma separated list of Amplify App IDs'
+    required: true
+  create_branches:
+    description: 'Create preview branches using this actions instead of "auto-build" feature on AWS Amplify'
+    required: false
+    default: "false"
+runs:
+  using: composite
+  steps:
+    - name: Extract branch name
+      shell: bash
+      run: echo "branch=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}" >> $GITHUB_OUTPUT
+      id: extract_branch
+
+    - name: Get/Create Amplify branch
+      id: get_amplify_branch
+      env: 
+        AMPLIFY_APP_IDS: ${{ inputs.app_ids }}
+        BRANCH_NAME: ${{ steps.extract_branch.outputs.branch }} 
+        CREATE_BRANCHES: ${{ inputs.create_branches }}
+      shell: bash
+      run: |
+        set +e
+        save_outputs() {
+            echo "APP_ID=${1}" >> $GITHUB_OUTPUT
+            echo "PREVIEW_URL=https://$(jq -r '.displayName' <<< "$2").$app_id.amplifyapp.com" >> $GITHUB_OUTPUT
+            echo "CREATE_TIME=$(jq -r '.createTime' <<< "$2")"  >> $GITHUB_OUTPUT
+            echo "UPDATE_TIME=$(jq -r '.updateTime' <<< "$2")"  >> $GITHUB_OUTPUT
+            echo "JOB_ID=$(jq -r '.activeJobId' <<< "$2")"      >> $GITHUB_OUTPUT
+        }
+
+        IFS=, app_id_array=($AMPLIFY_APP_IDS)
+        for app_id in "${app_id_array[@]}"; do
+          branch_info=$(aws amplify get-branch --app-id ${app_id} --branch-name ${BRANCH_NAME} --query 'branch')
+          if [ $? -eq 0 ]; then
+            save_outputs $app_id "$branch_info"
+            found_in_app_id=$app_id
+            break
+          fi
+        done
+
+        if [ -z "${found_in_app_id}" ] && [ ${CREATE_BRANCHES} = "true" ]; then
+          for app_id in "${app_id_array[@]}"; do
+            branch_info=$(aws amplify create-branch --app-id ${app_id} --branch-name ${BRANCH_NAME} --stage PULL_REQUEST --enable-auto-build --query 'branch')
+            if [ $? -eq 0 ]; then
+              save_outputs $app_id "$branch_info"
+              break
+            fi
+          done
+        fi
+
+    - name: Describe Amplify Deployment
+      id: get_amplify_job
+      env: 
+        APP_ID: ${{ steps.get_amplify_branch.outputs.APP_ID }}
+        JOB_ID: ${{ steps.get_amplify_branch.outputs.JOB_ID }}
+        BRANCH_NAME: ${{ steps.extract_branch.outputs.branch }} 
+      shell: bash
+      continue-on-error: true
+      run: |
+        job_info=$(aws amplify get-job --app-id ${APP_ID} --branch-name ${BRANCH_NAME} --job-id ${JOB_ID} --query 'job.summary')
+        echo "JOB_STATUS=$(jq -r '.status' <<< "$job_info")" >> $GITHUB_OUTPUT
+        echo "COMMIT_ID=$(jq -r '.commitId' <<< "$job_info")" >> $GITHUB_OUTPUT
+
+    - uses: actions/github-script@v7
+      env:
+        PREVIEW_URL: ${{ steps.get_amplify_branch.outputs.PREVIEW_URL }}
+        UPDATE_TIME:  ${{ steps.get_amplify_branch.outputs.UPDATE_TIME }}
+        JOB_ID:      ${{ steps.get_amplify_branch.outputs.JOB_ID }}
+        JOB_STATUS:  ${{ steps.get_amplify_job.outputs.JOB_STATUS }}
+        COMMIT_ID:  ${{ steps.get_amplify_job.outputs.COMMIT_ID }}
+      with:
+        script: |
+          const previewUrl = process.env.PREVIEW_URL;
+          const jobId = process.env.JOB_ID;
+          const jobStatus = process.env.JOB_STATUS || "unknown";
+          const updatedAt = process.env.UPDATE_TIME;
+          const commitId = process.env.COMMIT_ID;
+
+          const commentBody = `![🤖](https://a0.awsstatic.com/libra-css/images/site/fav/favicon.ico) Amplify preview here: ${previewUrl}
+
+          <details><summary>Preview details</summary>
+
+          - **LAST_UPDATED_AT**: ${updatedAt}
+          - **JOB_ID**: ${jobId}
+          - **JOB_STATUS**: ${jobStatus}
+          - **COMMIT_ID**: ${commitId}
+
+          </details>
+          `;
+
+          const prProps = {
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+          };
+
+          const comments = (await github.rest.issues.listComments(prProps))?.data;
+
+          const existingComment = comments?.find((comment) =>
+            comment.user.login === "github-actions[bot]" && comment.body.includes("Amplify preview here"));
+
+          if (existingComment == null) {
+            console.log("Posting new comment ${existingComment.id}")
+            github.rest.issues.createComment({
+              ...prProps,
+              body: commentBody,
+            })
+          } else {
+            console.log("Found existing comment ${existingComment.id}")
+            github.rest.issues.updateComment({
+              ...prProps,
+              body: commentBody,
+              comment_id: existingComment.id,
+            })
+          }
