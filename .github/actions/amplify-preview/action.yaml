@@ -33,24 +33,38 @@ runs:
             echo "JOB_ID=$(jq -r '.activeJobId' <<< "$2")"      >> $GITHUB_OUTPUT
         }
 
+        echo "ℹ Checking if branch connected to any of the apps" >&2
         IFS=, app_id_array=($AMPLIFY_APP_IDS)
         for app_id in "${app_id_array[@]}"; do
           branch_info=$(aws amplify get-branch --app-id ${app_id} --branch-name ${BRANCH_NAME} --query 'branch')
           if [ $? -eq 0 ]; then
-            save_outputs $app_id "$branch_info"
             found_in_app_id=$app_id
+            save_outputs $app_id "$branch_info"
+            echo "ℹ ${BRANCH_NAME} is already connected to app ${app_id}" >&2
             break
           fi
         done
 
         if [ -z "${found_in_app_id}" ] && [ ${CREATE_BRANCHES} = "true" ]; then
+          echo "ℹ Trying to connect branch to one of the apps" >&2
           for app_id in "${app_id_array[@]}"; do
             branch_info=$(aws amplify create-branch --app-id ${app_id} --branch-name ${BRANCH_NAME} --stage PULL_REQUEST --enable-auto-build --query 'branch')
             if [ $? -eq 0 ]; then
+              found_in_app_id=$app_id
               save_outputs $app_id "$branch_info"
+              echo "✅ ${BRANCH_NAME} was successfully connected to app ${app_id}" >&2
+              job_info=$(aws amplify start-job --app-id ${app_id} --branch-name ${BRANCH_NAME} --job-type RELEASE --job-reason "GHA Workflow #${GITHUB_WORKFLOW}" --query 'jobSummary')
+              if [ $? -eq 0 ]; then
+                echo "🚀 Successfully triggered job $(jq -r '.jobId' <<< "$jobSummary") for ${BRANCH_NAME} on app ${app_id}" >&2
+              fi
               break
             fi
           done
+        fi
+
+        if [ -z "${found_in_app_id}" ]; then
+          echo "Branch wasn't connect to any of the apps" >&2
+          exit 1
         fi
 
     - name: Describe Amplify Deployment
