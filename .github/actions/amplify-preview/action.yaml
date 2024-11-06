@@ -87,6 +87,7 @@ runs:
         echo "COMMIT_ID=$(jq -r '.commitId' <<< "$job_info")" >> $GITHUB_OUTPUT
 
     - uses: actions/github-script@v7
+      if: ${{ github.event_name == 'pull_request' }}
       env:
         PREVIEW_URL: ${{ steps.get_amplify_branch.outputs.PREVIEW_URL }}
         UPDATE_TIME: ${{ steps.get_amplify_branch.outputs.UPDATE_TIME }}
