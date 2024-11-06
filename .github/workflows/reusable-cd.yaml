@@ -56,7 +56,7 @@ jobs:
           make tarball OS=linux ARCH=arm64
           make tarball OS=darwin ARCH=amd64
           make tarball OS=darwin ARCH=arm64
-          make tarball OS=windows ARCH=arm64
+          make tarball OS=windows ARCH=amd64
 
       # Build and push the image
       - name: Install docker buildx
