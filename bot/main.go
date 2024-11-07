@@ -82,6 +82,8 @@ func main() {
 		err = b.CheckChangelog(ctx)
 	case "docpaths":
 		err = b.CheckDocsPathsForMissingRedirects(ctx, flags.teleportClonePath)
+	case "docurls":
+		err = b.CheckDocsURLs(ctx, flags.teleportClonePath)
 	default:
 		err = trace.BadParameter("unknown workflow: %v", flags.workflow)
 	}
