@@ -56,6 +56,9 @@ func (b *Bot) CheckChangelog(ctx context.Context) error {
 	}
 
 	for _, changelogEntry := range changelogEntries {
+		if slices.Contains(pull.UnsafeLabels, NoChangelogLabel) {
+			return trace.BadParameter("Changelog entry found in the PR body, but the %q label is also present on the PR. Please either remove the changelog entry, or remove the %q label from the PR.", NoChangelogLabel, NoChangelogLabel)
+		}
 		err = b.validateChangelogEntry(ctx, changelogEntry)
 		if err != nil {
 			return trace.Wrap(err, "failed to validate changelog entry %q", changelogEntry)
