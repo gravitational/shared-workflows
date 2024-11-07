@@ -25,39 +25,34 @@ runs:
       shell: bash
       run: |
         set +e
-        save_outputs() {
-            echo "APP_ID=${1}" >> $GITHUB_OUTPUT
-            echo "PREVIEW_URL=https://$(jq -r '.displayName' <<< "$2").$app_id.amplifyapp.com" >> $GITHUB_OUTPUT
-            echo "CREATE_TIME=$(jq -r '.createTime' <<< "$2")"  >> $GITHUB_OUTPUT
-            echo "UPDATE_TIME=$(jq -r '.updateTime' <<< "$2")"  >> $GITHUB_OUTPUT
-            echo "JOB_ID=$(jq -r '.activeJobId' <<< "$2")"      >> $GITHUB_OUTPUT
+        github_outputs() {
+            echo "APP_ID=${1}"
+            echo "PREVIEW_URL=https://$(jq -r '.displayName' <<< "$2").$app_id.amplifyapp.com"
+            echo "CREATE_TIME=$(jq -r '.createTime' <<< "$2")"
+            echo "UPDATE_TIME=$(jq -r '.updateTime' <<< "$2")"
+            echo "JOB_ID=$(jq -r '.activeJobId' <<< "$2")"
         }
-
         echo "ℹ️ Checking if branch connected to any of the apps" >&2
-        IFS=, app_id_array=($AMPLIFY_APP_IDS)
+        IFS=, app_id_array=("$AMPLIFY_APP_IDS")
         for app_id in "${app_id_array[@]}"; do
-          branch_info=$(aws amplify get-branch --app-id ${app_id} --branch-name ${BRANCH_NAME} --query 'branch')
-          if [ $? -eq 0 ]; then
+          if branch_info=$(aws amplify get-branch --app-id "${app_id}" --branch-name "${BRANCH_NAME}" --query 'branch'); then
             found_in_app_id=$app_id
-            save_outputs $app_id "$branch_info"
+            github_outputs "$app_id" "$branch_info" >> "$GITHUB_OUTPUT"
             echo "ℹ️ ${BRANCH_NAME} is already connected to app ${app_id}" >&2
             break
           fi
         done
-
-        if [ -z "${found_in_app_id}" ] && [ ${CREATE_BRANCHES} = "true" ]; then
+        if [ -z "${found_in_app_id}" ] && [ "${CREATE_BRANCHES}" = "true" ]; then
           echo "ℹ️ Trying to connect branch to one of the apps" >&2
           for app_id in "${app_id_array[@]}"; do
-            branch_info=$(aws amplify create-branch --app-id ${app_id} --branch-name ${BRANCH_NAME} --stage PULL_REQUEST --enable-auto-build --query 'branch')
-            if [ $? -eq 0 ]; then
+            if branch_info=$(aws amplify create-branch --app-id "${app_id}" --branch-name "${BRANCH_NAME}" --stage PULL_REQUEST --enable-auto-build --query 'branch'); then
               found_in_app_id=$app_id
-              save_outputs $app_id "$branch_info"
+              github_outputs "$app_id" "$branch_info" >> "$GITHUB_OUTPUT"
               echo "✅ ${BRANCH_NAME} was successfully connected to app ${app_id}" >&2
               break
             fi
           done
         fi
-
         if [ -z "${found_in_app_id}" ]; then
           echo "❌ Branch wasn't connected to any of the apps" >&2
           exit 1
@@ -73,18 +68,20 @@ runs:
       shell: bash
       continue-on-error: true
       run: |
-        if [ ${CREATE_BRANCHES} = "true" ] && ([ -z "${JOB_ID}" ] || [ ${JOB_ID} = "null" ]); then
-          job_info=$(aws amplify start-job --app-id ${APP_ID} --branch-name ${BRANCH_NAME} --job-type RELEASE --job-reason "${GITHUB_WORKFLOW} (${GITHUB_RUN_ID}) - ${GITHUB_REF_NAME}" --query 'jobSummary')
+        if [ "${CREATE_BRANCHES}" = "true" ] && { [ -z "${JOB_ID}" ] || [ "${JOB_ID}" = "null" ]; }; then
+          job_info=$(aws amplify start-job --app-id "${APP_ID}" --branch-name "${BRANCH_NAME}" --job-type RELEASE --job-reason "${GITHUB_WORKFLOW} (${GITHUB_RUN_ID}) - ${GITHUB_REF_NAME}" --query 'jobSummary')
           if [ $? -eq 0 ]; then
             JOB_ID=$(jq -r '.jobId' <<< "$job_info")
-            echo "🚀 Successfully triggered job "$JOB_ID" for ${BRANCH_NAME} on app ${APP_ID}" >&2
+            echo "🚀 Successfully triggered job ${JOB_ID} for ${BRANCH_NAME} on app ${APP_ID}" >&2
           fi
         fi
 
-        job_info=$(aws amplify get-job --app-id ${APP_ID} --branch-name ${BRANCH_NAME} --job-id ${JOB_ID} --query 'job.summary')
-        echo "JOB_ID=$(jq -r '.jobId' <<< "$job_info")" >> $GITHUB_OUTPUT
-        echo "JOB_STATUS=$(jq -r '.status' <<< "$job_info")" >> $GITHUB_OUTPUT
-        echo "COMMIT_ID=$(jq -r '.commitId' <<< "$job_info")" >> $GITHUB_OUTPUT
+        job_info=$(aws amplify get-job --app-id "${APP_ID}" --branch-name "${BRANCH_NAME}" --job-id "${JOB_ID}" --query 'job.summary')
+        {
+          echo "JOB_ID=$(jq -r '.jobId' <<< "$job_info")"
+          echo "JOB_STATUS=$(jq -r '.status' <<< "$job_info")"
+          echo "COMMIT_ID=$(jq -r '.commitId' <<< "$job_info")"
+        } >> "$GITHUB_OUTPUT"
 
     - uses: actions/github-script@v7
       if: ${{ github.event_name == 'pull_request' }}
