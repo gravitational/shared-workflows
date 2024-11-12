@@ -31,14 +31,15 @@ jobs:
           # and get the version based off of that
           if [[ "${GITHUB_REF}" =~ refs/tags/.* ]]; then
             # Transforms tag refs like refs/tags/tools/${TOOL_NAME}/v1.2.3 into v1.2.3
-            echo "version=${GITHUB_REF#refs/tags/tools/${TOOL_NAME}}" >> "${GITHUB_OUTPUT}"
+            VERSION="${GITHUB_REF#refs/tags/tools/${TOOL_NAME}/}"
+            echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
 
             # Eventually the parse-version action from the teleport.e repo
             # should move into this repo and replace this logic
             echo "should-release=true" >> "${GITHUB_OUTPUT}"
             
-            # Any '-' character means in a tag ref means that it is a prerelease
-            if [[ "${GITHUB_REF}" == *-* ]]; then
+            # Any '-' character means in the version means that it is a prerelease
+            if [[ "${VERSION}" == *-* ]]; then
               echo "is-prerelease=true" >> "${GITHUB_OUTPUT}"
             fi
           fi
