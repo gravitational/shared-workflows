@@ -47,7 +47,7 @@ jobs:
             # Verify that the tag version matches the tool version
             MAKEFILE_VERSION="$(make print-version)"
             if [[ "${MAKEFILE_VERSION}" != "${VERSION}" ]]; then
-              echo "Makefile version '${MAKEFILE_VERSION}' does not match tag '${VERSION}'" >*2
+              echo "Makefile version '${MAKEFILE_VERSION}' does not match tag '${VERSION}'" >&2
               exit 1
             fi
           fi
