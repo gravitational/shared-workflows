@@ -23,7 +23,7 @@ jobs:
         uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
       - name: Get the name of the tool
         working-directory: ${{ inputs.tool-directory }}
-        run: set -e; echo "TOOL_NAME=$(make tool-name)" >> "${GITHUB_ENV}"
+        run: set -e; echo "TOOL_NAME=$(make print-print-tool-name)" >> "${GITHUB_ENV}"
       - name: Create event-specific values
         id: setup
         run: |
@@ -42,14 +42,21 @@ jobs:
             if [[ "${VERSION}" == *-* ]]; then
               echo "is-prerelease=true" >> "${GITHUB_OUTPUT}"
             fi
+
+            # Verify that the tag version matches the tool version
+            MAKEFILE_VERSION="$(make print-version)"
+            if [[ "${MAKEFILE_VERSION}" != "${VERSION}" ]]; then
+              echo "Makefile version '${MAKEFILE_VERSION}' does not match tag '${VERSION}'" >*2
+              exit 1
+            fi
           fi
 
       # Build the binaries
       - name: Setup Go
         uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32 # v5.0.2
         with:
-          go-version-file: '${{ inputs.tool-directory }}/go.mod'
-          cache-dependency-path: '${{ inputs.tool-directory }}/go.sum'
+          go-version-file: "${{ inputs.tool-directory }}/go.mod"
+          cache-dependency-path: "${{ inputs.tool-directory }}/go.sum"
 
       - name: Build the project
         working-directory: ${{ inputs.tool-directory }}
@@ -136,4 +143,3 @@ jobs:
           gh release create --title "${TOOL_NAME} ${VERSION}" --verify-tag \
             --generate-notes "${EXTRA_FLAGS[@]}" "${GITHUB_REF_NAME}" \
             "${RELEASE_TARBALLS[@]}"
-
