@@ -26,6 +26,7 @@ jobs:
         run: set -e; echo "TOOL_NAME=$(make print-print-tool-name)" >> "${GITHUB_ENV}"
       - name: Create event-specific values
         id: setup
+        working-directory: ${{ inputs.tool-directory }}
         run: |
           # Determine if the workflow was triggered via a push to main or a tag
           # and get the version based off of that
