@@ -23,11 +23,12 @@ jobs:
         uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
       - name: Get the name of the tool
         working-directory: ${{ inputs.tool-directory }}
-        run: set -e; echo "TOOL_NAME=$(make print-print-tool-name)" >> "${GITHUB_ENV}"
+        run: set -euo pipefail; echo "TOOL_NAME=$(make print-tool-name)" >> "${GITHUB_ENV}"
       - name: Create event-specific values
         id: setup
         working-directory: ${{ inputs.tool-directory }}
         run: |
+          set -euo pipefail
           # Determine if the workflow was triggered via a push to main or a tag
           # and get the version based off of that
           if [[ "${GITHUB_REF}" =~ refs/tags/.* ]]; then
@@ -62,6 +63,7 @@ jobs:
       - name: Build the project
         working-directory: ${{ inputs.tool-directory }}
         run: |
+          set -euo pipefail
           make tarball OS=linux ARCH=amd64
           make tarball OS=linux ARCH=arm64
           make tarball OS=darwin ARCH=amd64
@@ -128,6 +130,7 @@ jobs:
           IS_PRERELEASE: ${{ steps.setup.outputs.is-prerelease }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
           if [[ "${IS_PRERELEASE}" == 'true' ]]; then
             EXTRA_FLAGS=("--prerelease")
           else
