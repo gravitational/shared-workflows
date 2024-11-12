@@ -38,7 +38,7 @@ jobs:
             # should move into this repo and replace this logic
             echo "should-release=true" >> "${GITHUB_OUTPUT}"
             
-            # Any '-' character means in the version means that it is a prerelease
+            # Any '-' character in the version means that it is a prerelease
             if [[ "${VERSION}" == *-* ]]; then
               echo "is-prerelease=true" >> "${GITHUB_OUTPUT}"
             fi
