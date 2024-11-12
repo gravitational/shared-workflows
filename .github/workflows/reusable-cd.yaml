@@ -13,7 +13,7 @@ on:
 jobs:
   release:
     name: Release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04-8core
     permissions:
       contents: write # Needed to create the release
       packages: write # Needed to upload the images to GHCR
@@ -118,6 +118,7 @@ jobs:
         env:
           VERSION: ${{ steps.setup.outputs.version }}
           IS_PRERELEASE: ${{ steps.setup.outputs.is-prerelease }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [[ "${IS_PRERELEASE}" == 'true' ]]; then
             EXTRA_FLAGS=("--prerelease")
