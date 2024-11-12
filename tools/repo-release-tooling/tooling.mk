@@ -12,8 +12,11 @@ BINARY_NAME := $(BINARY_NAME).exe
 endif
 DOCKERFILE_PATH ?= ../repo-release-tooling/Dockerfile
 
-tool-name:
+print-tool-name:
 	@echo "$(TOOL_NAME)"
+
+print-version:
+	@echo "$(VERSION)"
 
 lint:
 	@golangci-lint run ./... --out-format colored-line-number -vvv
@@ -39,4 +42,4 @@ clean:
 	@rm -rf build/
 	@docker image rm -f "$(TOOL_NAME):$(CONTAINER_VERSION)" 2> /dev/null > /dev/null
 
-.PHONY: tool-name lint test binary tarball container-image clean
+.PHONY: print-tool-name print-version lint test binary tarball container-image clean

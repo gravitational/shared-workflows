@@ -13,7 +13,7 @@ on:
 jobs:
   release:
     name: Release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04-8core
     permissions:
       contents: write # Needed to create the release
       packages: write # Needed to upload the images to GHCR
@@ -23,23 +23,33 @@ jobs:
         uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
       - name: Get the name of the tool
         working-directory: ${{ inputs.tool-directory }}
-        run: set -e; echo "TOOL_NAME=$(make tool-name)" >> "${GITHUB_ENV}"
+        run: set -euo pipefail; echo "TOOL_NAME=$(make print-tool-name)" >> "${GITHUB_ENV}"
       - name: Create event-specific values
         id: setup
+        working-directory: ${{ inputs.tool-directory }}
         run: |
+          set -euo pipefail
           # Determine if the workflow was triggered via a push to main or a tag
           # and get the version based off of that
           if [[ "${GITHUB_REF}" =~ refs/tags/.* ]]; then
             # Transforms tag refs like refs/tags/tools/${TOOL_NAME}/v1.2.3 into v1.2.3
-            echo "version=${GITHUB_REF#refs/tags/tools/${TOOL_NAME}}" >> "${GITHUB_OUTPUT}"
+            VERSION="${GITHUB_REF#refs/tags/tools/${TOOL_NAME}/}"
+            echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
 
             # Eventually the parse-version action from the teleport.e repo
             # should move into this repo and replace this logic
             echo "should-release=true" >> "${GITHUB_OUTPUT}"
             
-            # Any '-' character means in a tag ref means that it is a prerelease
-            if [[ "${GITHUB_REF}" == *-* ]]; then
+            # Any '-' character in the version means that it is a prerelease
+            if [[ "${VERSION}" == *-* ]]; then
               echo "is-prerelease=true" >> "${GITHUB_OUTPUT}"
+            fi
+
+            # Verify that the tag version matches the tool version
+            MAKEFILE_VERSION="$(make print-version)"
+            if [[ "${MAKEFILE_VERSION}" != "${VERSION}" ]]; then
+              echo "Makefile version '${MAKEFILE_VERSION}' does not match tag '${VERSION}'" >&2
+              exit 1
             fi
           fi
 
@@ -47,12 +57,13 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32 # v5.0.2
         with:
-          go-version-file: '${{ inputs.tool-directory }}/go.mod'
-          cache-dependency-path: '${{ inputs.tool-directory }}/go.sum'
+          go-version-file: "${{ inputs.tool-directory }}/go.mod"
+          cache-dependency-path: "${{ inputs.tool-directory }}/go.sum"
 
       - name: Build the project
         working-directory: ${{ inputs.tool-directory }}
         run: |
+          set -euo pipefail
           make tarball OS=linux ARCH=amd64
           make tarball OS=linux ARCH=arm64
           make tarball OS=darwin ARCH=amd64
@@ -117,7 +128,9 @@ jobs:
         env:
           VERSION: ${{ steps.setup.outputs.version }}
           IS_PRERELEASE: ${{ steps.setup.outputs.is-prerelease }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
           if [[ "${IS_PRERELEASE}" == 'true' ]]; then
             EXTRA_FLAGS=("--prerelease")
           else
@@ -134,4 +147,3 @@ jobs:
           gh release create --title "${TOOL_NAME} ${VERSION}" --verify-tag \
             --generate-notes "${EXTRA_FLAGS[@]}" "${GITHUB_REF_NAME}" \
             "${RELEASE_TARBALLS[@]}"
-
