@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/gravitational/trace"
+	"golang.org/x/exp/slices"
 )
 
 // skipItems finds any comments from an admin with the skipPrefix
@@ -30,7 +31,7 @@ func (b *Bot) skipItems(ctx context.Context, skipPrefix string) ([]string, error
 
 	admins := b.c.Review.GetAdminCheckers(b.c.Environment.Author)
 	for _, c := range comments {
-		if !contains(admins, c.Author) {
+		if !slices.Contains(admins, c.Author) {
 			log.Printf("ignoring comment from non-admin %v", c.Author)
 			continue
 		}
