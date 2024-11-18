@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/gravitational/trace"
+	"golang.org/x/exp/slices"
 )
 
 const (
@@ -89,14 +90,6 @@ func (b *Bot) BloatCheck(ctx context.Context, baseStats, current string, artifac
 		default:
 		}
 
-		skipped := false
-		for _, s := range skip {
-			if s == artifact {
-				skipped = true
-				break
-			}
-		}
-
 		stats, err := calculateChange(baseLookup, current, artifact)
 		if err != nil {
 			return err
@@ -105,7 +98,7 @@ func (b *Bot) BloatCheck(ctx context.Context, baseStats, current string, artifac
 		log.Printf("artifact %s has a current size of %d", artifact, stats.currentSize)
 
 		status := "✅"
-		if skipped {
+		if skipped := slices.Contains(skip, artifact); skipped {
 			status += " skipped by admin"
 		} else {
 			if stats.diff > int64(warnThreshold) {
@@ -148,13 +141,6 @@ func renderMarkdownTable(w io.Writer, data map[string]result) error {
 	padding := map[string]int{}
 	for _, v := range titles {
 		padding[v] = len(v)
-	}
-
-	max := func(a, b int) int {
-		if a > b {
-			return a
-		}
-		return b
 	}
 
 	// get the largest item from the title or items in the column to determine
