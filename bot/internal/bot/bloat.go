@@ -10,11 +10,11 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/gravitational/trace"
-	"golang.org/x/exp/slices"
 )
 
 const (
@@ -98,7 +98,7 @@ func (b *Bot) BloatCheck(ctx context.Context, baseStats, current string, artifac
 		log.Printf("artifact %s has a current size of %d", artifact, stats.currentSize)
 
 		status := "✅"
-		if skipped := slices.Contains(skip, artifact); skipped {
+		if slices.Contains(skip, artifact) {
 			status += " skipped by admin"
 		} else {
 			if stats.diff > int64(warnThreshold) {
@@ -106,7 +106,7 @@ func (b *Bot) BloatCheck(ctx context.Context, baseStats, current string, artifac
 			}
 			if stats.diff > int64(errorThreshold) {
 				status = "❌"
-				failure = !skipped
+				failure = true
 			}
 		}
 

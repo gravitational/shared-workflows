@@ -25,15 +25,14 @@ import (
 	"os/exec"
 	"path"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"text/template"
 
-	"github.com/gravitational/trace"
-	"golang.org/x/exp/slices"
-
 	"github.com/gravitational/shared-workflows/bot/internal/github"
+	"github.com/gravitational/trace"
 )
 
 // Backport will create backport Pull Requests (if requested) when a Pull

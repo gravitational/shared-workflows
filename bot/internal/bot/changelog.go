@@ -20,11 +20,11 @@ import (
 	"context"
 	"log"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode"
 
 	"github.com/gravitational/trace"
-	"golang.org/x/exp/slices"
 )
 
 const NoChangelogLabel string = "no-changelog"
