@@ -435,31 +435,15 @@ func (r *Assignments) CheckInternal(e *env.Environment, reviews []github.Review,
 		return nil
 	}
 
-	switch {
-	case changes.Docs && changes.Code:
-		log.Printf("Check: Found docs and code changes.")
-		if err := r.checkInternalReviews(e, changes, reviews, files); err != nil {
-			return trace.Wrap(err)
-		}
-	case !changes.Docs && changes.Code:
-		log.Printf("Check: Found code changes.")
-		if err := r.checkInternalReviews(e, changes, reviews, files); err != nil {
-			return trace.Wrap(err)
-		}
-	case changes.Docs && !changes.Code:
-		log.Printf("Check: Found docs changes.")
-		if err := r.checkInternalReviews(e, changes, reviews, files); err != nil {
-			return trace.Wrap(err)
-		}
 	// Strange state, an empty commit? Check admins.
-	case !changes.Docs && !changes.Code:
-		log.Printf("Check: Found no docs or code changes.")
+	if !changes.Docs && !changes.Code {
+		log.Printf("Check: Found no docs or code changes, requiring admin approvals")
 		if checkN(r.GetAdminCheckers(e.Author), reviews) < 2 {
 			return trace.BadParameter("requires two admin approvals")
 		}
 	}
 
-	return nil
+	return trace.Wrap(r.checkInternalReviews(e, changes, reviews, files))
 }
 
 func (r *Assignments) checkInternalReleaseReviews(reviews []github.Review) error {
@@ -484,6 +468,7 @@ func (r *Assignments) checkInternalReviews(e *env.Environment, changes env.Chang
 	// Add them to set B, as docs reviewers are not required so long as we get
 	// the appropriate number of approvals.
 	if changes.Docs {
+		log.Printf("Check: PR contains docs changes, adding docs reviewers to group 2")
 		setB = append(setB, r.getDocsReviewers(e, files)...)
 	}
 

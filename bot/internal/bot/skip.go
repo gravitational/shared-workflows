@@ -3,10 +3,10 @@ package bot
 import (
 	"context"
 	"log"
+	"slices"
 	"strings"
 
 	"github.com/gravitational/trace"
-	"golang.org/x/exp/slices"
 )
 
 // skipItems finds any comments from an admin with the skipPrefix
