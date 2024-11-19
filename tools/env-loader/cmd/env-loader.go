@@ -43,7 +43,7 @@ func parseCLI() *config {
 
 	kingpin.Flag("environments-directory", "Path to the directory containing all environments, defaulting to the repo root").
 		Short('d').
-		Envar(EnvVarPrefix + "ENVIRONMENT").
+		Envar(EnvVarPrefix + "ENVIRONMENTS_DIRECTORY").
 		StringVar(&c.EnvironmentsDirectory)
 
 	kingpin.Flag("environment", "Name of the environment containing the values to load").
@@ -88,13 +88,15 @@ func run(c *config) error {
 	}
 
 	// Filter out values not requested
-	maps.DeleteFunc(envValues, func(key, _ string) bool {
-		return !slices.Contains(c.Values, key)
-	})
+	if len(c.Values) > 0 {
+		maps.DeleteFunc(envValues, func(key, _ string) bool {
+			return !slices.Contains(c.Values, key)
+		})
+	}
 
 	// Build the output string
 	writer := writers.FromName[c.Writer]
-	envValueOutput, err := writer.FormatEnvironmentValues(map[string]string{})
+	envValueOutput, err := writer.FormatEnvironmentValues(envValues)
 	if err != nil {
 		return trace.Wrap(err, "failed to format output values with writer %q", c.Writer)
 	}
