@@ -114,7 +114,11 @@ func run(c *config) error {
 	}
 
 	// Write it to stdout
-	outputPrinter(envValueOutput)
+	_, err = outputPrinter(envValueOutput)
+	if err != nil {
+		return trace.Wrap(err, "failed to print output %q", envValueOutput)
+	}
+
 	return nil
 }
 
