@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"fmt"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -87,7 +86,7 @@ func TestGetRequestedEnvValues(t *testing.T) {
 	for _, test := range tests {
 		actualValues, err := getRequestedEnvValues(test.c)
 		require.NoError(t, err)
-		require.EqualValues(t, actualValues, test.expectedValues)
+		require.EqualValues(t, test.expectedValues, actualValues)
 	}
 }
 
@@ -117,19 +116,14 @@ func TestRun(t *testing.T) {
 
 	for _, test := range tests {
 		// Setup to capture stdout
-		var output bytes.Buffer
-		var writtenLength int
-		var capturedErr error
-		outputPrinter = func(a ...any) (n int, err error) {
-			writtenLength, capturedErr = fmt.Fprint(&output, a...)
-			return writtenLength, capturedErr
-		}
+		var outputBytes bytes.Buffer
+		outputWriter = &outputBytes
 
 		err := run(test.c)
 
+		output := outputBytes.String()
+
 		require.NoError(t, err)
-		require.NoError(t, capturedErr)
-		require.Equal(t, writtenLength, len(test.expectedOutput))
-		require.Equal(t, output.String(), test.expectedOutput)
+		require.Equal(t, test.expectedOutput, output)
 	}
 }

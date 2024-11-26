@@ -18,6 +18,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"maps"
 	"os"
@@ -32,7 +33,7 @@ import (
 const EnvVarPrefix = "ENV_LOADER_"
 
 // This is a package-level var to assist with capturing stdout in tests
-var outputPrinter = fmt.Print
+var outputWriter io.Writer = os.Stdout
 
 type config struct {
 	EnvironmentsDirectory string
@@ -114,7 +115,7 @@ func run(c *config) error {
 	}
 
 	// Write it to stdout
-	_, err = outputPrinter(envValueOutput)
+	_, err = fmt.Fprint(outputWriter, envValueOutput)
 	if err != nil {
 		return trace.Wrap(err, "failed to print output %q", envValueOutput)
 	}
