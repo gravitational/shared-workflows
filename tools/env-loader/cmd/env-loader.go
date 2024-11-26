@@ -72,8 +72,7 @@ func parseCLI(args []string) *config {
 		Default("dotenv").
 		EnumVar(&c.Writer, slices.Collect(maps.Keys(writers.FromName))...)
 
-	kingpin.CommandLine.Parse(args)
-
+	kingpin.MustParse(kingpin.CommandLine.Parse(args))
 	return c
 }
 
