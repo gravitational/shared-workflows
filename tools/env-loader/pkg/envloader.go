@@ -38,6 +38,8 @@ const EnvironmentNameDirectorySeparator = "/"
 // value files.
 const CommonFileGlob = "common.*"
 
+const gitFakeLinkFileIdentifier = "gitdir: "
+
 func findGitRepoRoot() (string, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -47,20 +49,37 @@ func findGitRepoRoot() (string, error) {
 	// Walk upwards until a '.git' directory is found, or root is reached
 	path := filepath.Clean(cwd)
 	for {
-		fileInfo, err := os.Lstat(filepath.Join(path, ".git"))
+		gitFsObjectPath := filepath.Join(path, ".git")
+		fileInfo, err := os.Lstat(gitFsObjectPath)
 		// If failed to stat the fs object and it exists
 		if err != nil && !os.IsNotExist(err) {
-			return "", trace.Wrap(err, "failed to read file information for %q", path)
+			return "", trace.Wrap(err, "failed to read file information for %q", gitFsObjectPath)
 		}
 
 		// If the .git fs object was found and it is a directory
-		if err == nil && fileInfo.IsDir() {
-			absPath, err := filepath.Abs(path)
-			if err != nil {
-				return "", trace.Wrap(err, "failed to get absolute path for git repo at %q", path)
+		if err == nil {
+			isCurrentPathAGitDirectory := fileInfo.IsDir()
+
+			// Perform some rudimentary checking to see if the .git directory
+			// exists elsewhere, as is the case with submodules:
+			// https://git-scm.com/docs/git-init#Documentation/git-init.txt-code--separate-git-dircodeemltgit-dirgtem
+			if fileInfo.Mode().IsRegular() {
+				fileContents, err := os.ReadFile(gitFsObjectPath)
+				if err != nil {
+					return "", trace.Wrap(err, "failed to read .git file at %q", gitFsObjectPath)
+				}
+
+				isCurrentPathAGitDirectory = strings.HasPrefix(string(fileContents), gitFakeLinkFileIdentifier)
 			}
 
-			return absPath, nil
+			if isCurrentPathAGitDirectory {
+				absPath, err := filepath.Abs(path)
+				if err != nil {
+					return "", trace.Wrap(err, "failed to get absolute path for git repo at %q", path)
+				}
+
+				return absPath, nil
+			}
 		}
 
 		// If the .git fs object was found and is not a directory, or it wasn't
@@ -90,8 +109,7 @@ func findCommonFilesInPath(basePath, relativeSubdirectoryPath string) ([]string,
 	var commonFilePaths []string
 	currentDirectoryPath := basePath
 	for _, directoryNameToCheck := range subdirectoryNames {
-		currentDirectoryPath := filepath.Join(currentDirectoryPath, directoryNameToCheck)
-
+		currentDirectoryPath = filepath.Join(currentDirectoryPath, directoryNameToCheck)
 		fileInfo, err := os.Lstat(currentDirectoryPath)
 		if err != nil {
 			return nil, trace.Wrap(err, "failed to lstat %q", currentDirectoryPath)

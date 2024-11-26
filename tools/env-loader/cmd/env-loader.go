@@ -18,8 +18,10 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"maps"
+	"os"
 	"slices"
 
 	"github.com/alecthomas/kingpin/v2"
@@ -30,6 +32,9 @@ import (
 
 const EnvVarPrefix = "ENV_LOADER_"
 
+// This is a package-level var to assist with capturing stdout in tests
+var outputWriter io.Writer = os.Stdout
+
 type config struct {
 	EnvironmentsDirectory string
 	Environment           string
@@ -38,12 +43,12 @@ type config struct {
 	Writer                string
 }
 
-func parseCLI() *config {
+func parseCLI(args []string) *config {
 	c := &config{}
 
 	kingpin.Flag("environments-directory", "Path to the directory containing all environments, defaulting to the repo root").
 		Short('d').
-		Envar(EnvVarPrefix + "ENVIRONMENT").
+		Envar(EnvVarPrefix + "ENVIRONMENTS_DIRECTORY").
 		StringVar(&c.EnvironmentsDirectory)
 
 	kingpin.Flag("environment", "Name of the environment containing the values to load").
@@ -68,12 +73,11 @@ func parseCLI() *config {
 		Default("dotenv").
 		EnumVar(&c.Writer, slices.Collect(maps.Keys(writers.FromName))...)
 
-	kingpin.Parse()
-
+	kingpin.MustParse(kingpin.CommandLine.Parse(args))
 	return c
 }
 
-func run(c *config) error {
+func getRequestedEnvValues(c *config) (map[string]string, error) {
 	// Load in values
 	var envValues map[string]string
 	var err error
@@ -84,28 +88,43 @@ func run(c *config) error {
 	}
 
 	if err != nil {
-		return trace.Wrap(err, "failed to load all environment values")
+		return nil, trace.Wrap(err, "failed to load all environment values")
 	}
 
 	// Filter out values not requested
-	maps.DeleteFunc(envValues, func(key, _ string) bool {
-		return !slices.Contains(c.Values, key)
-	})
+	if len(c.Values) > 0 {
+		maps.DeleteFunc(envValues, func(key, _ string) bool {
+			return !slices.Contains(c.Values, key)
+		})
+	}
+
+	return envValues, nil
+}
+
+func run(c *config) error {
+	envValues, err := getRequestedEnvValues(c)
+	if err != nil {
+		return trace.Wrap(err, "failed to get requested environment values")
+	}
 
 	// Build the output string
 	writer := writers.FromName[c.Writer]
-	envValueOutput, err := writer.FormatEnvironmentValues(map[string]string{})
+	envValueOutput, err := writer.FormatEnvironmentValues(envValues)
 	if err != nil {
 		return trace.Wrap(err, "failed to format output values with writer %q", c.Writer)
 	}
 
 	// Write it to stdout
-	fmt.Print(envValueOutput)
+	_, err = fmt.Fprint(outputWriter, envValueOutput)
+	if err != nil {
+		return trace.Wrap(err, "failed to print output %q", envValueOutput)
+	}
+
 	return nil
 }
 
 func main() {
-	c := parseCLI()
+	c := parseCLI(os.Args[1:])
 
 	err := run(c)
 	if err != nil {
