@@ -56,7 +56,7 @@ jobs:
         uses: actions/dependency-review-action@5bbc3ba658137598168acb2ab73b21c432dd411b # v4.2.5
         with:
           fail-on-severity: ${{ inputs.fail-on-severity }}
-          allow-licenses: 0BSD, Apache-2.0, BlueOak-1.0.0, BSD-2-Clause, BSD-2-Clause-FreeBSD, BSD-3-Clause, BSD-2-Clause AND BSD-3-Clause, BSD-3-Clause AND BSD-3-Clause-Clear, CC-BY-3.0, CC-BY-4.0, CC0-1.0, ISC, LGPL-2.1, MIT, MIT-0, MPL-2.0, ODC-By-1.0, OFL-1.1, Python-2.0, Unicode-DFS-2016, Unlicense, WTFPL, Zlib, (MIT OR Apache-2.0) AND Unicode-DFS-2016, Apache-2.0 AND BSD-3-Clause, ISC AND MIT, MIT AND Zlib, MIT AND BSD-3-Clause, MIT AND WTFPL, ISC AND (Apache-2.0 OR ISC) AND OpenSSL
+          allow-licenses: 0BSD, Apache-2.0, BlueOak-1.0.0, BSD-2-Clause, BSD-2-Clause-FreeBSD, BSD-3-Clause, BSD-2-Clause AND BSD-3-Clause, BSD-3-Clause AND BSD-3-Clause-Clear, CC-BY-3.0, CC-BY-4.0, CC0-1.0, ISC, LGPL-2.1, MIT, MIT-0, MPL-2.0, ODC-By-1.0, OFL-1.1, Python-2.0, Unicode-DFS-2016, Unlicense, WTFPL, Zlib, (MIT OR Apache-2.0) AND Unicode-DFS-2016, Apache-2.0 AND BSD-3-Clause, ISC AND MIT, MIT AND Zlib, MIT AND BSD-3-Clause, MIT AND WTFPL, ISC AND (Apache-2.0 OR ISC) AND OpenSSL, Unicode-3.0
           allow-ghsas: ${{ inputs.allow-ghsas }}
           allow-dependencies-licenses: ${{ inputs.allow-dependencies-licenses != '' && format('pkg:golang/github.com/gravitational/teleport, pkg:golang/github.com/gravitational/teleport/api, {0}', inputs.allow-dependencies-licenses) || 'pkg:golang/github.com/gravitational/teleport, pkg:golang/github.com/gravitational/teleport/api'}}
           comment-summary-in-pr: on-failure
