@@ -16,7 +16,7 @@ runs:
       run: echo "branch=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}" >> $GITHUB_OUTPUT
       id: extract_branch
 
-    - uses: actions/setup-go
+    - uses: actions/setup-go@v5
       with:
         go-version-file: go.mod
 
