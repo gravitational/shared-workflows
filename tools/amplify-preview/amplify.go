@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/amplify"
 	"github.com/aws/aws-sdk-go-v2/service/amplify/types"
@@ -195,27 +196,37 @@ func (err aggregatedError) Error() error {
 func amplifyJobToMarkdown(job *types.JobSummary, branch *types.Branch) string {
 	var mdTableHeader = [...]string{"Branch", "Status", "Preview", "Updated (UTC)"}
 	var commentBody strings.Builder
+	var jobStatusToEmoji = map[types.JobStatus]rune{
+		types.JobStatusFailed:       '❌',
+		types.JobStatusRunning:      '🔄',
+		types.JobStatusPending:      '⏳',
+		types.JobStatusProvisioning: '⏳',
+		types.JobStatusSucceed:      '✅',
+	}
+
 	appID, _ := appIDFromBranchARN(*branch.BranchArn)
+
+	updateTime := job.StartTime
+	if job.EndTime != nil {
+		updateTime = job.EndTime
+	}
 
 	commentBody.WriteString(amplifyMarkdownHeader)
 	commentBody.WriteByte('\n')
 
+	// Markdown table header
 	commentBody.WriteString(strings.Join(mdTableHeader[:], " | "))
 	commentBody.WriteByte('\n')
 	commentBody.WriteString(strings.TrimSuffix(strings.Repeat("---------|", len(mdTableHeader)), "|"))
 	commentBody.WriteByte('\n')
+	// Markdown table content
 	commentBody.WriteString(*branch.BranchName)
 	commentBody.WriteString(" | ")
-	commentBody.WriteString(string(job.Status))
+	commentBody.WriteString(fmt.Sprintf("%c %s", jobStatusToEmoji[job.Status], job.Status))
 	commentBody.WriteString(" | ")
-	commentBody.WriteString(strings.Join([]string{*branch.DisplayName, appID, amplifyDefaultDomain}, "."))
+	commentBody.WriteString(fmt.Sprintf("https://%s.%s.%s", *branch.DisplayName, appID, amplifyDefaultDomain))
 	commentBody.WriteString(" | ")
-
-	if job.EndTime == nil {
-		commentBody.WriteString(job.StartTime.String())
-	} else {
-		commentBody.WriteString(job.EndTime.String())
-	}
+	commentBody.WriteString(updateTime.Format(time.DateTime))
 	commentBody.WriteByte('\n')
 
 	return commentBody.String()

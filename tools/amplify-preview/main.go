@@ -31,7 +31,7 @@ import (
 )
 
 var (
-	logger = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	logger = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
 	amplifyAppIDs  = kingpin.Flag("amplify-app-ids", "List of Amplify App IDs").Envar("AMPLIFY_APP_IDS").Required().Strings()
 	gitBranchName  = kingpin.Flag("git-branch-name", "Git branch name").Envar("GIT_BRANCH_NAME").Required().String()
@@ -93,8 +93,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	logger.Error("amplify job is in failed state", "job_status", job.Status, "job_id", job.JobId)
 	if job.Status == types.JobStatusFailed {
+		logger.Error("amplify job is in failed state", "job_status", job.Status, "job_id", job.JobId)
 		os.Exit(1)
 	}
 }
