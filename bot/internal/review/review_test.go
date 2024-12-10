@@ -434,7 +434,7 @@ func TestGetCodeReviewerSets(t *testing.T) {
 				Author:     test.author,
 			}
 			changes := env.Changes{ApproverCount: env.DefaultApproverCount}
-			require.ErrorContains(t, test.assignments.checkInternalCodeReviews(e, changes, nil),
+			require.ErrorContains(t, test.assignments.checkInternalReviews(e, changes, nil, nil),
 				"at least one approval required from each set")
 
 			setA, setB := test.assignments.getCodeReviewerSets(e)
@@ -683,6 +683,7 @@ func TestCheckInternal(t *testing.T) {
 			// Docs.
 			DocsReviewers: map[string]Reviewer{
 				"7": {Owner: true},
+				"8": {Owner: false},
 			},
 			DocsReviewersOmit: map[string]bool{},
 			CodeReviewersOmit: map[string]bool{},
@@ -738,7 +739,19 @@ func TestCheckInternal(t *testing.T) {
 			result: false,
 		},
 		{
-			desc:       "docs-only-docs-approval-success",
+			desc:       "docs-only-two-approval-success",
+			repository: "teleport",
+			author:     "4",
+			reviews: []github.Review{
+				{Author: "1", State: Approved},
+				{Author: "8", State: Approved},
+			},
+			docs:   true,
+			code:   false,
+			result: true,
+		},
+		{
+			desc:       "docs-only-docs-approval-fail",
 			repository: "teleport",
 			author:     "4",
 			reviews: []github.Review{
@@ -746,7 +759,7 @@ func TestCheckInternal(t *testing.T) {
 			},
 			docs:   true,
 			code:   false,
-			result: true,
+			result: false,
 		},
 		{
 			desc:       "code-only-no-reviews-fail",
@@ -850,9 +863,10 @@ func TestCheckInternal(t *testing.T) {
 				{Author: "3", State: Approved},
 				{Author: "4", State: Approved},
 			},
-			docs:   true,
-			code:   true,
-			result: false,
+			docs: true,
+			code: true,
+			// docs reviewers count towards required approvals, but are not required
+			result: true,
 		},
 		{
 			desc:       "docs-and-code-docs-and-code-approval-success",

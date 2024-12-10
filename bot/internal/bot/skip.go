@@ -3,6 +3,7 @@ package bot
 import (
 	"context"
 	"log"
+	"slices"
 	"strings"
 
 	"github.com/gravitational/trace"
@@ -30,7 +31,7 @@ func (b *Bot) skipItems(ctx context.Context, skipPrefix string) ([]string, error
 
 	admins := b.c.Review.GetAdminCheckers(b.c.Environment.Author)
 	for _, c := range comments {
-		if !contains(admins, c.Author) {
+		if !slices.Contains(admins, c.Author) {
 			log.Printf("ignoring comment from non-admin %v", c.Author)
 			continue
 		}

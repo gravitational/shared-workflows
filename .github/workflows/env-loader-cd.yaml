@@ -1,18 +1,18 @@
 ---
-name: Changelog generator CD
+name: Environment value loader CD
 
 on:
   push:
     branches:
       - main
     paths:
-      - tools/changelog
+      - tools/env-loader
     tags:
-      - "tools/changelog/v[0-9]+.[0-9]+.[0-9]+**"
+      - "tools/env-loader/v[0-9]+.[0-9]+.[0-9]+**"
   pull_request:
     paths:
-      - tools/changelog/workflows/cd.yaml
-      - .github/workflows/changelog-cd.yaml
+      - tools/env-loader/workflows/cd.yaml
+      - .github/workflows/env-loader-cd.yaml
       - .github/workflows/reusable-cd.yaml
 
 jobs:
@@ -22,4 +22,4 @@ jobs:
       contents: write
       packages: write
     with:
-      tool-directory: ./tools/changelog
+      tool-directory: ./tools/env-loader

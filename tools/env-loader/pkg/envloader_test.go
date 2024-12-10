@@ -45,6 +45,12 @@ func ensureGitFSObjectsExist(t *testing.T) {
 		return os.WriteFile(gitPath, nil, 0400)
 	})
 
+	ensureGitFSObjectExist(t, "git repo with submodule", "directory", createGitFile)
+	ensureGitFSObjectExist(t, filepath.Join("git repo with submodule", "submodule"), "file", func(gitPath string) error {
+		// This path doesn't (currently) actually need to be created
+		return os.WriteFile(gitPath, []byte("gitdir: ../.git/modules/submodule\n"), 0400)
+	})
+
 	ensureGitFSObjectExist(t, "nested repos", "directory", createGitFile)
 	ensureGitFSObjectExist(t, filepath.Join("nested repos", "subdirectory"), "directory", createGitFile)
 }
@@ -54,7 +60,10 @@ func getInitialCwd(t *testing.T) string {
 	initialWorkingDir, err := os.Getwd()
 	require.NoError(t, err, "unable to get initial working directory")
 	t.Cleanup(func() {
-		os.Chdir(initialWorkingDir)
+		err := os.Chdir(initialWorkingDir)
+		if err != nil {
+			t.Fatalf("failed to change directory during cleanup: %#v", err)
+		}
 	})
 
 	return initialWorkingDir
@@ -97,6 +106,11 @@ func TestFindGitRepoRoot(t *testing.T) {
 			desc:             "nested repos",
 			workingDirectory: filepath.Join("nested repos", "subdirectory"),
 			expectedRoot:     filepath.Join("nested repos", "subdirectory"),
+		},
+		{
+			desc:             "from submodule",
+			workingDirectory: filepath.Join("git repo with submodule", "submodule"),
+			expectedRoot:     filepath.Join("git repo with submodule", "submodule"),
 		},
 	}
 

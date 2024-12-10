@@ -1,0 +1,149 @@
+---
+on:
+  workflow_call:
+    inputs:
+      tool-directory:
+        type: string
+        description: Path to the tool's directory, relative to repo root
+      dockerfile-path:
+        type: string
+        description: Path to the tool's dockerfile, relative to repo root
+        default: ./tools/repo-release-tooling/Dockerfile
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-22.04-8core
+    permissions:
+      contents: write # Needed to create the release
+      packages: write # Needed to upload the images to GHCR
+    steps:
+      # Setup
+      - name: Checkout repository
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+      - name: Get the name of the tool
+        working-directory: ${{ inputs.tool-directory }}
+        run: set -euo pipefail; echo "TOOL_NAME=$(make print-tool-name)" >> "${GITHUB_ENV}"
+      - name: Create event-specific values
+        id: setup
+        working-directory: ${{ inputs.tool-directory }}
+        run: |
+          set -euo pipefail
+          # Determine if the workflow was triggered via a push to main or a tag
+          # and get the version based off of that
+          if [[ "${GITHUB_REF}" =~ refs/tags/.* ]]; then
+            # Transforms tag refs like refs/tags/tools/${TOOL_NAME}/v1.2.3 into v1.2.3
+            VERSION="${GITHUB_REF#refs/tags/tools/${TOOL_NAME}/}"
+            echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
+
+            # Eventually the parse-version action from the teleport.e repo
+            # should move into this repo and replace this logic
+            echo "should-release=true" >> "${GITHUB_OUTPUT}"
+            
+            # Any '-' character in the version means that it is a prerelease
+            if [[ "${VERSION}" == *-* ]]; then
+              echo "is-prerelease=true" >> "${GITHUB_OUTPUT}"
+            fi
+
+            # Verify that the tag version matches the tool version
+            MAKEFILE_VERSION="$(make print-version)"
+            if [[ "${MAKEFILE_VERSION}" != "${VERSION}" ]]; then
+              echo "Makefile version '${MAKEFILE_VERSION}' does not match tag '${VERSION}'" >&2
+              exit 1
+            fi
+          fi
+
+      # Build the binaries
+      - name: Setup Go
+        uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32 # v5.0.2
+        with:
+          go-version-file: "${{ inputs.tool-directory }}/go.mod"
+          cache-dependency-path: "${{ inputs.tool-directory }}/go.sum"
+
+      - name: Build the project
+        working-directory: ${{ inputs.tool-directory }}
+        run: |
+          set -euo pipefail
+          make tarball OS=linux ARCH=amd64
+          make tarball OS=linux ARCH=arm64
+          make tarball OS=darwin ARCH=amd64
+          make tarball OS=darwin ARCH=arm64
+          make tarball OS=windows ARCH=amd64
+
+      # Build and push the image
+      - name: Install docker buildx
+        uses: docker/setup-buildx-action@4fd812986e6c8c2a69e18311145f9371337f27d4 # v3.4.0
+
+      - name: Login to GitHub Container Registry
+        id: login-ghcr
+        uses: docker/login-action@0d4c9c5ea7693da7b068278f7b52bda2a190a446 # v3.2.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # TODO move this to `make container-image` or similar.
+      # Using these to actions for now because they greatly reduce the amount
+      # of in-house logic required
+      - name: Prepare container image labels and tags
+        id: meta
+        uses: docker/metadata-action@8e5442c4ef9f78752691e2d8f8d19755c6f78e81 # v5.5.1
+        with:
+          images: |
+            ghcr.io/${{ github.repository_owner }}/${{ env.TOOL_NAME }}
+          flavor: |
+            latest=false
+          # Enable sha tag on branch push events and pull requests.
+          # Enable semver tags on tag push events, but don't overwrite major/minor tags for prereleases.
+          # Semver tags won't be generated except upon tag events.
+          tags: |
+            type=sha,prefix=v0.0.0-{{branch}}-,enable=${{ startsWith(github.ref, 'refs/heads/') }}
+            type=sha,prefix=v0.0.0-{{base_ref}}-,enable=${{ github.event_name == 'pull_request' }}
+            type=semver,pattern={{major}},value=${{ steps.setup.outputs.version }},enable=${{ steps.setup.outputs.is-prerelease != 'true' }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ steps.setup.outputs.version }},enable=${{ steps.setup.outputs.is-prerelease != 'true' }}
+            type=semver,pattern={{version}},value=${{ steps.setup.outputs.version }}
+
+      - name: Build the container image and push
+        uses: docker/build-push-action@1ca370b3a9802c92e886402e0dd88098a2533b12 # v6.4.1
+        with:
+          context: ${{ inputs.tool-directory }}
+          file: ${{ inputs.dockerfile-path }}
+          build-args: TOOL_NAME=${{ env.TOOL_NAME }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: |
+            linux/amd64
+            linux/arm64
+          provenance: true
+          sbom: true
+
+      # File a new release with the tarballs attached
+      - name: Create a new GitHub release
+        if: ${{ steps.setup.outputs.should-release == 'true' }}
+        working-directory: ${{ inputs.tool-directory }}
+        env:
+          VERSION: ${{ steps.setup.outputs.version }}
+          IS_PRERELEASE: ${{ steps.setup.outputs.is-prerelease }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ "${IS_PRERELEASE}" == 'true' ]]; then
+            EXTRA_FLAGS=("--prerelease")
+          else
+            EXTRA_FLAGS=("--latest")
+          fi
+
+          readarray -d '' RELEASE_TARBALLS < <(
+            find . -name '*.tar.gz' -print0
+          )
+
+          echo "Creating a release for ${VERSION} with files:"
+          ls -lh "${RELEASE_TARBALLS[@]}"
+
+          gh release create --title "${TOOL_NAME} ${VERSION}" --verify-tag \
+            --generate-notes "${EXTRA_FLAGS[@]}" "${GITHUB_REF_NAME}" \
+            "${RELEASE_TARBALLS[@]}"

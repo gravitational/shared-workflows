@@ -20,8 +20,10 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"slices"
 	"strings"
 
+	"github.com/gravitational/shared-workflows/bot/internal/github"
 	"github.com/gravitational/shared-workflows/bot/internal/review"
 	"github.com/gravitational/trace"
 )
@@ -87,13 +89,9 @@ func (b *Bot) Check(ctx context.Context) error {
 			b.c.Environment.Repository,
 			b.c.Environment.Number,
 		)
-		commentExists := false
-		for _, c := range comments {
-			if c.Body == comment {
-				commentExists = true
-				break
-			}
-		}
+		commentExists := slices.ContainsFunc(comments, func(c github.Comment) bool {
+			return c.Body == comment
+		})
 		if !commentExists {
 			if err := b.c.GitHub.CreateComment(ctx,
 				b.c.Environment.Organization,
@@ -119,15 +117,6 @@ func (b *Bot) Check(ctx context.Context) error {
 	return nil
 }
 
-func contains(ss []string, s string) bool {
-	for i := range ss {
-		if ss[i] == s {
-			return true
-		}
-	}
-	return false
-}
-
 // checkDoNotMerge checks if the PR has "do-not-merge" label on it.
 func (b *Bot) checkDoNotMerge(ctx context.Context) error {
 	pull, err := b.c.GitHub.GetPullRequest(ctx,
@@ -138,7 +127,7 @@ func (b *Bot) checkDoNotMerge(ctx context.Context) error {
 		return trace.Wrap(err)
 	}
 
-	if contains(pull.UnsafeLabels, doNotMergeLabel) {
+	if slices.Contains(pull.UnsafeLabels, doNotMergeLabel) {
 		return trace.BadParameter("the pull request is marked as %v", doNotMergeLabel)
 	}
 
@@ -225,7 +214,7 @@ func (b *Bot) reviewersToDismiss(ctx context.Context) ([]string, error) {
 }
 
 const (
-	// doNotMergeLabel is the name of the Github label that is put on PRs
+	// doNotMergeLabel is the name of the GitHub label that is put on PRs
 	// to prevent them from merging.
 	doNotMergeLabel = "do-not-merge"
 )
