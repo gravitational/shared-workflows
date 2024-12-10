@@ -27,4 +27,6 @@ runs:
         CREATE_BRANCHES: ${{ inputs.create_branches }}
       shell: bash
       run: |
-        go run ./tools/amplify-preview/
+        pushd ./tools/amplify-preview/
+        go run ./
+        popd
