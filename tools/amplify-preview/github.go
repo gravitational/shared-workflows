@@ -19,6 +19,7 @@ const (
 
 func postPreviewURL(ctx context.Context, commentBody string) error {
 	refName := os.Getenv("GITHUB_REF_NAME")
+	githubRepository := os.Getenv("GITHUB_REPOSITORY")
 	if !strings.HasSuffix(refName, prRefNameSuffix) {
 		return nil
 	}
@@ -39,6 +40,8 @@ func postPreviewURL(ctx context.Context, commentBody string) error {
 
 	currentPR := github.IssueIdentifier{
 		Number: prID,
+		Owner:  strings.Split(githubRepository, "/")[0],
+		Repo:   strings.Split(githubRepository, "/")[1],
 	}
 
 	comment, err := gh.FindCommentByTraits(ctx, currentPR, targetComment)
