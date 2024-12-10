@@ -18,7 +18,7 @@ runs:
 
     - uses: actions/setup-go@v5
       with:
-        go-version-file: go.mod
+        go-version-file: tools/amplify-preview/go.mod
 
     - name: Amplify Preview
       env:
@@ -27,4 +27,4 @@ runs:
         CREATE_BRANCHES: ${{ inputs.create_branches }}
       shell: bash
       run: |
-        go run ./
+        go run ./tools/amplify-preview/
