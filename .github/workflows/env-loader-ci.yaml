@@ -1,5 +1,5 @@
 ---
-name: Changelog generator CI
+name: Environment value loader CI
 
 on:
   pull_request:
@@ -11,4 +11,4 @@ jobs:
       contents: write
       packages: write
     with:
-      tool-directory: ./tools/changelog
+      tool-directory: ./tools/env-loader

@@ -52,7 +52,7 @@ var (
 	// singleApproverPaths defines paths in cloud or core repos that only require a single approver.
 	// The map key is the repo (cloud|teleport|teleport.e) and the value is a list of paths.
 	singleApproverPaths = map[string][]string{
-		"cloud": []string{
+		"cloud": {
 			"deploy/fluxcd/config/values.yaml",
 			"deploy/fluxcd/config/*/values.yaml",
 			"deploy/fluxcd/config/*/*/values.yaml",
@@ -68,7 +68,7 @@ var (
 	// require a single approver. The map key is the repo (cloud|teleport|teleport.e) and the
 	// value is a list of authors. BOTS ONLY - DO NOT INCLUDE EMPLOYEE GITHUB HANDLES.
 	singleApproverAuthors = map[string][]string{
-		"cloud": []string{Dependabot, DependabotBatcher, RenovateBotPrivate, RenovateBotPublic},
+		"cloud": {Dependabot, DependabotBatcher, RenovateBotPrivate, RenovateBotPublic},
 	}
 )
 
@@ -255,12 +255,12 @@ func (r *Assignments) getDocsReviewers(e *env.Environment, files []github.PullRe
 	// the changed docs files. If so, add them as docs reviewers.
 	repoReviewers := r.repoReviewers(e)
 	a, b := getReviewerSets(e.Author, repoReviewers, r.c.CodeReviewersOmit)
-	prefCodeReviewers := r.getAllPreferredReviewers(repoReviewers, append(a, b...), files)
+	preferredCodeReviewers := r.getAllPreferredReviewers(repoReviewers, append(a, b...), files)
 
 	// Get the docs reviewer pool, which does not depend on the files
 	// changed by a pull request.
 	docsA, docsB := getReviewerSets(e.Author, r.c.DocsReviewers, r.c.DocsReviewersOmit)
-	reviewers := append(prefCodeReviewers, append(docsA, docsB...)...)
+	reviewers := append(preferredCodeReviewers, append(docsA, docsB...)...)
 
 	// If no docs reviewers were assigned, assign admin reviews.
 	if len(reviewers) == 0 {
@@ -435,34 +435,15 @@ func (r *Assignments) CheckInternal(e *env.Environment, reviews []github.Review,
 		return nil
 	}
 
-	switch {
-	case changes.Docs && changes.Code:
-		log.Printf("Check: Found docs and code changes.")
-		if err := r.checkInternalDocsReviews(e, reviews, files); err != nil {
-			return trace.Wrap(err)
-		}
-		if err := r.checkInternalCodeReviews(e, changes, reviews); err != nil {
-			return trace.Wrap(err)
-		}
-	case !changes.Docs && changes.Code:
-		log.Printf("Check: Found code changes.")
-		if err := r.checkInternalCodeReviews(e, changes, reviews); err != nil {
-			return trace.Wrap(err)
-		}
-	case changes.Docs && !changes.Code:
-		log.Printf("Check: Found docs changes.")
-		if err := r.checkInternalDocsReviews(e, reviews, files); err != nil {
-			return trace.Wrap(err)
-		}
 	// Strange state, an empty commit? Check admins.
-	case !changes.Docs && !changes.Code:
-		log.Printf("Check: Found no docs or code changes.")
+	if !changes.Docs && !changes.Code {
+		log.Printf("Check: Found no docs or code changes, requiring admin approvals")
 		if checkN(r.GetAdminCheckers(e.Author), reviews) < 2 {
 			return trace.BadParameter("requires two admin approvals")
 		}
 	}
 
-	return nil
+	return trace.Wrap(r.checkInternalReviews(e, changes, reviews, files))
 }
 
 func (r *Assignments) checkInternalReleaseReviews(reviews []github.Review) error {
@@ -478,22 +459,18 @@ func (r *Assignments) checkInternalReleaseReviews(reviews []github.Review) error
 	return trace.BadParameter("requires at least one approval from %v", reviewers)
 }
 
-// checkInternalDocsReviews checks whether docs review requirements are satisfied
+// checkInternalReviews checks whether review requirements are satisfied
 // for a PR authored by an internal employee
-func (r *Assignments) checkInternalDocsReviews(e *env.Environment, reviews []github.Review, files []github.PullRequestFile) error {
-	reviewers := r.getDocsReviewers(e, files)
-
-	if check(reviewers, reviews) {
-		return nil
-	}
-
-	return trace.BadParameter("requires at least one approval from %v", reviewers)
-}
-
-// checkInternalCodeReviews checks whether code review requirements are satisfied
-// for a PR authored by an internal employee
-func (r *Assignments) checkInternalCodeReviews(e *env.Environment, changes env.Changes, reviews []github.Review) error {
+func (r *Assignments) checkInternalReviews(e *env.Environment, changes env.Changes, reviews []github.Review, files []github.PullRequestFile) error {
 	setA, setB := getReviewerSets(e.Author, r.repoReviewers(e), r.c.CodeReviewersOmit)
+
+	// If this PR touches docs, then approvals from docs reviewers also count.
+	// Add them to set B, as docs reviewers are not required so long as we get
+	// the appropriate number of approvals.
+	if changes.Docs {
+		log.Printf("Check: PR contains docs changes, adding docs reviewers to group 2")
+		setB = append(setB, r.getDocsReviewers(e, files)...)
+	}
 
 	// PRs can be approved if you either have multiple code owners that approve
 	// or code owner and code reviewer. An exception is for PRs that
