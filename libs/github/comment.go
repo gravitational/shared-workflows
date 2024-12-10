@@ -32,15 +32,17 @@ func (c *Client) FindCommentByTraits(ctx context.Context, issue IssueIdentifier,
 
 	for _, c := range comments {
 		matcher := true
-		matcher = matcher &&
-			targetComment.UserLogin != nil &&
-			c.User != nil && c.User.Login != nil &&
-			*c.User.Login == *targetComment.UserLogin
+		if targetComment.UserLogin != nil {
+			matcher = matcher &&
+				c.User != nil && c.User.Login != nil &&
+				*c.User.Login == *targetComment.UserLogin
+		}
 
-		matcher = matcher &&
-			targetComment.BodyContains != nil &&
-			c.Body != nil &&
-			strings.Contains(*c.Body, *targetComment.BodyContains)
+		if targetComment.BodyContains != nil {
+			matcher = matcher &&
+				c.Body != nil &&
+				strings.Contains(*c.Body, *targetComment.BodyContains)
+		}
 
 		if matcher {
 			return c, nil

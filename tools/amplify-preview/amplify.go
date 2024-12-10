@@ -194,7 +194,7 @@ func (err aggregatedError) Error() error {
 }
 
 func amplifyJobToMarkdown(job *types.JobSummary, branch *types.Branch) string {
-	var mdTableHeader = [...]string{"Branch", "Status", "Preview", "Updated (UTC)"}
+	var mdTableHeader = [...]string{"Branch", "Commit", "Status", "Preview", "Updated (UTC)"}
 	var commentBody strings.Builder
 	var jobStatusToEmoji = map[types.JobStatus]rune{
 		types.JobStatusFailed:       '❌',
@@ -222,7 +222,9 @@ func amplifyJobToMarkdown(job *types.JobSummary, branch *types.Branch) string {
 	// Markdown table content
 	commentBody.WriteString(*branch.BranchName)
 	commentBody.WriteString(" | ")
-	commentBody.WriteString(fmt.Sprintf("%c %s", jobStatusToEmoji[job.Status], job.Status))
+	commentBody.WriteString(*job.CommitId)
+	commentBody.WriteString(" | ")
+	commentBody.WriteString(fmt.Sprintf("%c%s", jobStatusToEmoji[job.Status], job.Status))
 	commentBody.WriteString(" | ")
 	commentBody.WriteString(fmt.Sprintf("https://%s.%s.%s", *branch.DisplayName, appID, amplifyDefaultDomain))
 	commentBody.WriteString(" | ")

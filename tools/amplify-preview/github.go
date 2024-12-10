@@ -45,13 +45,12 @@ func postPreviewURL(ctx context.Context, commentBody string) error {
 	}
 
 	comment, err := gh.FindCommentByTraits(ctx, currentPR, targetComment)
-	if err != nil && !errors.Is(err, github.ErrCommentNotFound) {
+	if err != nil {
+		if errors.Is(err, github.ErrCommentNotFound) {
+			return gh.CreateComment(ctx, currentPR, commentBody)
+		}
 		return fmt.Errorf("something went wrong while searching for comment: %w", err)
 	}
 
-	if comment == nil {
-		return gh.CreateComment(ctx, currentPR, commentBody)
-	} else {
-		return gh.UpdateComment(ctx, currentPR, comment.GetID(), commentBody)
-	}
+	return gh.UpdateComment(ctx, currentPR, comment.GetID(), commentBody)
 }
