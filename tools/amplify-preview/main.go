@@ -93,6 +93,8 @@ func main() {
 		os.Exit(1)
 	}
 
+	logger.Info("Successfully posted PR comment")
+
 	if job.Status == types.JobStatusFailed {
 		logger.Error("amplify job is in failed state", "job_status", job.Status, "job_id", job.JobId)
 		os.Exit(1)
