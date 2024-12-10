@@ -19,6 +19,7 @@ runs:
     - uses: actions/setup-go@v5
       with:
         go-version-file: tools/amplify-preview/go.mod
+        cache-dependency-path: tools/amplify-preview/go.sum
 
     - name: Amplify Preview
       env:

@@ -19,16 +19,20 @@ package main
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
+	"os"
 
 	"github.com/alecthomas/kingpin/v2"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/retry"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/amplify"
+	"github.com/aws/aws-sdk-go-v2/service/amplify/types"
 )
 
 var (
+	logger = slog.New(slog.NewTextHandler(os.Stderr, nil))
+
 	amplifyAppIDs  = kingpin.Flag("amplify-app-ids", "List of Amplify App IDs").Envar("AMPLIFY_APP_IDS").Required().Strings()
 	gitBranchName  = kingpin.Flag("git-branch-name", "Git branch name").Envar("GIT_BRANCH_NAME").Required().String()
 	createBranches = kingpin.Flag("crate-branches",
@@ -36,6 +40,7 @@ var (
 )
 
 func main() {
+
 	kingpin.Parse()
 	ctx := context.Background()
 
@@ -43,7 +48,8 @@ func main() {
 		return retry.AddWithMaxAttempts(retry.NewStandard(), 10)
 	}))
 	if err != nil {
-		log.Fatalln("failed to load configuration", err)
+		logger.Error("failed to load configuration", "error", err)
+		os.Exit(1)
 	}
 
 	amp := AmplifyPreview{
@@ -54,32 +60,41 @@ func main() {
 	// Check if Amplify branch is already connected to one of the Amplify Apps
 	branch, err := amp.FindExistingBranch(ctx, *gitBranchName)
 	if err != nil {
-		log.Fatalf("Failed to lookup branch %q: %s", *gitBranchName, err)
+		logger.Error("failed to lookup branch", logKeyBranchName, *gitBranchName, "error", err)
+		os.Exit(1)
 	}
 
 	// If branch wasn't found, and branch creation enabled - create new branch
 	if branch == nil && *createBranches {
 		branch, err = amp.CreateBranch(ctx, *gitBranchName)
 		if err != nil {
-			log.Fatalf("Failed to lookup create %q: %s", *gitBranchName, err)
+			logger.Error("failed to create branch", logKeyBranchName, *gitBranchName, "error", err)
+			os.Exit(1)
 		}
 	}
 
 	// check if existing branch was/being already deployed
 	job, err := amp.GetJob(ctx, branch, nil)
 	if err != nil {
-		log.Fatalf("Failed to get amplify job %q: %s", *gitBranchName, err)
+		logger.Error("failed to get amplify job", logKeyBranchName, *gitBranchName, "error", err)
+		os.Exit(1)
 	}
 
 	if errors.Is(err, errNoJobForBranch) && *createBranches {
 		job, err = amp.StartJob(ctx, branch)
 		if err != nil {
-			log.Fatalf("Failed to start amplify job %q: %s", *gitBranchName, err)
+			logger.Error("failed to start amplify job", logKeyBranchName, *gitBranchName, "error", err)
+			os.Exit(1)
 		}
 	}
 
 	if err := postPreviewURL(ctx, amplifyJobToMarkdown(job, branch)); err != nil {
-		log.Fatalln("Failed to post preview URL", err)
+		logger.Error("failed to post preview URL", "error", err)
+		os.Exit(1)
 	}
 
+	logger.Error("amplify job is in failed state", "job_status", job.Status, "job_id", job.JobId)
+	if job.Status == types.JobStatusFailed {
+		os.Exit(1)
+	}
 }

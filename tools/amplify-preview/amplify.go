@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/service/amplify"
@@ -68,7 +67,7 @@ func (amp *AmplifyPreview) FindExistingBranch(ctx context.Context, branchName st
 	for resp := range resultCh {
 		var errNotFound *types.ResourceNotFoundException
 		if errors.As(resp.err, &errNotFound) {
-			slog.Debug("Branch not found", logKeyAppID, resp.appID, logKeyBranchName, branchName)
+			logger.Debug("Branch not found", logKeyAppID, resp.appID, logKeyBranchName, branchName)
 			continue
 		} else if resp.err != nil {
 			failedResp.perAppErr[resp.appID] = resp.err
@@ -104,13 +103,13 @@ func (amp *AmplifyPreview) CreateBranch(ctx context.Context, branchName string) 
 
 		var errLimitExceeded *types.LimitExceededException
 		if errors.As(err, &errLimitExceeded) {
-			slog.Debug("Reached branches limit", logKeyAppID, appID)
+			logger.Debug("Reached branches limit", logKeyAppID, appID)
 		} else if err != nil {
 			failedResp.perAppErr[appID] = err
 		}
 
 		if resp != nil {
-			slog.Info("Successfully created branch", logKeyAppID, appID, logKeyBranchName, resp.Branch.BranchName, logKeyJobID)
+			logger.Info("Successfully created branch", logKeyAppID, appID, logKeyBranchName, resp.Branch.BranchName, logKeyJobID, resp.Branch.ActiveJobId)
 			return resp.Branch, nil
 		}
 	}
@@ -135,7 +134,7 @@ func (amp *AmplifyPreview) StartJob(ctx context.Context, branch *types.Branch) (
 		return nil, err
 	}
 
-	slog.Info("Successfully started job", logKeyAppID, appID, logKeyBranchName, branch.BranchName, logKeyJobID, resp.JobSummary.JobId)
+	logger.Info("Successfully started job", logKeyAppID, appID, logKeyBranchName, branch.BranchName, logKeyJobID, resp.JobSummary.JobId)
 
 	return resp.JobSummary, nil
 
