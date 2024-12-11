@@ -72,7 +72,7 @@ func (amp *AmplifyPreview) FindExistingBranch(ctx context.Context, branchName st
 	}
 
 	for resp := range resultCh {
-		var errNotFound *types.ResourceNotFoundException
+		var errNotFound *types.NotFoundException
 		if errors.As(resp.err, &errNotFound) {
 			logger.Debug("Branch not found", logKeyAppID, resp.appID, logKeyBranchName, branchName)
 			continue
