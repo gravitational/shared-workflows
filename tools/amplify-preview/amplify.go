@@ -116,7 +116,7 @@ func (amp *AmplifyPreview) CreateBranch(ctx context.Context, branchName string) 
 		}
 
 		if resp != nil {
-			logger.Info("Successfully created branch", logKeyAppID, appID, logKeyBranchName, resp.Branch.BranchName, logKeyJobID, resp.Branch.ActiveJobId)
+			logger.Info("Successfully created branch", logKeyAppID, appID, logKeyBranchName, *resp.Branch.BranchName, logKeyJobID, resp.Branch.ActiveJobId)
 			return resp.Branch, nil
 		}
 	}
@@ -134,7 +134,7 @@ func (amp *AmplifyPreview) StartJob(ctx context.Context, branch *types.Branch) (
 		AppId:      &appID,
 		BranchName: branch.BranchName,
 		JobType:    types.JobTypeRelease,
-		JobReason:  aws.String("Initial job for PR-xxx"),
+		JobReason:  aws.String("Initial job from GHA"),
 	})
 
 	if err != nil {
@@ -221,6 +221,8 @@ func amplifyJobToMarkdown(job *types.JobSummary, branch *types.Branch) string {
 	}
 
 	commentBody.WriteString(amplifyMarkdownHeader)
+	commentBody.WriteByte('\n')
+	commentBody.WriteString("- [ ] Check this box to update Preview status")
 	commentBody.WriteByte('\n')
 
 	// Markdown table header
