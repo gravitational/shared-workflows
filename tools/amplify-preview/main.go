@@ -67,12 +67,12 @@ func main() {
 	// Check if Amplify branch is already connected to one of the Amplify Apps
 	branch, err := amp.FindExistingBranch(ctx, *gitBranchName)
 	if err != nil {
-		logger.Error("failed to lookup branch", logKeyBranchName, *gitBranchName, "error", err)
-		os.Exit(1)
-	}
+		if !*createBranches && !errors.Is(err, errNoJobForBranch) {
+			logger.Error("failed to lookup branch", logKeyBranchName, *gitBranchName, "error", err)
+			os.Exit(1)
+		}
 
-	// If branch wasn't found, and branch creation enabled - create new branch
-	if branch == nil && *createBranches {
+		// If branch wasn't found, and branch creation enabled - create new branch
 		branch, err = amp.CreateBranch(ctx, *gitBranchName)
 		if err != nil {
 			logger.Error("failed to create branch", logKeyBranchName, *gitBranchName, "error", err)
@@ -80,14 +80,15 @@ func main() {
 		}
 	}
 
-	// check if existing branch was/being already deployed
+	// check if existing branch was/being deployed already
 	job, err := amp.GetJob(ctx, branch, nil)
 	if err != nil {
-		logger.Error("failed to get amplify job", logKeyBranchName, *gitBranchName, "error", err)
-		os.Exit(1)
-	}
+		if !*createBranches && !errors.Is(err, errNoJobForBranch) {
+			logger.Error("failed to get amplify job", logKeyBranchName, *gitBranchName, "error", err)
+			os.Exit(1)
+		}
 
-	if errors.Is(err, errNoJobForBranch) && *createBranches {
+		// if job not found and branch was just created - start new job
 		job, err = amp.StartJob(ctx, branch)
 		if err != nil {
 			logger.Error("failed to start amplify job", logKeyBranchName, *gitBranchName, "error", err)
