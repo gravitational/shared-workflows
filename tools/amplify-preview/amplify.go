@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/amplify"
@@ -43,10 +44,13 @@ func (amp *AmplifyPreview) FindExistingBranch(ctx context.Context, branchName st
 		data  *amplify.GetBranchOutput
 		err   error
 	}
+	var wg sync.WaitGroup
+	wg.Add(len(amp.appIDs))
 	resultCh := make(chan resp, len(amp.appIDs))
 
 	for _, appID := range amp.appIDs {
 		go func() {
+			defer wg.Done()
 			branch, err := amp.client.GetBranch(ctx, &amplify.GetBranchInput{
 				AppId:      aws.String(appID),
 				BranchName: aws.String(branchName),
@@ -56,9 +60,11 @@ func (amp *AmplifyPreview) FindExistingBranch(ctx context.Context, branchName st
 				data:  branch,
 				err:   err,
 			}
-
 		}()
 	}
+
+	wg.Wait()
+	close(resultCh)
 
 	failedResp := aggregatedError{
 		perAppErr: map[string]error{},
