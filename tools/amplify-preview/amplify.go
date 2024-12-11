@@ -141,7 +141,7 @@ func (amp *AmplifyPreview) StartJob(ctx context.Context, branch *types.Branch) (
 		return nil, err
 	}
 
-	logger.Info("Successfully started job", logKeyAppID, appID, logKeyBranchName, branch.BranchName, logKeyJobID, resp.JobSummary.JobId)
+	logger.Info("Successfully started job", logKeyAppID, appID, logKeyBranchName, *branch.BranchName, logKeyJobID, *resp.JobSummary.JobId)
 
 	return resp.JobSummary, nil
 
@@ -215,6 +215,9 @@ func amplifyJobToMarkdown(job *types.JobSummary, branch *types.Branch) string {
 	updateTime := job.StartTime
 	if job.EndTime != nil {
 		updateTime = job.EndTime
+	}
+	if updateTime == nil {
+		updateTime = branch.CreateTime
 	}
 
 	commentBody.WriteString(amplifyMarkdownHeader)
