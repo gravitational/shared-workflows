@@ -21,6 +21,7 @@ import (
 	"errors"
 	"log/slog"
 	"os"
+	"strings"
 
 	"github.com/alecthomas/kingpin/v2"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -40,7 +41,6 @@ var (
 )
 
 func main() {
-
 	kingpin.Parse()
 	ctx := context.Background()
 
@@ -54,7 +54,14 @@ func main() {
 
 	amp := AmplifyPreview{
 		client: amplify.NewFromConfig(cfg),
-		appIDs: *amplifyAppIDs,
+		appIDs: func() []string {
+			if len(*amplifyAppIDs) == 1 {
+				// kingpin env variables are separated by new lines, and there is no way to change the behavior
+				// https://github.com/alecthomas/kingpin/issues/249
+				return strings.Split((*amplifyAppIDs)[0], ",")
+			}
+			return *amplifyAppIDs
+		}(),
 	}
 
 	// Check if Amplify branch is already connected to one of the Amplify Apps
