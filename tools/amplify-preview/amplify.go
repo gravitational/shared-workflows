@@ -224,6 +224,7 @@ func amplifyJobToMarkdown(job *types.JobSummary, branch *types.Branch) string {
 	commentBody.WriteByte('\n')
 	commentBody.WriteString("- [ ] Check this box to update Preview status")
 	commentBody.WriteByte('\n')
+	commentBody.WriteByte('\n')
 
 	// Markdown table header
 	commentBody.WriteString(strings.Join(mdTableHeader[:], " | "))
