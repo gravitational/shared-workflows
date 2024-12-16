@@ -11,6 +11,9 @@ inputs:
   github_token:
     required: true
     description: "Github token with permissions to read/write comments in pull request"
+  wait:
+    default: "false"
+    description: "If Amplify deployment is pending/running state wait for it's completion"
 runs:
   using: composite
   steps:
@@ -30,6 +33,7 @@ runs:
         GIT_BRANCH_NAME: ${{ steps.extract_branch.outputs.branch }}
         CREATE_BRANCHES: ${{ inputs.create_branches }}
         GITHUB_TOKEN: ${{ inputs.github_token }}
+        WAIT: ${{ inputs.wait }} 
       shell: bash
       run: |
         pushd ./tools/amplify-preview/; go run ./; popd

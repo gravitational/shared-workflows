@@ -22,6 +22,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/alecthomas/kingpin/v2"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -38,6 +39,13 @@ var (
 	gitBranchName  = kingpin.Flag("git-branch-name", "Git branch name").Envar("GIT_BRANCH_NAME").Required().String()
 	createBranches = kingpin.Flag("crate-branches",
 		"Defines whether Amplify branches should be created if missing, or just lookup existing ones").Envar("CREATE_BRANCHES").Default("false").Bool()
+	wait = kingpin.Flag("wait",
+		"Wait for pending/running job to complete").Envar("wait").Default("false").Bool()
+)
+
+const (
+	jobWaitSleepTime    = 30 * time.Second
+	jobWaitTimeAttempts = 40
 )
 
 func main() {
@@ -81,7 +89,7 @@ func main() {
 	}
 
 	// check if existing branch was/being deployed already
-	job, err := amp.GetJob(ctx, branch, nil)
+	job, err := amp.GetLatestJob(ctx, branch, nil)
 	if err != nil {
 		if !*createBranches && !errors.Is(err, errNoJobForBranch) {
 			logger.Error("failed to get amplify job", logKeyBranchName, *gitBranchName, "error", err)
@@ -100,11 +108,28 @@ func main() {
 		logger.Error("failed to post preview URL", "error", err)
 		os.Exit(1)
 	}
-
 	logger.Info("Successfully posted PR comment")
 
+	if *wait {
+		for i := 0; !isAmplifyJobCompleted(job) && i < jobWaitTimeAttempts; i++ {
+			job, err := amp.GetLatestJob(ctx, branch, nil)
+			if err != nil {
+				logger.Error("failed to get amplify job", logKeyBranchName, *gitBranchName, "error", err)
+				os.Exit(1)
+			}
+
+			logger.Info("Job is not in a completed state yet. Sleeping...", logKeyBranchName, *gitBranchName, "job_status", job.Status, "job_id", job.JobId)
+			time.Sleep(jobWaitSleepTime)
+		}
+
+		if err := postPreviewURL(ctx, amplifyJobToMarkdown(job, branch)); err != nil {
+			logger.Error("failed to post preview URL", "error", err)
+			os.Exit(1)
+		}
+	}
+
 	if job.Status == types.JobStatusFailed {
-		logger.Error("amplify job is in failed state", "job_status", job.Status, "job_id", job.JobId)
+		logger.Error("amplify job is in failed state", logKeyBranchName, *gitBranchName, "job_status", job.Status, "job_id", job.JobId)
 		os.Exit(1)
 	}
 }

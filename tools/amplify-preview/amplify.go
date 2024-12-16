@@ -1,3 +1,19 @@
+/*
+Copyright 2024 Gravitational, Inc.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+	http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package main
 
 import (
@@ -15,8 +31,13 @@ import (
 )
 
 var (
-	errBranchNotFound = errors.New("Branch not found")
-	errNoJobForBranch = errors.New("Current branch has no jobs")
+	errBranchNotFound           = errors.New("Branch not found")
+	errNoJobForBranch           = errors.New("Current branch has no jobs")
+	amplifyJobCompletedStatuses = map[types.JobStatus]struct{}{
+		types.JobStatusFailed:    {},
+		types.JobStatusCancelled: {},
+		types.JobStatusSucceed:   {},
+	}
 )
 
 const (
@@ -147,7 +168,7 @@ func (amp *AmplifyPreview) StartJob(ctx context.Context, branch *types.Branch) (
 
 }
 
-func (amp *AmplifyPreview) GetJob(ctx context.Context, branch *types.Branch, jobID *string) (*types.JobSummary, error) {
+func (amp *AmplifyPreview) GetLatestJob(ctx context.Context, branch *types.Branch, jobID *string) (*types.JobSummary, error) {
 	appID, err := appIDFromBranchARN(*branch.BranchArn)
 	if err != nil {
 		return nil, err
@@ -158,16 +179,17 @@ func (amp *AmplifyPreview) GetJob(ctx context.Context, branch *types.Branch, job
 	}
 
 	if jobID != nil {
-		resp, err := amp.client.GetJob(ctx, &amplify.GetJobInput{
+		resp, err := amp.client.ListJobs(ctx, &amplify.ListJobsInput{
 			AppId:      aws.String(appID),
 			BranchName: branch.BranchName,
-			JobId:      jobID,
+			MaxResults: 1,
 		})
 		if err != nil {
 			return nil, err
 		}
-
-		return resp.Job.Summary, nil
+		if len(resp.JobSummaries) > 0 {
+			return &resp.JobSummaries[0], nil
+		}
 	}
 
 	return nil, errNoJobForBranch
@@ -186,6 +208,11 @@ func appIDFromBranchARN(branchArn string) (string, error) {
 	return "", fmt.Errorf("Invalid branch ARN")
 }
 
+func isAmplifyJobCompleted(job *types.JobSummary) bool {
+	_, ok := amplifyJobCompletedStatuses[job.Status]
+	return ok
+}
+
 func (err aggregatedError) Error() error {
 	if len(err.perAppErr) == 0 {
 		return nil
@@ -200,7 +227,7 @@ func (err aggregatedError) Error() error {
 }
 
 func amplifyJobToMarkdown(job *types.JobSummary, branch *types.Branch) string {
-	var mdTableHeader = [...]string{"Branch", "Commit", "Status", "Preview", "Updated (UTC)"}
+	var mdTableHeader = [...]string{"Branch", "Commit", "Job ID", "Status", "Preview", "Updated (UTC)"}
 	var commentBody strings.Builder
 	var jobStatusToEmoji = map[types.JobStatus]rune{
 		types.JobStatusFailed:       '❌',
@@ -233,9 +260,11 @@ func amplifyJobToMarkdown(job *types.JobSummary, branch *types.Branch) string {
 	commentBody.WriteString(" | ")
 	commentBody.WriteString(*job.CommitId)
 	commentBody.WriteString(" | ")
+	commentBody.WriteString(*job.JobId)
+	commentBody.WriteString(" | ")
 	commentBody.WriteString(fmt.Sprintf("%c%s", jobStatusToEmoji[job.Status], job.Status))
 	commentBody.WriteString(" | ")
-	commentBody.WriteString(fmt.Sprintf("https://%s.%s.%s", *branch.DisplayName, appID, amplifyDefaultDomain))
+	commentBody.WriteString(fmt.Sprintf("[%[1]s](https://%[1]s.%s.%s)", *branch.DisplayName, appID, amplifyDefaultDomain))
 	commentBody.WriteString(" | ")
 	commentBody.WriteString(updateTime.Format(time.DateTime))
 	commentBody.WriteByte('\n')
