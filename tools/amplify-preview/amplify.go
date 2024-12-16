@@ -32,8 +32,8 @@ import (
 )
 
 var (
-	errBranchNotFound           = errors.New("Branch not found")
-	errNoJobForBranch           = errors.New("Current branch has no jobs")
+	errBranchNotFound           = errors.New("branch not found")
+	errNoJobForBranch           = errors.New("current branch has no jobs")
 	amplifyJobCompletedStatuses = map[types.JobStatus]struct{}{
 		types.JobStatusFailed:    {},
 		types.JobStatusCancelled: {},
