@@ -40,7 +40,7 @@ var (
 	createBranches = kingpin.Flag("crate-branches",
 		"Defines whether Amplify branches should be created if missing, or just lookup existing ones").Envar("CREATE_BRANCHES").Default("false").Bool()
 	wait = kingpin.Flag("wait",
-		"Wait for pending/running job to complete").Envar("wait").Default("false").Bool()
+		"Wait for pending/running job to complete").Envar("WAIT").Default("false").Bool()
 )
 
 const (
@@ -89,7 +89,7 @@ func main() {
 	}
 
 	// check if existing branch was/being deployed already
-	job, err := amp.GetLatestJob(ctx, branch, nil)
+	latestJob, activeJob, err := amp.GetLatestAndActiveJobs(ctx, branch)
 	if err != nil {
 		if !*createBranches && !errors.Is(err, errNoJobForBranch) {
 			logger.Error("failed to get amplify job", logKeyBranchName, *gitBranchName, "error", err)
@@ -97,39 +97,40 @@ func main() {
 		}
 
 		// if job not found and branch was just created - start new job
-		job, err = amp.StartJob(ctx, branch)
+		latestJob, err = amp.StartJob(ctx, branch)
 		if err != nil {
 			logger.Error("failed to start amplify job", logKeyBranchName, *gitBranchName, "error", err)
 			os.Exit(1)
 		}
 	}
 
-	if err := postPreviewURL(ctx, amplifyJobToMarkdown(job, branch)); err != nil {
+	if err := postPreviewURL(ctx, amplifyJobsToMarkdown(branch, latestJob, activeJob)); err != nil {
 		logger.Error("failed to post preview URL", "error", err)
 		os.Exit(1)
 	}
 	logger.Info("Successfully posted PR comment")
 
 	if *wait {
-		for i := 0; !isAmplifyJobCompleted(job) && i < jobWaitTimeAttempts; i++ {
-			job, err := amp.GetLatestJob(ctx, branch, nil)
+		for i := 0; !isAmplifyJobCompleted(latestJob) && i < jobWaitTimeAttempts; i++ {
+			latestJob, activeJob, err = amp.GetLatestAndActiveJobs(ctx, branch)
 			if err != nil {
 				logger.Error("failed to get amplify job", logKeyBranchName, *gitBranchName, "error", err)
 				os.Exit(1)
 			}
 
-			logger.Info("Job is not in a completed state yet. Sleeping...", logKeyBranchName, *gitBranchName, "job_status", job.Status, "job_id", job.JobId)
+			logger.Info("Job is not in a completed state yet. Sleeping...",
+				logKeyBranchName, *gitBranchName, "job_status", latestJob.Status, "job_id", *latestJob.JobId, "attempts_left", jobWaitTimeAttempts-i)
 			time.Sleep(jobWaitSleepTime)
 		}
 
-		if err := postPreviewURL(ctx, amplifyJobToMarkdown(job, branch)); err != nil {
+		if err := postPreviewURL(ctx, amplifyJobsToMarkdown(branch, latestJob, activeJob)); err != nil {
 			logger.Error("failed to post preview URL", "error", err)
 			os.Exit(1)
 		}
 	}
 
-	if job.Status == types.JobStatusFailed {
-		logger.Error("amplify job is in failed state", logKeyBranchName, *gitBranchName, "job_status", job.Status, "job_id", job.JobId)
+	if latestJob.Status == types.JobStatusFailed {
+		logger.Error("amplify job is in failed state", logKeyBranchName, *gitBranchName, "job_status", latestJob.Status, "job_id", *latestJob.JobId)
 		os.Exit(1)
 	}
 }

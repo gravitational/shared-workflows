@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -168,31 +169,36 @@ func (amp *AmplifyPreview) StartJob(ctx context.Context, branch *types.Branch) (
 
 }
 
-func (amp *AmplifyPreview) GetLatestJob(ctx context.Context, branch *types.Branch, jobID *string) (*types.JobSummary, error) {
+func (amp *AmplifyPreview) GetLatestAndActiveJobs(ctx context.Context, branch *types.Branch) (latestJob, activeJob *types.JobSummary, err error) {
 	appID, err := appIDFromBranchARN(*branch.BranchArn)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	if jobID == nil {
-		jobID = branch.ActiveJobId
+	resp, err := amp.client.ListJobs(ctx, &amplify.ListJobsInput{
+		AppId:      aws.String(appID),
+		BranchName: branch.BranchName,
+		MaxResults: 50,
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(resp.JobSummaries) == 0 {
+		return nil, nil, errNoJobForBranch
 	}
 
-	if jobID != nil {
-		resp, err := amp.client.ListJobs(ctx, &amplify.ListJobsInput{
-			AppId:      aws.String(appID),
-			BranchName: branch.BranchName,
-			MaxResults: 1,
-		})
-		if err != nil {
-			return nil, err
+	latestJob = &resp.JobSummaries[0]
+	if branch.ActiveJobId != nil {
+		for _, j := range resp.JobSummaries {
+			jobID, _ := strconv.Atoi(*j.JobId)
+			activeJobID, _ := strconv.Atoi(*branch.ActiveJobId)
+			if jobID == activeJobID {
+				activeJob = &j
+			}
 		}
-		if len(resp.JobSummaries) > 0 {
-			return &resp.JobSummaries[0], nil
-		}
 	}
 
-	return nil, errNoJobForBranch
+	return latestJob, activeJob, nil
 }
 
 func appIDFromBranchARN(branchArn string) (string, error) {
@@ -226,7 +232,7 @@ func (err aggregatedError) Error() error {
 	return fmt.Errorf("%s for apps:\n\t%s", err.message, msg.String())
 }
 
-func amplifyJobToMarkdown(job *types.JobSummary, branch *types.Branch) string {
+func amplifyJobsToMarkdown(branch *types.Branch, jobs ...*types.JobSummary) string {
 	var mdTableHeader = [...]string{"Branch", "Commit", "Job ID", "Status", "Preview", "Updated (UTC)"}
 	var commentBody strings.Builder
 	var jobStatusToEmoji = map[types.JobStatus]rune{
@@ -239,35 +245,44 @@ func amplifyJobToMarkdown(job *types.JobSummary, branch *types.Branch) string {
 
 	appID, _ := appIDFromBranchARN(*branch.BranchArn)
 
-	updateTime := job.StartTime
-	if job.EndTime != nil {
-		updateTime = job.EndTime
-	}
-	if updateTime == nil {
-		updateTime = branch.CreateTime
-	}
-
+	// Markdown table header
 	commentBody.WriteString(amplifyMarkdownHeader)
 	commentBody.WriteByte('\n')
-
-	// Markdown table header
 	commentBody.WriteString(strings.Join(mdTableHeader[:], " | "))
 	commentBody.WriteByte('\n')
 	commentBody.WriteString(strings.TrimSuffix(strings.Repeat("---------|", len(mdTableHeader)), "|"))
 	commentBody.WriteByte('\n')
+
+	var previousJobStatus types.JobStatus = "unknown"
 	// Markdown table content
-	commentBody.WriteString(*branch.BranchName)
-	commentBody.WriteString(" | ")
-	commentBody.WriteString(*job.CommitId)
-	commentBody.WriteString(" | ")
-	commentBody.WriteString(*job.JobId)
-	commentBody.WriteString(" | ")
-	commentBody.WriteString(fmt.Sprintf("%c%s", jobStatusToEmoji[job.Status], job.Status))
-	commentBody.WriteString(" | ")
-	commentBody.WriteString(fmt.Sprintf("[%[1]s](https://%[1]s.%s.%s)", *branch.DisplayName, appID, amplifyDefaultDomain))
-	commentBody.WriteString(" | ")
-	commentBody.WriteString(updateTime.Format(time.DateTime))
-	commentBody.WriteByte('\n')
+	for _, job := range jobs {
+		if job == nil || job.Status == previousJobStatus {
+			continue
+		}
+
+		updateTime := job.StartTime
+		if job.EndTime != nil {
+			updateTime = job.EndTime
+		}
+		if updateTime == nil {
+			updateTime = branch.CreateTime
+		}
+
+		commentBody.WriteString(*branch.BranchName)
+		commentBody.WriteString(" | ")
+		commentBody.WriteString(*job.CommitId)
+		commentBody.WriteString(" | ")
+		commentBody.WriteString(*job.JobId)
+		commentBody.WriteString(" | ")
+		commentBody.WriteString(fmt.Sprintf("%c%s", jobStatusToEmoji[job.Status], job.Status))
+		commentBody.WriteString(" | ")
+		commentBody.WriteString(fmt.Sprintf("[%[1]s](https://%[1]s.%s.%s)", *branch.DisplayName, appID, amplifyDefaultDomain))
+		commentBody.WriteString(" | ")
+		commentBody.WriteString(updateTime.Format(time.DateTime))
+		commentBody.WriteByte('\n')
+
+		previousJobStatus = job.Status
+	}
 
 	return commentBody.String()
 }
