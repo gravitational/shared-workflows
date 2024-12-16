@@ -37,7 +37,7 @@ var (
 
 	amplifyAppIDs  = kingpin.Flag("amplify-app-ids", "List of Amplify App IDs").Envar("AMPLIFY_APP_IDS").Required().Strings()
 	gitBranchName  = kingpin.Flag("git-branch-name", "Git branch name").Envar("GIT_BRANCH_NAME").Required().String()
-	createBranches = kingpin.Flag("crate-branches",
+	createBranches = kingpin.Flag("create-branches",
 		"Defines whether Amplify branches should be created if missing, or just lookup existing ones").Envar("CREATE_BRANCHES").Default("false").Bool()
 	wait = kingpin.Flag("wait",
 		"Wait for pending/running job to complete").Envar("WAIT").Default("false").Bool()
