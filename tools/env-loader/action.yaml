@@ -61,12 +61,18 @@ runs:
 
         # Install the tool
         echo "Installing to ${INSTALL_DIR}..."
+        echo "DEBUG LOG"
+        echo "command -v sudo: $(command -v sudo)"
+        echo "Shell: ${SHELL:-NOT SET}"
         if ! command -v sudo; then
           # Ensure the sudo "command" exists
+          echo "Setting alias"
           alias sudo=""
+        else
+          echo "Not setting alias"
         fi
         sudo mkdir -pv -m 755 "${INSTALL_DIR}"
-        sudo tar -xzvf "${DOWNLOAD_PATH}" -C "${INSTALL_DIR}" "${TOOL_NAME}"
+        sudo tar -xzf "${DOWNLOAD_PATH}" -C "${INSTALL_DIR}" "${TOOL_NAME}"
         echo "${INSTALL_DIR}" >> "${GITHUB_PATH}"
         echo "Installation complete!"
 
