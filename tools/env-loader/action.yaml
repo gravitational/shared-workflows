@@ -74,5 +74,5 @@ runs:
       env:
         ENV_LOADER_ENVIRONMENTS_DIRECTORY: "${{ inputs.environments-directory }}"
         ENV_LOADER_ENVIRONMENT: "${{ inputs.environment-name }}"
-        ENV_LOADER_VALUE_SETS: "${{ inputs.value-set }}"
+        ENV_LOADER_VALUE_SETS: "${{ inputs.value-sets }}"
       run: env-loader >> "${GITHUB_ENV}"
