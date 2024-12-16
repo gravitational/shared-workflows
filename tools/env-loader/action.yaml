@@ -61,8 +61,12 @@ runs:
 
         # Install the tool
         echo "Installing to ${INSTALL_DIR}..."
-        mkdir -pv "${INSTALL_DIR}"
-        tar -xzvf "${DOWNLOAD_PATH}" -C "${INSTALL_DIR}" "${TOOL_NAME}"
+        if ! command -v sudo; then
+          # Ensure the sudo "command" exists
+          alias sudo=""
+        fi
+        sudo mkdir -pv -m 755 "${INSTALL_DIR}"
+        sudo tar -xzvf "${DOWNLOAD_PATH}" -C "${INSTALL_DIR}" "${TOOL_NAME}"
         echo "${INSTALL_DIR}" >> "${GITHUB_PATH}"
         echo "Installation complete!"
 
