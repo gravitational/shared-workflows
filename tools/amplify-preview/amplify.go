@@ -51,8 +51,9 @@ const (
 )
 
 type AmplifyPreview struct {
-	appIDs []string
-	client *amplify.Client
+	appIDs     []string
+	branchName string
+	client     *amplify.Client
 }
 
 type aggregatedError struct {
@@ -60,7 +61,7 @@ type aggregatedError struct {
 	message   string
 }
 
-func (amp *AmplifyPreview) FindExistingBranch(ctx context.Context, branchName string) (*types.Branch, error) {
+func (amp *AmplifyPreview) FindExistingBranch(ctx context.Context) (*types.Branch, error) {
 	type resp struct {
 		appID string
 		data  *amplify.GetBranchOutput
@@ -75,7 +76,7 @@ func (amp *AmplifyPreview) FindExistingBranch(ctx context.Context, branchName st
 			defer wg.Done()
 			branch, err := amp.client.GetBranch(ctx, &amplify.GetBranchInput{
 				AppId:      aws.String(appID),
-				BranchName: aws.String(branchName),
+				BranchName: aws.String(amp.branchName),
 			})
 			resultCh <- resp{
 				appID: appID,
@@ -96,7 +97,7 @@ func (amp *AmplifyPreview) FindExistingBranch(ctx context.Context, branchName st
 	for resp := range resultCh {
 		var errNotFound *types.NotFoundException
 		if errors.As(resp.err, &errNotFound) {
-			logger.Debug("Branch not found", logKeyAppID, resp.appID, logKeyBranchName, branchName)
+			logger.Debug("Branch not found", logKeyAppID, resp.appID, logKeyBranchName, amp.branchName)
 			continue
 		} else if resp.err != nil {
 			failedResp.perAppErr[resp.appID] = resp.err
@@ -115,7 +116,7 @@ func (amp *AmplifyPreview) FindExistingBranch(ctx context.Context, branchName st
 	return nil, errBranchNotFound
 }
 
-func (amp *AmplifyPreview) CreateBranch(ctx context.Context, branchName string) (*types.Branch, error) {
+func (amp *AmplifyPreview) CreateBranch(ctx context.Context) (*types.Branch, error) {
 	failedResp := aggregatedError{
 		perAppErr: map[string]error{},
 		message:   "failed to create branch",
@@ -124,7 +125,7 @@ func (amp *AmplifyPreview) CreateBranch(ctx context.Context, branchName string) 
 	for _, appID := range amp.appIDs {
 		resp, err := amp.client.CreateBranch(ctx, &amplify.CreateBranchInput{
 			AppId:           aws.String(appID),
-			BranchName:      aws.String(branchName),
+			BranchName:      aws.String(amp.branchName),
 			Description:     aws.String("Branch generated for PR TODO"),
 			Stage:           types.StagePullRequest,
 			EnableAutoBuild: aws.Bool(true),
@@ -169,36 +170,85 @@ func (amp *AmplifyPreview) StartJob(ctx context.Context, branch *types.Branch) (
 
 }
 
-func (amp *AmplifyPreview) GetLatestAndActiveJobs(ctx context.Context, branch *types.Branch) (latestJob, activeJob *types.JobSummary, err error) {
+func (amp *AmplifyPreview) findJobsByID(ctx context.Context, branch *types.Branch, includeLatest bool, ids ...string) (jobSummaries []types.JobSummary, err error) {
 	appID, err := appIDFromBranchARN(*branch.BranchArn)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	resp, err := amp.client.ListJobs(ctx, &amplify.ListJobsInput{
 		AppId:      aws.String(appID),
-		BranchName: branch.BranchName,
+		BranchName: aws.String(amp.branchName),
 		MaxResults: 50,
 	})
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if len(resp.JobSummaries) == 0 {
-		return nil, nil, errNoJobForBranch
+		return nil, errNoJobForBranch
 	}
 
-	latestJob = &resp.JobSummaries[0]
-	if branch.ActiveJobId != nil {
+	if includeLatest {
+		jobSummaries = append(jobSummaries, resp.JobSummaries[0])
+	}
+
+	for _, id := range ids {
+		wantJobID, _ := strconv.Atoi(id)
 		for _, j := range resp.JobSummaries {
 			jobID, _ := strconv.Atoi(*j.JobId)
-			activeJobID, _ := strconv.Atoi(*branch.ActiveJobId)
-			if jobID == activeJobID {
-				activeJob = &j
+			if jobID == wantJobID {
+				jobSummaries = append(jobSummaries, j)
+				break
 			}
 		}
+
+	}
+
+	return jobSummaries, nil
+}
+
+func (amp *AmplifyPreview) GetLatestAndActiveJobs(ctx context.Context, branch *types.Branch) (latestJob, activeJob *types.JobSummary, err error) {
+	var jobIDs []string
+	if branch.ActiveJobId != nil {
+		jobIDs = append(jobIDs, *branch.ActiveJobId)
+	}
+	jobSummaries, err := amp.findJobsByID(ctx, branch, true, jobIDs...)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if len(jobSummaries) > 0 {
+		latestJob = &jobSummaries[0]
+	}
+	if len(jobSummaries) > 1 {
+		activeJob = &jobSummaries[1]
 	}
 
 	return latestJob, activeJob, nil
+}
+
+func (amp *AmplifyPreview) WaitForJobCompletion(ctx context.Context, branch *types.Branch, job *types.JobSummary) (currentJob, activeJob *types.JobSummary, err error) {
+	for i := 0; i < jobWaitTimeAttempts; i++ {
+		jobSummaries, err := amp.findJobsByID(ctx, branch, true, *job.JobId)
+		if err != nil {
+			return nil, nil, err
+		}
+		if len(jobSummaries) > 0 {
+			currentJob = &jobSummaries[0]
+		}
+		if len(jobSummaries) > 1 {
+			activeJob = &jobSummaries[1]
+		}
+		if isAmplifyJobCompleted(currentJob) {
+			break
+		}
+
+		logger.Info("Job is not in a completed state yet. Sleeping...",
+			logKeyBranchName, amp.branchName, "job_status", currentJob.Status, "job_id", *currentJob.JobId, "attempts_left", jobWaitTimeAttempts-i)
+		time.Sleep(jobWaitSleepTime)
+	}
+
+	return currentJob, activeJob, nil
 }
 
 func appIDFromBranchARN(branchArn string) (string, error) {

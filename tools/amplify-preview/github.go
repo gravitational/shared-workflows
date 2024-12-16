@@ -25,7 +25,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/gravitational/shared-workflows/libs/github"
 )
 
@@ -51,7 +50,7 @@ func postPreviewURL(ctx context.Context, commentBody string) error {
 	}
 
 	targetComment := github.CommentTraits{
-		BodyContains: aws.String(amplifyMarkdownHeader),
+		BodyContains: amplifyMarkdownHeader,
 	}
 
 	currentPR := github.IssueIdentifier{

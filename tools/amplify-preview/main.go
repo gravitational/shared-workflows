@@ -19,6 +19,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"strings"
@@ -52,7 +53,7 @@ func main() {
 	kingpin.Parse()
 	ctx := context.Background()
 
-	cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRetryer(func() aws.Retryer {
+	cfg, err := config.LoadDefaultConfig(ctx, config.WithRetryer(func() aws.Retryer {
 		return retry.AddWithMaxAttempts(retry.NewStandard(), 10)
 	}))
 	if err != nil {
@@ -60,77 +61,90 @@ func main() {
 		os.Exit(1)
 	}
 
-	amp := AmplifyPreview{
-		client: amplify.NewFromConfig(cfg),
-		appIDs: func() []string {
-			if len(*amplifyAppIDs) == 1 {
-				// kingpin env variables are separated by new lines, and there is no way to change the behavior
-				// https://github.com/alecthomas/kingpin/issues/249
-				return strings.Split((*amplifyAppIDs)[0], ",")
-			}
-			return *amplifyAppIDs
-		}(),
-	}
-
-	// Check if Amplify branch is already connected to one of the Amplify Apps
-	branch, err := amp.FindExistingBranch(ctx, *gitBranchName)
-	if err != nil {
-		if !*createBranches && !errors.Is(err, errNoJobForBranch) {
-			logger.Error("failed to lookup branch", logKeyBranchName, *gitBranchName, "error", err)
-			os.Exit(1)
-		}
-
-		// If branch wasn't found, and branch creation enabled - create new branch
-		branch, err = amp.CreateBranch(ctx, *gitBranchName)
-		if err != nil {
-			logger.Error("failed to create branch", logKeyBranchName, *gitBranchName, "error", err)
-			os.Exit(1)
-		}
-	}
-
-	// check if existing branch was/being deployed already
-	latestJob, activeJob, err := amp.GetLatestAndActiveJobs(ctx, branch)
-	if err != nil {
-		if !*createBranches && !errors.Is(err, errNoJobForBranch) {
-			logger.Error("failed to get amplify job", logKeyBranchName, *gitBranchName, "error", err)
-			os.Exit(1)
-		}
-
-		// if job not found and branch was just created - start new job
-		latestJob, err = amp.StartJob(ctx, branch)
-		if err != nil {
-			logger.Error("failed to start amplify job", logKeyBranchName, *gitBranchName, "error", err)
-			os.Exit(1)
-		}
-	}
-
-	if err := postPreviewURL(ctx, amplifyJobsToMarkdown(branch, latestJob, activeJob)); err != nil {
-		logger.Error("failed to post preview URL", "error", err)
+	if amplifyAppIDs == nil || len(*amplifyAppIDs) == 0 {
+		logger.Error("expected one more more Amplify App IDs")
 		os.Exit(1)
 	}
+
+	amp := AmplifyPreview{
+		client:     amplify.NewFromConfig(cfg),
+		branchName: *gitBranchName,
+		appIDs:     *amplifyAppIDs,
+	}
+
+	if len(amp.appIDs) == 1 {
+		// kingpin env variables are separated by new lines, and there is no way to change the behavior
+		// https://github.com/alecthomas/kingpin/issues/249
+		amp.appIDs = strings.Split(amp.appIDs[0], ",")
+	}
+
+	if err := execute(ctx, amp); err != nil {
+		logger.Error("execution failed", "error", err)
+		os.Exit(1)
+	}
+}
+
+func execute(ctx context.Context, amp AmplifyPreview) error {
+	branch, err := ensureAmplifyBranch(ctx, amp)
+	if err != nil {
+		return err
+	}
+
+	currentJob, activeJob, err := ensureAmplifyDeployment(ctx, amp, branch)
+	if err != nil {
+		return err
+	}
+
+	if err := postPreviewURL(ctx, amplifyJobsToMarkdown(branch, currentJob, activeJob)); err != nil {
+		return fmt.Errorf("failed to post preview URL: %w", err)
+	}
+
 	logger.Info("Successfully posted PR comment")
 
 	if *wait {
-		for i := 0; !isAmplifyJobCompleted(latestJob) && i < jobWaitTimeAttempts; i++ {
-			latestJob, activeJob, err = amp.GetLatestAndActiveJobs(ctx, branch)
-			if err != nil {
-				logger.Error("failed to get amplify job", logKeyBranchName, *gitBranchName, "error", err)
-				os.Exit(1)
-			}
-
-			logger.Info("Job is not in a completed state yet. Sleeping...",
-				logKeyBranchName, *gitBranchName, "job_status", latestJob.Status, "job_id", *latestJob.JobId, "attempts_left", jobWaitTimeAttempts-i)
-			time.Sleep(jobWaitSleepTime)
+		currentJob, activeJob, err = amp.WaitForJobCompletion(ctx, branch, currentJob)
+		if err != nil {
+			return fmt.Errorf("failed to follow job status: %w", err)
 		}
 
-		if err := postPreviewURL(ctx, amplifyJobsToMarkdown(branch, latestJob, activeJob)); err != nil {
-			logger.Error("failed to post preview URL", "error", err)
-			os.Exit(1)
+		// update comment when job is completed
+		if err := postPreviewURL(ctx, amplifyJobsToMarkdown(branch, currentJob, activeJob)); err != nil {
+			return fmt.Errorf("failed to post preview URL: %w", err)
 		}
 	}
 
-	if latestJob.Status == types.JobStatusFailed {
-		logger.Error("amplify job is in failed state", logKeyBranchName, *gitBranchName, "job_status", latestJob.Status, "job_id", *latestJob.JobId)
-		os.Exit(1)
+	if currentJob.Status == types.JobStatusFailed {
+		logger.Error("amplify job is in failed state", logKeyBranchName, amp.branchName, "job_status", currentJob.Status, "job_id", *currentJob.JobId)
+		return fmt.Errorf("amplify job is in %q state", currentJob.Status)
+	}
+
+	return nil
+}
+
+// ensureAmplifyBranch checks if git branch is connected to amplify across multiple amplify apps
+// if "create-branch" is enabled, then branch is created if not found, otherwise returns error
+func ensureAmplifyBranch(ctx context.Context, amp AmplifyPreview) (*types.Branch, error) {
+	branch, err := amp.FindExistingBranch(ctx)
+	if err == nil {
+		return branch, nil
+	} else if errors.Is(err, errBranchNotFound) && *createBranches {
+		return amp.CreateBranch(ctx)
+	} else {
+		return nil, fmt.Errorf("failed to lookup branch %q: %w", amp.branchName, err)
+	}
+}
+
+// ensureAmplifyDeployment lists deployments and checks for latest and active (the one that's currently live) deployments
+// if this branch has no deployments yet and "create-branch" is enabled, then deployment will be kicked off
+// this is because when new branch is created on Amplify and "AutoBuild" is enabled, it won't start the deployment until next commit
+func ensureAmplifyDeployment(ctx context.Context, amp AmplifyPreview, branch *types.Branch) (currentJob, activeJob *types.JobSummary, err error) {
+	currentJob, activeJob, err = amp.GetLatestAndActiveJobs(ctx, branch)
+	if err == nil {
+		return currentJob, activeJob, nil
+	} else if errors.Is(err, errNoJobForBranch) && *createBranches {
+		currentJob, err = amp.StartJob(ctx, branch)
+		return currentJob, activeJob, err
+	} else {
+		return nil, nil, fmt.Errorf("failed to lookup amplify job for branch %q: %w", amp.branchName, err)
 	}
 }
