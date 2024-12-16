@@ -1,10 +1,9 @@
 module github.com/gravitational/shared-workflows/tools/amplify-preview
 
-go 1.23.3
+go 1.23.4
 
 require (
 	github.com/alecthomas/kingpin/v2 v2.4.0
-	github.com/aws/aws-sdk-go v1.55.5
 	github.com/aws/aws-sdk-go-v2 v1.32.6
 	github.com/aws/aws-sdk-go-v2/config v1.28.6
 	github.com/aws/aws-sdk-go-v2/service/amplify v1.27.5
@@ -24,8 +23,8 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.28.6 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.33.2 // indirect
 	github.com/aws/smithy-go v1.22.1 // indirect
-	github.com/cli/go-gh/v2 v2.9.0 // indirect
-	github.com/cli/safeexec v1.0.0 // indirect
+	github.com/cli/go-gh/v2 v2.11.1 // indirect
+	github.com/cli/safeexec v1.0.1 // indirect
 	github.com/google/go-github/v63 v63.0.0 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/gravitational/trace v1.4.0 // indirect

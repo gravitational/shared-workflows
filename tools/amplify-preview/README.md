@@ -33,6 +33,8 @@ Example GHA workflow:
 name: Amplify Preview
 on:
   pull_request:
+    paths:
+      - 'docs/**'
   workflow_dispatch:
   
 permissions:
