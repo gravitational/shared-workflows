@@ -62,7 +62,7 @@ runs:
         # Install the tool
         echo "Installing to ${INSTALL_DIR}..."
         echo "DEBUG LOG"
-        echo "command -v sudo: $(command -v sudo)"
+        echo "command -v sudo: $(command sudo)"
         echo "Shell: ${SHELL:-NOT SET}"
         if ! command -v sudo; then
           # Ensure the sudo "command" exists
