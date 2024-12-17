@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"os"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -92,10 +93,12 @@ func TestGetRequestedEnvValues(t *testing.T) {
 }
 
 func TestRun(t *testing.T) {
+	os.Setenv("SOPS_AGE_KEY_FILE", filepath.Join("..", "pkg", "loaders", "testdata", "key1.age"))
+
 	tests := []struct {
-		desc           string
-		c              *config
-		expectedOutput string
+		desc            string
+		c               *config
+		expectedOutputs []string // Must support multiple options due to map iteration randomness
 	}{
 		{
 			desc: "specific values",
@@ -111,7 +114,25 @@ func TestRun(t *testing.T) {
 				},
 				Writer: "dotenv",
 			},
-			expectedOutput: "envLevelCommon1=env level\nsetLevel=set level\n",
+			expectedOutputs: []string{
+				"envLevelCommon1=env level\nsetLevel=set level\n",
+				"setLevel=set level\nenvLevelCommon1=env level\n",
+			},
+		},
+		{
+			desc: "secret masked values",
+			c: &config{
+				EnvironmentsDirectory: filepath.Join("..", "pkg", "testdata", "repos", "basic repo", ".environments"),
+				Environment:           "env1",
+				Writer:                "gha-mask",
+				ValueSets: []string{
+					"secrets",
+				},
+			},
+			expectedOutputs: []string{
+				"::add-mask::value1\n::add-mask::value2_unencrypted\n",
+				"::add-mask::value2_unencrypted\n::add-mask::value1\n",
+			},
 		},
 	}
 
@@ -125,6 +146,6 @@ func TestRun(t *testing.T) {
 		output := outputBytes.String()
 
 		require.NoError(t, err)
-		require.Equal(t, test.expectedOutput, output)
+		require.Contains(t, test.expectedOutputs, output)
 	}
 }
