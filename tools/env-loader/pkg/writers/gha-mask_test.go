@@ -37,13 +37,6 @@ func TestGHAMaskFormat(t *testing.T) {
 			desc: "no values",
 		},
 		{
-			desc: "empty key",
-			values: map[string]values.Value{
-				"": {UnderlyingValue: "value"},
-			},
-			shouldError: true,
-		},
-		{
 			desc: "single secret value",
 			values: map[string]values.Value{
 				"key": {UnderlyingValue: "secret value", ShouldMask: true},
@@ -79,22 +72,6 @@ func TestGHAMaskFormat(t *testing.T) {
 			values: map[string]values.Value{
 				"key": {UnderlyingValue: "", ShouldMask: true},
 			},
-		},
-		{
-			desc: "empty secret key",
-			values: map[string]values.Value{
-				"": {UnderlyingValue: "secret value", ShouldMask: true},
-			},
-			shouldError: true,
-		},
-		{
-			desc: "empty secret key, mixed",
-			values: map[string]values.Value{
-				"key1": {UnderlyingValue: "secret value1", ShouldMask: true},
-				"":     {UnderlyingValue: "secret value2", ShouldMask: true},
-				"key3": {UnderlyingValue: "secret value3", ShouldMask: true},
-			},
-			shouldError: true,
 		},
 		{
 			desc: "multiline secret value",

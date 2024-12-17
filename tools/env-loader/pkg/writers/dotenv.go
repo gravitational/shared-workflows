@@ -36,18 +36,18 @@ func NewDotenvWriter() *DotenvWriter {
 	return &DotenvWriter{}
 }
 
-func (*DotenvWriter) validateValue(key, _ string) error {
+func (*DotenvWriter) validateValue(key string, value values.Value) error {
 	if dotEnvKeyValidationRegex.MatchString(key) {
 		return nil
 	}
 
-	return trace.Errorf("Environment value name %q cannot be written to a dotenv file", key)
+	return trace.Errorf("Environment value (%q, %q) cannot be written to a dotenv file", key, value.String())
 }
 
 func (ew *DotenvWriter) FormatEnvironmentValues(values map[string]values.Value) (string, error) {
 	lines := make([]string, 0, len(values))
 	for key, value := range values {
-		err := ew.validateValue(key, value.UnderlyingValue)
+		err := ew.validateValue(key, value)
 		if err != nil {
 			return "", trace.Wrap(err)
 		}

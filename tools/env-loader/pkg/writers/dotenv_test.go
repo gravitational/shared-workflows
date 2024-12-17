@@ -12,33 +12,34 @@ func TestDotenvValidation(t *testing.T) {
 	testCases := []struct {
 		desc       string
 		key        string
-		value      string
+		value      values.Value
 		checkError require.ErrorAssertionFunc
 	}{
 		{
-			desc:       "valid value",
-			key:        "key",
-			value:      "value",
-			checkError: require.NoError,
+			desc:  "valid value",
+			key:   "key",
+			value: values.Value{UnderlyingValue: "value"},
 		},
 		{
-			desc:       "no value",
-			key:        "key",
-			checkError: require.NoError,
+			desc: "no value",
+			key:  "key",
 		},
 		{
-			desc:       "contains '_'",
-			key:        "key_name",
-			checkError: require.NoError,
+			desc: "contains '_'",
+			key:  "key_name",
 		},
 		{
-			desc:       "all caps",
-			key:        "KEY",
-			checkError: require.NoError,
+			desc: "all caps",
+			key:  "KEY",
 		},
 		{
 			desc:       "no key",
-			value:      "value",
+			value:      values.Value{UnderlyingValue: "value"},
+			checkError: require.Error,
+		},
+		{
+			desc:       "no key, secret value",
+			value:      values.Value{UnderlyingValue: "secret value", ShouldMask: true},
 			checkError: require.Error,
 		},
 		{
@@ -60,7 +61,15 @@ func TestDotenvValidation(t *testing.T) {
 
 	for _, testCase := range testCases {
 		err := writer.validateValue(testCase.key, testCase.value)
+
+		if testCase.checkError == nil {
+			testCase.checkError = require.NoError
+		}
 		testCase.checkError(t, err)
+
+		if err != nil && testCase.value.ShouldMask {
+			require.NotContains(t, err.Error(), testCase.value.UnderlyingValue)
+		}
 	}
 }
 

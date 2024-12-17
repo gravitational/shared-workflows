@@ -41,15 +41,7 @@ func (ew *GHAMaskWriter) FormatEnvironmentValues(values map[string]values.Value)
 	renderedValues := make([]string, 0, len(values))
 	for key, value := range values {
 		if key == "" {
-			// Log as much as possible without compromising security to help
-			// with debugging. This could be further improved by hashing the
-			// value.
-			logValue := "<redacted>"
-			if !value.ShouldMask {
-				logValue = value.UnderlyingValue
-			}
-
-			return "", trace.Errorf("found empty key for log value %q", logValue)
+			return "", trace.Errorf("found empty key for log value %q", value.String())
 		}
 
 		if !value.ShouldMask {
