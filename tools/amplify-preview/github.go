@@ -20,7 +20,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -28,11 +27,8 @@ import (
 	"github.com/gravitational/shared-workflows/libs/github"
 )
 
-const (
-	prRefNameSuffix = "/merge"
-)
-
 func postPreviewURL(ctx context.Context, commentBody string) error {
+	const prRefNameSuffix = "/merge"
 	refName := os.Getenv("GITHUB_REF_NAME")
 	githubRepository := os.Getenv("GITHUB_REPOSITORY")
 	if !strings.HasSuffix(refName, prRefNameSuffix) {
@@ -46,17 +42,21 @@ func postPreviewURL(ctx context.Context, commentBody string) error {
 
 	prID, err := strconv.Atoi(strings.TrimSuffix(refName, "/merge"))
 	if err != nil {
-		log.Fatalf("Failed to extract PR ID from GITHUB_REF_NAME=%s: %s", refName, err)
+		return fmt.Errorf("Failed to extract PR ID from GITHUB_REF_NAME=%s: %s", refName, err)
 	}
 
 	targetComment := github.CommentTraits{
 		BodyContains: amplifyMarkdownHeader,
 	}
 
+	githubRepoParts := strings.Split(githubRepository, "/")
+	if len(githubRepoParts) < 2 {
+		return fmt.Errorf("Couldn't extract repo and owner from %q", githubRepository)
+	}
 	currentPR := github.IssueIdentifier{
 		Number: prID,
-		Owner:  strings.Split(githubRepository, "/")[0],
-		Repo:   strings.Split(githubRepository, "/")[1],
+		Owner:  githubRepoParts[0],
+		Repo:   githubRepoParts[1],
 	}
 
 	comment, err := gh.FindCommentByTraits(ctx, currentPR, targetComment)

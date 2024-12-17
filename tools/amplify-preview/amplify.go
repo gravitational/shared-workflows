@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 	"sync"
@@ -32,13 +33,9 @@ import (
 )
 
 var (
-	errBranchNotFound           = errors.New("branch not found")
-	errNoJobForBranch           = errors.New("current branch has no jobs")
-	amplifyJobCompletedStatuses = map[types.JobStatus]struct{}{
-		types.JobStatusFailed:    {},
-		types.JobStatusCancelled: {},
-		types.JobStatusSucceed:   {},
-	}
+	errBranchNotFound = errors.New("branch not found")
+	errNoJobForBranch = errors.New("current branch has no jobs")
+	errNilBranch      = errors.New("branch is nil")
 )
 
 const (
@@ -50,6 +47,10 @@ const (
 	amplifyDefaultDomain  = "amplifyapp.com"
 )
 
+// AmplifyPreview is used to get/create amplify preview
+// deployments on AWS Amplify across multiple apps
+// to work around hard limit 50 branches per app
+// https://docs.aws.amazon.com/amplify/latest/userguide/quotas-chapter.html
 type AmplifyPreview struct {
 	appIDs     []string
 	branchName string
@@ -97,7 +98,7 @@ func (amp *AmplifyPreview) FindExistingBranch(ctx context.Context) (*types.Branc
 	for resp := range resultCh {
 		var errNotFound *types.NotFoundException
 		if errors.As(resp.err, &errNotFound) {
-			logger.Debug("Branch not found", logKeyAppID, resp.appID, logKeyBranchName, amp.branchName)
+			slog.Debug("Branch not found", logKeyAppID, resp.appID, logKeyBranchName, amp.branchName)
 			continue
 		} else if resp.err != nil {
 			failedResp.perAppErr[resp.appID] = resp.err
@@ -126,20 +127,20 @@ func (amp *AmplifyPreview) CreateBranch(ctx context.Context) (*types.Branch, err
 		resp, err := amp.client.CreateBranch(ctx, &amplify.CreateBranchInput{
 			AppId:           aws.String(appID),
 			BranchName:      aws.String(amp.branchName),
-			Description:     aws.String("Branch generated for PR TODO"),
+			Description:     aws.String("Branch created from 'amplify-preview' GHA action"),
 			Stage:           types.StagePullRequest,
 			EnableAutoBuild: aws.Bool(true),
 		})
 
 		var errLimitExceeded *types.LimitExceededException
 		if errors.As(err, &errLimitExceeded) {
-			logger.Debug("Reached branches limit", logKeyAppID, appID)
+			slog.Debug("Reached branches limit", logKeyAppID, appID)
 		} else if err != nil {
 			failedResp.perAppErr[appID] = err
 		}
 
 		if resp != nil {
-			logger.Info("Successfully created branch", logKeyAppID, appID, logKeyBranchName, *resp.Branch.BranchName, logKeyJobID, resp.Branch.ActiveJobId)
+			slog.Info("Successfully created branch", logKeyAppID, appID, logKeyBranchName, *resp.Branch.BranchName, logKeyJobID, resp.Branch.ActiveJobId)
 			return resp.Branch, nil
 		}
 	}
@@ -148,6 +149,9 @@ func (amp *AmplifyPreview) CreateBranch(ctx context.Context) (*types.Branch, err
 }
 
 func (amp *AmplifyPreview) StartJob(ctx context.Context, branch *types.Branch) (*types.JobSummary, error) {
+	if branch == nil {
+		return nil, errNilBranch
+	}
 	appID, err := appIDFromBranchARN(*branch.BranchArn)
 	if err != nil {
 		return nil, err
@@ -164,13 +168,16 @@ func (amp *AmplifyPreview) StartJob(ctx context.Context, branch *types.Branch) (
 		return nil, err
 	}
 
-	logger.Info("Successfully started job", logKeyAppID, appID, logKeyBranchName, *branch.BranchName, logKeyJobID, *resp.JobSummary.JobId)
+	slog.Info("Successfully started job", logKeyAppID, appID, logKeyBranchName, *branch.BranchName, logKeyJobID, *resp.JobSummary.JobId)
 
 	return resp.JobSummary, nil
 
 }
 
 func (amp *AmplifyPreview) findJobsByID(ctx context.Context, branch *types.Branch, includeLatest bool, ids ...string) (jobSummaries []types.JobSummary, err error) {
+	if branch == nil {
+		return nil, errNilBranch
+	}
 	appID, err := appIDFromBranchARN(*branch.BranchArn)
 	if err != nil {
 		return nil, err
@@ -193,9 +200,15 @@ func (amp *AmplifyPreview) findJobsByID(ctx context.Context, branch *types.Branc
 	}
 
 	for _, id := range ids {
-		wantJobID, _ := strconv.Atoi(id)
+		wantJobID, err := strconv.Atoi(id)
+		if err != nil {
+			slog.Debug("unexpected Job ID value", logKeyJobID, wantJobID)
+		}
 		for _, j := range resp.JobSummaries {
-			jobID, _ := strconv.Atoi(*j.JobId)
+			jobID, err := strconv.Atoi(*j.JobId)
+			if err != nil {
+				slog.Debug("unexpected Job ID value", logKeyJobID, jobID)
+			}
 			if jobID == wantJobID {
 				jobSummaries = append(jobSummaries, j)
 				break
@@ -208,6 +221,10 @@ func (amp *AmplifyPreview) findJobsByID(ctx context.Context, branch *types.Branc
 }
 
 func (amp *AmplifyPreview) GetLatestAndActiveJobs(ctx context.Context, branch *types.Branch) (latestJob, activeJob *types.JobSummary, err error) {
+	if branch == nil {
+		return nil, nil, errNilBranch
+	}
+
 	var jobIDs []string
 	if branch.ActiveJobId != nil {
 		jobIDs = append(jobIDs, *branch.ActiveJobId)
@@ -228,7 +245,7 @@ func (amp *AmplifyPreview) GetLatestAndActiveJobs(ctx context.Context, branch *t
 }
 
 func (amp *AmplifyPreview) WaitForJobCompletion(ctx context.Context, branch *types.Branch, job *types.JobSummary) (currentJob, activeJob *types.JobSummary, err error) {
-	for i := 0; i < jobWaitTimeAttempts; i++ {
+	for i := range jobWaitTimeAttempts {
 		jobSummaries, err := amp.findJobsByID(ctx, branch, true, *job.JobId)
 		if err != nil {
 			return nil, nil, err
@@ -243,7 +260,7 @@ func (amp *AmplifyPreview) WaitForJobCompletion(ctx context.Context, branch *typ
 			break
 		}
 
-		logger.Info("Job is not in a completed state yet. Sleeping...",
+		slog.Info(fmt.Sprintf("Job is not in a completed state yet. Sleeping for %s", jobWaitSleepTime.String()),
 			logKeyBranchName, amp.branchName, "job_status", currentJob.Status, "job_id", *currentJob.JobId, "attempts_left", jobWaitTimeAttempts-i)
 		time.Sleep(jobWaitSleepTime)
 	}
@@ -265,8 +282,12 @@ func appIDFromBranchARN(branchArn string) (string, error) {
 }
 
 func isAmplifyJobCompleted(job *types.JobSummary) bool {
-	_, ok := amplifyJobCompletedStatuses[job.Status]
-	return ok
+	switch job.Status {
+	case types.JobStatusFailed, types.JobStatusCancelled, types.JobStatusSucceed:
+		return true
+	default:
+		return false
+	}
 }
 
 func (err aggregatedError) Error() error {

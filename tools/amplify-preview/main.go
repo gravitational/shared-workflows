@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/signal"
 	"strings"
 	"time"
 
@@ -34,8 +35,6 @@ import (
 )
 
 var (
-	logger = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
-
 	amplifyAppIDs  = kingpin.Flag("amplify-app-ids", "List of Amplify App IDs").Envar("AMPLIFY_APP_IDS").Required().Strings()
 	gitBranchName  = kingpin.Flag("git-branch-name", "Git branch name").Envar("GIT_BRANCH_NAME").Required().String()
 	createBranches = kingpin.Flag("create-branches",
@@ -51,19 +50,26 @@ const (
 
 func main() {
 	kingpin.Parse()
-	ctx := context.Background()
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	ctx, cancel := handleInterruption(context.Background())
+	defer cancel()
 
+	if err := run(ctx); err != nil {
+		slog.Error("run failed", "error", err)
+		os.Exit(1)
+	}
+}
+
+func run(ctx context.Context) error {
 	cfg, err := config.LoadDefaultConfig(ctx, config.WithRetryer(func() aws.Retryer {
 		return retry.AddWithMaxAttempts(retry.NewStandard(), 10)
 	}))
 	if err != nil {
-		logger.Error("failed to load configuration", "error", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to load AWS configuration: %w", err)
 	}
 
 	if amplifyAppIDs == nil || len(*amplifyAppIDs) == 0 {
-		logger.Error("expected one more more Amplify App IDs")
-		os.Exit(1)
+		return errors.New("expected one more more Amplify App IDs")
 	}
 
 	amp := AmplifyPreview{
@@ -78,13 +84,6 @@ func main() {
 		amp.appIDs = strings.Split(amp.appIDs[0], ",")
 	}
 
-	if err := execute(ctx, amp); err != nil {
-		logger.Error("execution failed", "error", err)
-		os.Exit(1)
-	}
-}
-
-func execute(ctx context.Context, amp AmplifyPreview) error {
 	branch, err := ensureAmplifyBranch(ctx, amp)
 	if err != nil {
 		return err
@@ -99,7 +98,7 @@ func execute(ctx context.Context, amp AmplifyPreview) error {
 		return fmt.Errorf("failed to post preview URL: %w", err)
 	}
 
-	logger.Info("Successfully posted PR comment")
+	slog.Info("Successfully posted PR comment")
 
 	if *wait {
 		currentJob, activeJob, err = amp.WaitForJobCompletion(ctx, branch, currentJob)
@@ -114,7 +113,7 @@ func execute(ctx context.Context, amp AmplifyPreview) error {
 	}
 
 	if currentJob.Status == types.JobStatusFailed {
-		logger.Error("amplify job is in failed state", logKeyBranchName, amp.branchName, "job_status", currentJob.Status, "job_id", *currentJob.JobId)
+		slog.Error("amplify job is in failed state", logKeyBranchName, amp.branchName, "job_status", currentJob.Status, "job_id", *currentJob.JobId)
 		return fmt.Errorf("amplify job is in %q state", currentJob.Status)
 	}
 
@@ -146,5 +145,24 @@ func ensureAmplifyDeployment(ctx context.Context, amp AmplifyPreview, branch *ty
 		return currentJob, activeJob, err
 	} else {
 		return nil, nil, fmt.Errorf("failed to lookup amplify job for branch %q: %w", amp.branchName, err)
+	}
+}
+
+func handleInterruption(ctx context.Context) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(ctx)
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+
+	go func() {
+		select {
+		case <-c:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+
+	return ctx, func() {
+		signal.Stop(c)
+		cancel()
 	}
 }
