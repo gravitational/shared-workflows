@@ -19,23 +19,32 @@ package loaders
 import (
 	"github.com/getsops/sops/v3/decrypt"
 	sopsyaml "github.com/getsops/sops/v3/stores/yaml"
+	"github.com/gravitational/shared-workflows/tools/env-loader/pkg/values"
 	"github.com/gravitational/trace"
 	"gopkg.in/yaml.v3"
 )
 
 type plainYAMLSubloader struct{}
 
-func (*plainYAMLSubloader) GetEnvironmentValues(yamlBytes []byte) (map[string]string, error) {
-	var environmentValues map[string]string
-	err := yaml.Unmarshal(yamlBytes, &environmentValues)
+func (*plainYAMLSubloader) GetEnvironmentValues(yamlBytes []byte) (map[string]values.Value, error) {
+	var rawEnvironmentValues map[string]string
+	err := yaml.Unmarshal(yamlBytes, &rawEnvironmentValues)
 	if err != nil {
 		return nil, trace.Wrap(err, "failed to unmarshal YAML bytes")
 	}
 
 	// This can occur with an empty file that has a docstring.
 	// Upstream yaml library bug?
-	if environmentValues == nil {
-		environmentValues = map[string]string{}
+	if rawEnvironmentValues == nil {
+		rawEnvironmentValues = map[string]string{}
+	}
+
+	// Wrap the string in `Value` type
+	environmentValues := make(map[string]values.Value, len(rawEnvironmentValues))
+	for key, value := range rawEnvironmentValues {
+		environmentValues[key] = values.Value{
+			UnderlyingValue: value,
+		}
 	}
 
 	return environmentValues, nil
@@ -56,13 +65,27 @@ func (*plainYAMLSubloader) Name() string {
 
 type SOPSYAMLSubloader struct{}
 
-func (*SOPSYAMLSubloader) GetEnvironmentValues(yamlBytes []byte) (map[string]string, error) {
+func (*SOPSYAMLSubloader) GetEnvironmentValues(yamlBytes []byte) (map[string]values.Value, error) {
 	yamlBytes, err := decrypt.Data(yamlBytes, "yaml")
 	if err != nil {
 		return nil, trace.Wrap(err, "failed to decrypt YAML SOPS content")
 	}
 
-	return (&plainYAMLSubloader{}).GetEnvironmentValues(yamlBytes)
+	values, err := (&plainYAMLSubloader{}).GetEnvironmentValues(yamlBytes)
+	if err != nil {
+		return nil, trace.Wrap(err, "failed to parse decrypted YAML content")
+	}
+
+	// Mark all loaded values as secret - if they weren't, then they shouldn't
+	// be encrypted. This does not currently support files with unencrypted
+	// content because the SOPS library `shouldBeEncrypted` function is not
+	// public.
+	for key, value := range values {
+		value.ShouldMask = true
+		values[key] = value
+	}
+
+	return values, nil
 }
 
 func (*SOPSYAMLSubloader) CanGetEnvironmentValues(yamlBytes []byte) bool {

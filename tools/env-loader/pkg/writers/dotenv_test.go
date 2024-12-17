@@ -3,6 +3,7 @@ package writers
 import (
 	"testing"
 
+	"github.com/gravitational/shared-workflows/tools/env-loader/pkg/values"
 	"github.com/stretchr/testify/require"
 )
 
@@ -60,5 +61,61 @@ func TestDotenvValidation(t *testing.T) {
 	for _, testCase := range testCases {
 		err := writer.validateValue(testCase.key, testCase.value)
 		testCase.checkError(t, err)
+	}
+}
+
+func TestDotenvFormat(t *testing.T) {
+	testCases := []struct {
+		desc       string
+		values     map[string]values.Value
+		canBeEmpty bool
+		checkError require.ErrorAssertionFunc
+	}{
+		{
+			desc: "single value",
+			values: map[string]values.Value{
+				"key": {UnderlyingValue: "value"},
+			},
+		},
+		{
+			desc: "multiple values",
+			values: map[string]values.Value{
+				"key1": {UnderlyingValue: "value1"},
+				"key2": {UnderlyingValue: "value2"},
+			},
+		},
+		{
+			desc: "key with empty value",
+			values: map[string]values.Value{
+				"key": {UnderlyingValue: ""},
+			},
+			canBeEmpty: true,
+		},
+		{
+			desc:       "no values",
+			canBeEmpty: true,
+		},
+		{
+			desc: "empty key",
+			values: map[string]values.Value{
+				"": {UnderlyingValue: "value"},
+			},
+			checkError: require.Error,
+			canBeEmpty: true,
+		},
+	}
+
+	writer := NewDotenvWriter()
+	for _, testCase := range testCases {
+		formattedStr, err := writer.FormatEnvironmentValues(testCase.values)
+
+		if testCase.checkError == nil {
+			testCase.checkError = require.NoError
+		}
+
+		testCase.checkError(t, err, "writer failed with test case %q", testCase.desc)
+		if !testCase.canBeEmpty {
+			require.NotEmpty(t, formattedStr, "writer output is empty")
+		}
 	}
 }

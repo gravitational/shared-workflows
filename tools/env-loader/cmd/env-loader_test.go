@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/alecthomas/kingpin/v2"
+	"github.com/gravitational/shared-workflows/tools/env-loader/pkg/values"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,7 +31,7 @@ func TestGetRequestedEnvValues(t *testing.T) {
 	tests := []struct {
 		desc           string
 		c              *config
-		expectedValues map[string]string
+		expectedValues map[string]values.Value
 	}{
 		{
 			desc: "specific values",
@@ -45,9 +46,9 @@ func TestGetRequestedEnvValues(t *testing.T) {
 					"envLevelCommon1",
 				},
 			},
-			expectedValues: map[string]string{
-				"setLevel":        "set level",
-				"envLevelCommon1": "env level",
+			expectedValues: map[string]values.Value{
+				"setLevel":        {UnderlyingValue: "set level"},
+				"envLevelCommon1": {UnderlyingValue: "env level"},
 			},
 		},
 		{
@@ -59,13 +60,13 @@ func TestGetRequestedEnvValues(t *testing.T) {
 					"testing1",
 				},
 			},
-			expectedValues: map[string]string{
-				"setLevel":        "set level",
-				"setLevelCommon":  "testing1 level",
-				"envLevelCommon1": "env level",
-				"envLevelCommon2": "set level",
-				"topLevelCommon1": "top level",
-				"topLevelCommon2": "env level",
+			expectedValues: map[string]values.Value{
+				"setLevel":        {UnderlyingValue: "set level"},
+				"setLevelCommon":  {UnderlyingValue: "testing1 level"},
+				"envLevelCommon1": {UnderlyingValue: "env level"},
+				"envLevelCommon2": {UnderlyingValue: "set level"},
+				"topLevelCommon1": {UnderlyingValue: "top level"},
+				"topLevelCommon2": {UnderlyingValue: "env level"},
 			},
 		},
 		{
@@ -74,11 +75,11 @@ func TestGetRequestedEnvValues(t *testing.T) {
 				EnvironmentsDirectory: filepath.Join("..", "pkg", "testdata", "repos", "basic repo", ".environments"),
 				Environment:           "env1",
 			},
-			expectedValues: map[string]string{
-				"envLevelCommon1": "env level",
-				"envLevelCommon2": "env level",
-				"topLevelCommon1": "top level",
-				"topLevelCommon2": "env level",
+			expectedValues: map[string]values.Value{
+				"envLevelCommon1": {UnderlyingValue: "env level"},
+				"envLevelCommon2": {UnderlyingValue: "env level"},
+				"topLevelCommon1": {UnderlyingValue: "top level"},
+				"topLevelCommon2": {UnderlyingValue: "env level"},
 			},
 		},
 	}

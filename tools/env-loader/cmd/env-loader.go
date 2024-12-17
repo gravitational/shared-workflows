@@ -26,6 +26,7 @@ import (
 
 	"github.com/alecthomas/kingpin/v2"
 	envloader "github.com/gravitational/shared-workflows/tools/env-loader/pkg"
+	"github.com/gravitational/shared-workflows/tools/env-loader/pkg/values"
 	"github.com/gravitational/shared-workflows/tools/env-loader/pkg/writers"
 	"github.com/gravitational/trace"
 )
@@ -77,9 +78,9 @@ func parseCLI(args []string) *config {
 	return c
 }
 
-func getRequestedEnvValues(c *config) (map[string]string, error) {
+func getRequestedEnvValues(c *config) (map[string]values.Value, error) {
 	// Load in values
-	var envValues map[string]string
+	var envValues map[string]values.Value
 	var err error
 	if c.EnvironmentsDirectory != "" {
 		envValues, err = envloader.LoadEnvironmentValuesInDirectory(c.EnvironmentsDirectory, c.Environment, c.ValueSets)
@@ -93,7 +94,7 @@ func getRequestedEnvValues(c *config) (map[string]string, error) {
 
 	// Filter out values not requested
 	if len(c.Values) > 0 {
-		maps.DeleteFunc(envValues, func(key, _ string) bool {
+		maps.DeleteFunc(envValues, func(key string, _ values.Value) bool {
 			return !slices.Contains(c.Values, key)
 		})
 	}

@@ -21,11 +21,12 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/gravitational/shared-workflows/tools/env-loader/pkg/values"
 	"github.com/gravitational/trace"
 )
 
 // Pulled from https://hexdocs.pm/dotenvy/dotenv-file-format.html#variable-names
-var keyValidationRegex = regexp.MustCompile("^[a-zA-Z_]+[a-zA-Z0-9_]*$")
+var dotEnvKeyValidationRegex = regexp.MustCompile("^[a-zA-Z_]+[a-zA-Z0-9_]*$")
 
 // Outputs the values in .env file format
 type DotenvWriter struct{}
@@ -36,22 +37,22 @@ func NewDotenvWriter() *DotenvWriter {
 }
 
 func (*DotenvWriter) validateValue(key, _ string) error {
-	if keyValidationRegex.MatchString(key) {
+	if dotEnvKeyValidationRegex.MatchString(key) {
 		return nil
 	}
 
 	return trace.Errorf("Environment value name %q cannot be written to a dotenv file", key)
 }
 
-func (ew *DotenvWriter) FormatEnvironmentValues(values map[string]string) (string, error) {
+func (ew *DotenvWriter) FormatEnvironmentValues(values map[string]values.Value) (string, error) {
 	lines := make([]string, 0, len(values))
 	for key, value := range values {
-		err := ew.validateValue(key, value)
+		err := ew.validateValue(key, value.UnderlyingValue)
 		if err != nil {
 			return "", trace.Wrap(err)
 		}
 
-		fileLine := fmt.Sprintf("%s=%s\n", key, value)
+		fileLine := fmt.Sprintf("%s=%s\n", key, value.UnderlyingValue)
 		lines = append(lines, fileLine)
 	}
 
