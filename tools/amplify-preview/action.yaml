@@ -1,0 +1,39 @@
+name: Amplify Preview
+description: Prepare Amplify Preview URL and post it in PR comments
+inputs:
+  app_ids:
+    description: "Comma separated list of Amplify App IDs"
+    required: true
+  create_branches:
+    description: 'Create preview branches using this actions instead of "auto-build" feature on AWS Amplify'
+    required: false
+    default: "false"
+  github_token:
+    required: true
+    description: "Github token with permissions to read/write comments in pull request"
+  wait:
+    default: "false"
+    description: "If Amplify deployment is pending/running state wait for it's completion"
+runs:
+  using: composite
+  steps:
+    - name: Extract branch name
+      shell: bash
+      run: echo "branch=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}" >> $GITHUB_OUTPUT
+      id: extract_branch
+
+    - uses: actions/setup-go@v5
+      with:
+        go-version-file: tools/amplify-preview/go.mod
+        cache-dependency-path: tools/amplify-preview/go.sum
+
+    - name: Amplify Preview
+      env:
+        AMPLIFY_APP_IDS: ${{ inputs.app_ids }}
+        GIT_BRANCH_NAME: ${{ steps.extract_branch.outputs.branch }}
+        CREATE_BRANCHES: ${{ inputs.create_branches }}
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+        WAIT: ${{ inputs.wait }} 
+      shell: bash
+      run: |
+        pushd ./tools/amplify-preview/; go run ./; popd

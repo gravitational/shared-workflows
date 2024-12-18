@@ -1,0 +1,25 @@
+---
+name: Amplify Preview CD
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - tools/amplify-preview
+    tags:
+      - "tools/amplify-preview/v[0-9]+.[0-9]+.[0-9]+**"
+  pull_request:
+    paths:
+      - tools/amplify-preview/workflows/cd.yaml
+      - .github/workflows/amplify-preview-cd.yaml
+      - .github/workflows/reusable-cd.yaml
+
+jobs:
+  release:
+    uses: ./.github/workflows/reusable-cd.yaml
+    permissions:
+      contents: write
+      packages: write
+    with:
+      tool-directory: ./tools/amplify-preview
