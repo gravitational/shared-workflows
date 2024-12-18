@@ -17,6 +17,18 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Workaround go cache issue
+      # It seems like `setup-go` can't use for cache files outside of ${{ github.workspace }}
+      # https://github.com/actions/setup-go/issues/467#issuecomment-2551300160
+      shell: bash
+      run: |
+        # Work around setup-go caching issue
+        mkdir -p ${{ github.workspace }}/.tmp/actions/cache/amplify-preview
+        go_sum_path=${{ github.workspace }}/.tmp/actions/cache/amplify-preview/go.sum
+        cp ${{ github.action_path }}/go.sum ${{ github.workspace }}/.tmp/actions/cache/amplify-preview/
+        echo "go_sum_path=${go_sum_path}" >> $GITHUB_OUTPUT
+      id: cache_workaround
+
     - name: Extract branch name
       shell: bash
       run: echo "branch=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}" >> $GITHUB_OUTPUT
@@ -24,8 +36,8 @@ runs:
 
     - uses: actions/setup-go@v5
       with:
-        go-version-file: tools/amplify-preview/go.mod
-        cache-dependency-path: tools/amplify-preview/go.sum
+        go-version-file: ${{ github.action_path }}/go.mod
+        cache-dependency-path: ${{ steps.cache_workaround.outputs.go_sum_path }}
 
     - name: Amplify Preview
       env:
@@ -35,5 +47,5 @@ runs:
         GITHUB_TOKEN: ${{ inputs.github_token }}
         WAIT: ${{ inputs.wait }} 
       shell: bash
-      run: |
-        pushd ./tools/amplify-preview/; go run ./; popd
+      working-directory: ${{ github.action_path }}
+      run: go run .

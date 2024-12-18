@@ -36,37 +36,29 @@ on:
     paths:
       - 'docs/**'
   workflow_dispatch:
-  
 permissions:
-  # Permissions to write PR comment
   pull-requests: write
   id-token: write
-  
 jobs:
   amplify-preview:
     name: Get and post Amplify preview URL
-    runs-on: ubuntu-22.04-2core-arm64
-    environment: docs-amplify
+    runs-on: ubuntu-latest
     steps:
-    - name: Checkout shared-workflow
-      uses: actions/checkout@v4
-      with:
-        repository: gravitational/shared-workflows
-        sparse-checkout: |
-          tools
-
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4
       with:
         aws-region: us-west-2
         role-to-assume: ${{ vars.IAM_ROLE }}
 
-    - name: Check Amplify job status test
-      uses: ./tools/amplify-preview
+    - name: Prepare Amplify Preview for this branch
+      uses: gravitational/shared-workflows/tools/amplify-preview@tools/amplify-preview/v0.0.1
       with:
         app_ids: ${{ vars.AMPLIFY_APP_IDS }}
-        create_branches: "true"
+        # "create_branches" can be disabled if amplify branch auto discovery and auto build enabled
+        # https://docs.aws.amazon.com/amplify/latest/userguide/pattern-based-feature-branch-deployments.html
+        create_branches: "true" 
         github_token: ${{ secrets.GITHUB_TOKEN }}
+        # when "wait" is disabled, GHA won't wait for build to complete
         wait: "true"
 ```
 
