@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/gravitational/shared-workflows/tools/env-loader/pkg/values"
 	"github.com/stretchr/testify/require"
 )
 
@@ -29,47 +30,47 @@ func readTestFile(t *testing.T, fileName string) []byte {
 func TestPlainYamlSubloader_GetEnvironmentValues(t *testing.T) {
 	testCases := []struct {
 		testFileName    string
-		resultingValues map[string]string
+		resultingValues map[string]values.Value
 		checkError      require.ErrorAssertionFunc
 	}{
 		{
 			testFileName:    "empty.yaml",
-			resultingValues: map[string]string{},
+			resultingValues: map[string]values.Value{},
 		},
 		{
 			testFileName:    "empty_docstring.yaml",
-			resultingValues: map[string]string{},
+			resultingValues: map[string]values.Value{},
 		},
 		{
 			testFileName: "single_value.yaml",
-			resultingValues: map[string]string{
-				"key": "value",
+			resultingValues: map[string]values.Value{
+				"key": {UnderlyingValue: "value"},
 			},
 		},
 		{
 			testFileName: "no_value.yaml",
-			resultingValues: map[string]string{
-				"key": "",
+			resultingValues: map[string]values.Value{
+				"key": {},
 			},
 		},
 		{
 			testFileName: "multiline.yaml",
-			resultingValues: map[string]string{
-				"key": "some\nmultiline\nvalue\n",
+			resultingValues: map[string]values.Value{
+				"key": {UnderlyingValue: "some\nmultiline\nvalue\n"},
 			},
 		},
 		{
 			testFileName: "multiple_values.yaml",
-			resultingValues: map[string]string{
-				"key1": "value1",
-				"key2": "value2",
+			resultingValues: map[string]values.Value{
+				"key1": {UnderlyingValue: "value1"},
+				"key2": {UnderlyingValue: "value2"},
 			},
 		},
 		{
 			testFileName: "anchor.yaml",
-			resultingValues: map[string]string{
-				"key1": "value",
-				"key2": "value",
+			resultingValues: map[string]values.Value{
+				"key1": {UnderlyingValue: "value"},
+				"key2": {UnderlyingValue: "value"},
 			},
 		},
 		{
@@ -92,7 +93,7 @@ func TestPlainYamlSubloader_GetEnvironmentValues(t *testing.T) {
 		builtValues, err := loader.GetEnvironmentValues(rawContent)
 		testCase.checkError(t, err, "file: %q", testCase.testFileName)
 		require.Equal(t, testCase.resultingValues, builtValues,
-			"maps for testfile %q are not equal", testCase.testFileName)
+			"maps for test file %q are not equal", testCase.testFileName)
 	}
 }
 
@@ -146,14 +147,14 @@ func TestSOPSYamlSubloader_GetEnvironmentValues(t *testing.T) {
 		desc            string
 		testFileName    string
 		ageKeyFileName  string
-		resultingValues map[string]string
+		resultingValues map[string]values.Value
 		checkError      require.ErrorAssertionFunc
 	}{
 		{
 			testFileName:   "single_value.sops.yaml",
 			ageKeyFileName: "key1.age",
-			resultingValues: map[string]string{
-				"key": "value",
+			resultingValues: map[string]values.Value{
+				"key": {UnderlyingValue: "value"},
 			},
 		},
 		{
@@ -170,30 +171,30 @@ func TestSOPSYamlSubloader_GetEnvironmentValues(t *testing.T) {
 		{
 			testFileName:    "empty.sops.yaml",
 			ageKeyFileName:  "key1.age",
-			resultingValues: map[string]string{},
+			resultingValues: map[string]values.Value{},
 		},
 		{
 			testFileName:   "multiple_keys.sops.yaml",
 			ageKeyFileName: "key2.age",
-			resultingValues: map[string]string{
-				"key": "value",
+			resultingValues: map[string]values.Value{
+				"key": {UnderlyingValue: "value"},
 			},
 		},
 		{
 			desc:           "key 1",
 			testFileName:   "multiple_keys.sops.yaml",
 			ageKeyFileName: "key1.age",
-			resultingValues: map[string]string{
-				"key": "value",
+			resultingValues: map[string]values.Value{
+				"key": {UnderlyingValue: "value"},
 			},
 		},
 		{
 			desc:           "key 2",
 			testFileName:   "mixed_unencrypted.sops.yaml",
 			ageKeyFileName: "key1.age",
-			resultingValues: map[string]string{
-				"key1":             "value1",
-				"key2_unencrypted": "value2_unencrypted",
+			resultingValues: map[string]values.Value{
+				"key1":             {UnderlyingValue: "value1"},
+				"key2_unencrypted": {UnderlyingValue: "value2_unencrypted"},
 			},
 		},
 		{
@@ -225,13 +226,25 @@ func TestSOPSYamlSubloader_GetEnvironmentValues(t *testing.T) {
 			os.Unsetenv(AGE_KEY_ENV_VAR_NAME)
 		}
 
-		// Run tests
+		// All output value should be marked as secret. Set this here for
+		// convenience and test case readability
+		for key, value := range testCase.resultingValues {
+			value.ShouldMask = true
+			testCase.resultingValues[key] = value
+		}
+
+		// Run
 		builtValues, err := loader.GetEnvironmentValues(rawContent)
 		testCase.checkError(t, err, "file: %q, description: %s",
 			testCase.testFileName, testCase.desc)
 		require.Equal(t, testCase.resultingValues, builtValues,
 			"maps for testfile %q are not equal (description: %s)",
 			testCase.testFileName, testCase.desc)
+
+		for _, value := range builtValues {
+			require.True(t, value.ShouldMask,
+				"value for test file %q was not marked as secret", testCase.testFileName)
+		}
 	}
 }
 

@@ -4,15 +4,14 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/gravitational/shared-workflows/tools/env-loader/pkg/values"
 	"github.com/stretchr/testify/require"
 )
 
 type dummyLoader struct {
 	canDecode bool
-	envVals   map[string]string
+	envVals   map[string]values.Value
 	err       error
-	// canGetEnvironmentValues func([]byte) bool
-	// getEnvironmentValues    func([]byte) (map[string]string, error)
 }
 
 func (*dummyLoader) Name() string {
@@ -24,7 +23,7 @@ func (dl *dummyLoader) CanGetEnvironmentValues(bytes []byte) bool {
 	return dl.canDecode
 }
 
-func (dl *dummyLoader) GetEnvironmentValues(bytes []byte) (map[string]string, error) {
+func (dl *dummyLoader) GetEnvironmentValues(bytes []byte) (map[string]values.Value, error) {
 	// return dl.getEnvironmentValues(bytes)
 	return dl.envVals, dl.err
 }
@@ -82,7 +81,7 @@ func TestSubloader_CanGetEnvironmentValues(t *testing.T) {
 }
 
 func TestSubloader_GetEnvironmentValues(t *testing.T) {
-	testEnvVals := map[string]string{"key": "value"}
+	testEnvVals := map[string]values.Value{"key": {UnderlyingValue: "value"}}
 	testErr := errors.New("dummy error")
 
 	testCases := []struct {
@@ -128,7 +127,7 @@ func TestSubloader_GetEnvironmentValues(t *testing.T) {
 		loader := NewSubLoader(testCase.childLoaders...)
 		actualValues, err := loader.GetEnvironmentValues(nil)
 
-		var expectedValues map[string]string
+		var expectedValues map[string]values.Value
 		if testCase.checkError == nil {
 			testCase.checkError = require.NoError
 			expectedValues = testEnvVals

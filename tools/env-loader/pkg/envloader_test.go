@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/gravitational/shared-workflows/tools/env-loader/pkg/values"
 	"github.com/stretchr/testify/require"
 )
 
@@ -316,20 +317,20 @@ func TestLoadEnvironmentValues(t *testing.T) {
 		workingDir      string
 		environmentName string
 		valueSets       []string
-		expectedValues  map[string]string
+		expectedValues  map[string]values.Value
 	}{
 		{
 			desc:            "lower priority values are overwritten",
 			workingDir:      filepath.Join("repos", "basic repo", "subdirectory 1"),
 			environmentName: "env1",
 			valueSets:       []string{"testing2", "testing1"},
-			expectedValues: map[string]string{
-				"topLevelCommon1": "top level",
-				"topLevelCommon2": "env level",
-				"envLevelCommon1": "env level",
-				"envLevelCommon2": "set level",
-				"setLevelCommon":  "testing1 level",
-				"setLevel":        "set level",
+			expectedValues: map[string]values.Value{
+				"topLevelCommon1": {UnderlyingValue: "top level"},
+				"topLevelCommon2": {UnderlyingValue: "env level"},
+				"envLevelCommon1": {UnderlyingValue: "env level"},
+				"envLevelCommon2": {UnderlyingValue: "set level"},
+				"setLevelCommon":  {UnderlyingValue: "testing1 level"},
+				"setLevel":        {UnderlyingValue: "set level"},
 			},
 		},
 	}

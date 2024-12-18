@@ -16,7 +16,10 @@
 
 package loaders
 
-import "github.com/gravitational/trace"
+import (
+	"github.com/gravitational/shared-workflows/tools/env-loader/pkg/values"
+	"github.com/gravitational/trace"
+)
 
 // Loader that tries several other loaders and uses the first one that can
 // successfully load provided values
@@ -30,7 +33,7 @@ func NewSubLoader(loaders ...Loader) *SubLoader {
 	}
 }
 
-func (sl *SubLoader) GetEnvironmentValues(bytes []byte) (map[string]string, error) {
+func (sl *SubLoader) GetEnvironmentValues(bytes []byte) (map[string]values.Value, error) {
 	subloader := sl.getSubloader(bytes)
 	if subloader == nil {
 		return nil, trace.Errorf("found no loaders for the provided content")
