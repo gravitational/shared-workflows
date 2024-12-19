@@ -60,23 +60,21 @@ runs:
         echo "Download complete"
 
         # Install the tool
-        # Actual install logic which may need to be ran as root, depending on
-        # platform
-        install_tool() {
-          echo "Installing to ${INSTALL_DIR}..."
-          mkdir -pv -m 755 "${INSTALL_DIR}"
-          tar -xzf "${DOWNLOAD_PATH}" -C "${INSTALL_DIR}" "${TOOL_NAME}"
-          echo "${INSTALL_DIR}" >> "${GITHUB_PATH}"
-          echo "Installation complete!"
+        maybe_sudo() {
+          # Run as root via sudo if possible. This cannot be handled via an alias
+          # because Bash on Windows seems to silently discard `alias sudo=""`.
+          if command -v sudo > /dev/null; then
+            sudo "$@"
+          else
+            "$@"
+          fi
         }
 
-        # Run as root via sudo if possible. This cannot be handled via an alias
-        # because Bash on Windows seems to silently discard `alias sudo=""`.
-        if command -v sudo > /dev/null; then
-          sudo install_tool
-        else
-          install_tool
-        fi
+        echo "Installing to ${INSTALL_DIR}..."
+        maybe_sudo mkdir -pv -m 755 "${INSTALL_DIR}"
+        maybe_sudo tar -xzf "${DOWNLOAD_PATH}" -C "${INSTALL_DIR}" "${TOOL_NAME}"
+        echo "${INSTALL_DIR}" >> "${GITHUB_PATH}"
+        echo "Installation complete!"
 
         # Cleanup
         rm -rf "${DOWNLOAD_DIR}"
