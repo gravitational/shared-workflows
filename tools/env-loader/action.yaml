@@ -74,13 +74,20 @@ runs:
 
         echo "Installing to ${INSTALL_DIR}..."
         maybe_sudo mkdir -pv -m 755 "${INSTALL_DIR}"
+
+        TOOL_FILE_NAME="${TOOL_NAME}"
+        if [[ "${RUNNER_OS}" == 'Windows' ]]; then
+          TOOL_FILE_NAME+='.exe'
+        fi
+
         # The tar `-C` flag may not be used with an absolute path, because tar interprets
         # `:` in the path name as a network address. Windows uses this to separate
         # drive/partition letter from file path, so this does not work on Windows. The
         # easiest workaround is just `pushd`/`popd`.
         pushd "$(dirname "${DOWNLOAD_PATH}")" || (echo "failed to change to download path" >&2; exit 1)
-        maybe_sudo tar -xzf "$(basename "${DOWNLOAD_PATH}")" -C "${INSTALL_DIR}" "${TOOL_NAME}"
+        maybe_sudo tar -xzf "$(basename "${DOWNLOAD_PATH}")" -C "${INSTALL_DIR}" "${TOOL_FILE_NAME}"
         popd || (echo "failed to leave the download path" >&2; exit 1)
+
         echo "${INSTALL_DIR}" >> "${GITHUB_PATH}"
         echo "Installation complete!"
 
