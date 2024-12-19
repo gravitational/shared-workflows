@@ -60,21 +60,23 @@ runs:
         echo "Download complete"
 
         # Install the tool
-        echo "Installing to ${INSTALL_DIR}..."
-        echo "DEBUG LOG"
-        echo "command -v sudo: $(command sudo)"
-        echo "Shell: ${SHELL:-NOT SET}"
-        if ! command -v sudo; then
-          # Ensure the sudo "command" exists
-          echo "Setting alias"
-          alias sudo=""
+        # Actual install logic which may need to be ran as root, depending on
+        # platform
+        install_tool() {
+          echo "Installing to ${INSTALL_DIR}..."
+          mkdir -pv -m 755 "${INSTALL_DIR}"
+          tar -xzf "${DOWNLOAD_PATH}" -C "${INSTALL_DIR}" "${TOOL_NAME}"
+          echo "${INSTALL_DIR}" >> "${GITHUB_PATH}"
+          echo "Installation complete!"
+        }
+
+        # Run as root via sudo if possible. This cannot be handled via an alias
+        # because Bash on Windows seems to silently discard `alias sudo=""`.
+        if command -v sudo > /dev/null; then
+          sudo install_tool
         else
-          echo "Not setting alias"
+          install_tool
         fi
-        sudo mkdir -pv -m 755 "${INSTALL_DIR}"
-        sudo tar -xzf "${DOWNLOAD_PATH}" -C "${INSTALL_DIR}" "${TOOL_NAME}"
-        echo "${INSTALL_DIR}" >> "${GITHUB_PATH}"
-        echo "Installation complete!"
 
         # Cleanup
         rm -rf "${DOWNLOAD_DIR}"
