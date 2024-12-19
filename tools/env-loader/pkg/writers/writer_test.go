@@ -3,6 +3,7 @@ package writers
 import (
 	"testing"
 
+	"github.com/gravitational/shared-workflows/tools/env-loader/pkg/values"
 	"github.com/stretchr/testify/require"
 )
 
@@ -15,58 +16,45 @@ func TestWriterName(t *testing.T) {
 	}
 }
 
+// Cover common test cases that all writers should pass
+// Most test cases should be writer-specific
 func TestWriterFormatValid(t *testing.T) {
 	testCases := []struct {
-		desc       string
-		values     map[string]string
-		canBeEmpty bool
-		checkError require.ErrorAssertionFunc
+		desc   string
+		values map[string]values.Value
 	}{
 		{
-			desc: "single value",
-			values: map[string]string{
-				"key": "value",
-			},
-		},
-		{
-			desc: "multiple values",
-			values: map[string]string{
-				"key1": "value1",
-				"key2": "value2",
-			},
-		},
-		{
-			desc: "key with empty value",
-			values: map[string]string{
-				"key": "",
-			},
-			canBeEmpty: true,
-		},
-		{
-			desc:       "no values",
-			canBeEmpty: true,
-		},
-		{
 			desc: "empty key",
-			values: map[string]string{
-				"": "value",
+			values: map[string]values.Value{
+				"": {UnderlyingValue: "value"},
 			},
-			checkError: require.Error,
-			canBeEmpty: true,
+		},
+		{
+			desc: "empty key, secret value",
+			values: map[string]values.Value{
+				"": {UnderlyingValue: "secret value", ShouldMask: true},
+			},
+		},
+		{
+			desc: "empty secret key, mixed",
+			values: map[string]values.Value{
+				"key1": {UnderlyingValue: "secret value1", ShouldMask: true},
+				"":     {UnderlyingValue: "secret value2", ShouldMask: true},
+				"key3": {UnderlyingValue: "secret value3", ShouldMask: true},
+			},
 		},
 	}
 
 	for name, writer := range FromName {
 		for _, testCase := range testCases {
-			formattedStr, err := writer.FormatEnvironmentValues(testCase.values)
+			_, err := writer.FormatEnvironmentValues(testCase.values)
 
-			if testCase.checkError == nil {
-				testCase.checkError = require.NoError
-			}
+			require.Error(t, err, "writer %q failed with test case %q", name, testCase.desc)
 
-			testCase.checkError(t, err, "writer %q failed with test case %q", name, testCase.desc)
-			if !testCase.canBeEmpty {
-				require.NotEmpty(t, formattedStr, "writer output for %q is empty", name)
+			for _, value := range testCase.values {
+				if value.ShouldMask {
+					require.NotContains(t, err.Error(), value.UnderlyingValue)
+				}
 			}
 		}
 	}

@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/gravitational/shared-workflows/tools/env-loader/pkg/loaders"
+	"github.com/gravitational/shared-workflows/tools/env-loader/pkg/values"
 	"github.com/gravitational/trace"
 )
 
@@ -176,12 +177,12 @@ func FindEnvironmentFiles(environment string, valueSets []string) ([]string, err
 	return FindEnvironmentFilesInDirectory(environmentsPath, environment, valueSets)
 }
 
-func loadEnvironmentValuesFromPaths(valueFilePaths []string, err error) (map[string]string, error) {
+func loadEnvironmentValuesFromPaths(valueFilePaths []string, err error) (map[string]values.Value, error) {
 	if err != nil {
 		return nil, trace.Wrap(err, "failed to load all value file paths")
 	}
 
-	environmentValues := map[string]string{}
+	environmentValues := map[string]values.Value{}
 	for _, filePath := range valueFilePaths {
 		fileContents, err := os.ReadFile(filePath)
 		if err != nil {
@@ -204,13 +205,13 @@ func loadEnvironmentValuesFromPaths(valueFilePaths []string, err error) (map[str
 // Finds environment value files for the given environment and value set, under the "environments"
 // directory in the repo root, and loads them. Lower priority files (common files) will have values
 // replaced by values from higher priority files (value set files, last provided being highest priority).
-func LoadEnvironmentValues(environment string, valueSets []string) (map[string]string, error) {
+func LoadEnvironmentValues(environment string, valueSets []string) (map[string]values.Value, error) {
 	return loadEnvironmentValuesFromPaths(FindEnvironmentFiles(environment, valueSets))
 }
 
 // Finds environment value files for the given environment and value set, under the given directory,
 // and loads them. Lower priority files (common files) will have values replaced by values from higher
 // priority files (value set files, last provided being highest priority).
-func LoadEnvironmentValuesInDirectory(directory, environment string, valueSets []string) (map[string]string, error) {
+func LoadEnvironmentValuesInDirectory(directory, environment string, valueSets []string) (map[string]values.Value, error) {
 	return loadEnvironmentValuesFromPaths(FindEnvironmentFilesInDirectory(directory, environment, valueSets))
 }

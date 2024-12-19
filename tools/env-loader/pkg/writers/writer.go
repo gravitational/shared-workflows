@@ -16,21 +16,25 @@
 
 package writers
 
+import "github.com/gravitational/shared-workflows/tools/env-loader/pkg/values"
+
 // Writers take environment values and create a string (usually to be written
 // to a file) of a given format.
 type Writer interface {
 	// Take in environment key/value pairs and format them.
-	FormatEnvironmentValues(values map[string]string) (string, error)
+	FormatEnvironmentValues(values map[string]values.Value) (string, error)
 	// Human-readable name of the writer, usually the output format.
 	Name() string
 }
 
 var (
 	dotenvWriter  = NewDotenvWriter()
+	ghaMaskWriter = NewGHAMaskWriter()
 	DefaultWriter = dotenvWriter
 
 	// A map of all writers available.
 	FromName = map[string]Writer{
-		dotenvWriter.Name(): dotenvWriter,
+		dotenvWriter.Name():  dotenvWriter,
+		ghaMaskWriter.Name(): ghaMaskWriter,
 	}
 )
