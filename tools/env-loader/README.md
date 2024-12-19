@@ -11,6 +11,7 @@ The following input formats are currently supported:
 
 The following output formats are currently supported:
 * dotenv
+* gha-mask
 
 When loading environment values from a given "value set", the tool will search
 for and load the following files in order:
@@ -63,10 +64,3 @@ name of Cloud roles with permission to decrypt secrets in the CI/CD tool value
 store, and then authenticate with the Cloud provider via OIDC. This puts the
 root of trust entirely on the CI/CD tool OIDC provider, rather than the value
 store.
-
-## Future work
-
-* Add tests
-* Add dev tooling
-* Add CI/CD pipelines
-* Add GitHub action

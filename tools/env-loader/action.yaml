@@ -85,4 +85,6 @@ runs:
         ENV_LOADER_ENVIRONMENTS_DIRECTORY: "${{ inputs.environments-directory }}"
         ENV_LOADER_ENVIRONMENT: "${{ inputs.environment-name }}"
         ENV_LOADER_VALUE_SETS: "${{ inputs.value-sets }}"
-      run: env-loader >> "${GITHUB_ENV}"
+      run: |
+        env-loader --format gha-mask
+        env-loader >> "${GITHUB_ENV}"
