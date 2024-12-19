@@ -29,12 +29,14 @@ type Writer interface {
 
 var (
 	dotenvWriter  = NewDotenvWriter()
+	ghaEnvWriter  = NewGHAEnvWriter()
 	ghaMaskWriter = NewGHAMaskWriter()
 	DefaultWriter = dotenvWriter
 
 	// A map of all writers available.
 	FromName = map[string]Writer{
 		dotenvWriter.Name():  dotenvWriter,
+		ghaEnvWriter.Name():  ghaEnvWriter,
 		ghaMaskWriter.Name(): ghaMaskWriter,
 	}
 )
