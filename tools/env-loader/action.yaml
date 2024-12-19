@@ -74,7 +74,7 @@ runs:
 
         echo "Installing to ${INSTALL_DIR}..."
         maybe_sudo mkdir -pv -m 755 "${INSTALL_DIR}"
-        maybe_sudo tar -xzf "${DOWNLOAD_PATH}" -C "${INSTALL_DIR}" "${TOOL_NAME}"
+        maybe_sudo tar -xzf "${DOWNLOAD_PATH}" -D "${INSTALL_DIR}" "${TOOL_NAME}"
         echo "${INSTALL_DIR}" >> "${GITHUB_PATH}"
         echo "Installation complete!"
 
