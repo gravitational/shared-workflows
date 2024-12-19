@@ -61,6 +61,7 @@ runs:
 
         # Install the tool
         maybe_sudo() {
+        set -x
           # Run as root via sudo if possible. This cannot be handled via an alias
           # because Bash on Windows seems to silently discard `alias sudo=""`.
           if command -v sudo > /dev/null; then
@@ -68,6 +69,7 @@ runs:
           else
             "$@"
           fi
+        set +x
         }
 
         echo "Installing to ${INSTALL_DIR}..."
