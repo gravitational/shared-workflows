@@ -95,7 +95,8 @@ jobs:
             Unlicense,
             WTFPL,
             Zlib
-            ${{ inputs.allow-additional-licenses == '' && '' || format(', {0}', inputs.allow-additional-licenses) }}
+            ${{ inputs.allow-additional-licenses != '' && ',' }}
+            ${{ inputs.allow-additional-licenses }}
           allow-ghsas: ${{ inputs.allow-ghsas }}
           allow-dependencies-licenses: ${{ inputs.allow-dependencies-licenses != '' && format('pkg:golang/github.com/gravitational/teleport, pkg:golang/github.com/gravitational/teleport/api, {0}', inputs.allow-dependencies-licenses) || 'pkg:golang/github.com/gravitational/teleport, pkg:golang/github.com/gravitational/teleport/api'}}
           comment-summary-in-pr: on-failure
