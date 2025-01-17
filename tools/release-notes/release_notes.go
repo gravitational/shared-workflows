@@ -80,7 +80,7 @@ func (r *releaseNotesGenerator) parseMD(md io.Reader) (string, error) {
 
 	// Search the changelog for the header matching releaseVersion
 	found := false
-	for sc.Scan() {
+	for !found && sc.Scan() {
 		// Only consider second-level headers
 		if strings.HasPrefix(sc.Text(), "## ") {
 			heading := strings.TrimSpace(strings.TrimPrefix(sc.Text(), "## "))
@@ -89,7 +89,6 @@ func (r *releaseNotesGenerator) parseMD(md io.Reader) (string, error) {
 			parts := strings.SplitN(heading, " ", 2)
 			if parts[0] == r.releaseVersion { // header matches releaseVersion
 				found = true
-				break
 			}
 		}
 	}

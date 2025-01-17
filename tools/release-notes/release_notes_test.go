@@ -38,10 +38,17 @@ func Test_generateReleaseNotes(t *testing.T) {
 		wantErr        bool
 	}{
 		{
-			name:           "happy path",
+			name:           "happy path - v17", // Tests that latest version works
+			releaseVersion: "17.1.3",
+			clFile:         mustOpen(t, "test-changelog.md"),
+			want:           mustRead(t, "expected-release-notes-v17.md"),
+			wantErr:        false,
+		},
+		{
+			name:           "happy path - v16", // Tests that an earlier version works
 			releaseVersion: "16.0.1",
 			clFile:         mustOpen(t, "test-changelog.md"),
-			want:           mustRead(t, "expected-release-notes.md"),
+			want:           mustRead(t, "expected-release-notes-v16.md"),
 			wantErr:        false,
 		},
 		{
@@ -53,8 +60,8 @@ func Test_generateReleaseNotes(t *testing.T) {
 			wantErr:        false,
 		},
 		{
-			name:           "version mismatch",
-			releaseVersion: "15.0.1", // test-changelog has 16.0.1
+			name:           "version does not exist",
+			releaseVersion: "14.0.1", // test-changelog has 16.0.1
 			clFile:         mustOpen(t, "test-changelog.md"),
 			want:           "",
 			wantErr:        true,
