@@ -78,25 +78,26 @@ func (r *releaseNotesGenerator) generateReleaseNotes(md io.Reader) (string, erro
 func (r *releaseNotesGenerator) parseMD(md io.Reader) (string, error) {
 	sc := bufio.NewScanner(md)
 
-	// Extract the first second-level heading
-	var heading string
+	// Search the changelog for the header matching releaseVersion
+	found := false
 	for sc.Scan() {
+		// Only consider second-level headers
 		if strings.HasPrefix(sc.Text(), "## ") {
-			heading = strings.TrimSpace(strings.TrimPrefix(sc.Text(), "## "))
-			break
+			heading := strings.TrimSpace(strings.TrimPrefix(sc.Text(), "## "))
+
+			// Expected heading would be something like "16.0.4 (MM/DD/YY)"
+			parts := strings.SplitN(heading, " ", 2)
+			if parts[0] == r.releaseVersion { // header matches releaseVersion
+				found = true
+				break
+			}
 		}
 	}
 	if err := sc.Err(); err != nil {
 		return "", trace.Wrap(err)
 	}
-	if heading == "" {
-		return "", trace.BadParameter("no second-level heading found in changelog")
-	}
-
-	// Expected heading would be something like "16.0.4 (MM/DD/YY)"
-	parts := strings.SplitN(heading, " ", 2)
-	if parts[0] != r.releaseVersion {
-		return "", trace.BadParameter("changelog version number did not match expected version number: %q != %q", parts[0], r.releaseVersion)
+	if !found {
+		return "", trace.BadParameter("could not find an entry for version %q in the changelog", r.releaseVersion)
 	}
 
 	// Write everything until next header to buffer
