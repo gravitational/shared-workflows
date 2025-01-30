@@ -10,17 +10,19 @@ import (
 )
 
 type zipper interface {
-	ZipDir(dir string, out io.Writer) error
+	ZipDir(dir string, out io.Writer, opts zipDirOpts) error
 }
 
-type dirZipper struct {
+type zipDirOpts struct {
 	// IncludePrefix determines whether to keep the root directory as a prefix in the zip file.
 	// This is particularly useful for App Bundles where the root directory (.app) should be included.
 	IncludePrefix bool
 }
 
+type defaultZipper struct{}
+
 // zipDir will zip the directory into the specified output file
-func (z *dirZipper) ZipDir(dir string, out io.Writer) error {
+func (z *defaultZipper) ZipDir(dir string, out io.Writer, opts zipDirOpts) error {
 	zipwriter := zip.NewWriter(out)
 	defer zipwriter.Close()
 
@@ -32,7 +34,7 @@ func (z *dirZipper) ZipDir(dir string, out io.Writer) error {
 			return nil
 		}
 
-		if !z.IncludePrefix {
+		if !opts.IncludePrefix {
 			path, _ = strings.CutPrefix(path, root+string(os.PathSeparator))
 		}
 

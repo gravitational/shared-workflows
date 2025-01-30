@@ -34,6 +34,7 @@ type Tool struct {
 	log slog.Logger
 
 	cmdRunner commandRunner
+	zipper    zipper
 }
 
 func NewTool(appleUsername, applePassword, applicationIdentifier string, retry int, logger slog.Logger) *Tool {
@@ -44,6 +45,7 @@ func NewTool(appleUsername, applePassword, applicationIdentifier string, retry i
 		Retry:                 retry,
 		log:                   logger,
 		cmdRunner:             &defaultCommandRunner{},
+		zipper:                &defaultZipper{},
 	}
 }
 
@@ -110,10 +112,49 @@ func (t *Tool) NotarizeAppBundle(appBundlePath string) error {
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	zipper := &dirZipper{IncludePrefix: true}
-	if err := zipper.ZipDir(appBundlePath, notaryfile); err != nil {
+	if err := t.zipper.ZipDir(appBundlePath, notaryfile, zipDirOpts{IncludePrefix: true}); err != nil {
 		return trace.Wrap(err)
 	}
+
+	// Staple the app bundle
+	out, err = t.cmdRunner.RunCommand("xcrun", "stapler", "staple", appBundlePath)
+	if err != nil {
+		return trace.Wrap(err, "failed to staple package")
+	}
+	t.log.Info("stapler output", "output", out)
+
+	return nil
+}
+
+// NotarizePackageInstaller will notarize a given package installer (.pkg).
+// Signing the package installer creates a new file for the signed package.
+func (t *Tool) NotarizePackageInstaller(pathToUnsigned, pathToSigned string) error {
+	// Productsign
+	args := []string{
+		"--sign", t.SigningIdentity,
+		"--timestamp",
+		pathToUnsigned,
+		pathToSigned,
+	}
+
+	out, err := t.cmdRunner.RunCommand("productsign", args...)
+	if err != nil {
+		return trace.Wrap(err, "failed to productsign package")
+	}
+	t.log.Info("productsign output", "output", out)
+
+	// Notarize
+	if err := t.SubmitAndWait(pathToSigned); err != nil {
+		return trace.Wrap(err)
+	}
+
+	// Staple
+	out, err = t.cmdRunner.RunCommand("xcrun", "stapler", "staple", pathToSigned)
+	if err != nil {
+		return trace.Wrap(err, "failed to staple package")
+	}
+	t.log.Info("stapler output", "output", out)
+
 	return nil
 }
 
