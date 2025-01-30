@@ -3,6 +3,7 @@ package packaging
 import (
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -10,45 +11,62 @@ import (
 	"github.com/gravitational/trace"
 )
 
-// AppBundle represents an app bundle to be packaged for distribution.
-type AppBundle struct {
+type AppBundlePackager struct {
+	Info *AppBundleInfo
+
+	log        *slog.Logger
+	notaryTool *notarize.Tool
+}
+
+// AppBundleInfo represents an app bundle to be packaged for distribution.
+type AppBundleInfo struct {
 	// Skeleton directory to use as the base for the app bundle
 	Skeleton string
 	// Entitlements file to use for the app bundle
 	Entitlements string
 	// AppBinary is the binary to use as the main executable for the app bundle
 	AppBinary string
-	// NotarizationEnabled determines whether to notarize the app bundle
-	NotaryTool *notarize.Tool
 }
 
-func NewAppBundle(skeleton, entitlements, appBinary string) *AppBundle {
-	return &AppBundle{
-		Skeleton:     skeleton,
-		Entitlements: entitlements,
-		AppBinary:    appBinary,
+type AppBundlePackagerOpts struct {
+	// NotarizationEnabled determines whether to notarize the app bundle
+	NotaryTool *notarize.Tool
+
+	Logger *slog.Logger
+}
+
+func NewAppBundlePackager(info *AppBundleInfo, opts *AppBundlePackagerOpts) *AppBundlePackager {
+	log := opts.Logger
+	if log == nil {
+		log = slog.Default()
+	}
+
+	return &AppBundlePackager{
+		Info:       info,
+		log:        log,
+		notaryTool: opts.NotaryTool,
 	}
 }
 
-func (a *AppBundle) Build() error {
-	if err := a.validate(); err != nil {
+func (a *AppBundlePackager) Package() error {
+	if err := a.Info.validate(); err != nil {
 		return trace.Wrap(err)
 	}
 
 	// Copy the app binary into the skeleton
-	binDir := filepath.Join(a.Skeleton, "Contents", "MacOS")
+	binDir := filepath.Join(a.Info.Skeleton, "Contents", "MacOS")
 	if err := os.MkdirAll(binDir, 0755); err != nil {
 		return trace.Wrap(err)
 	}
 
-	binDest := filepath.Join(binDir, filepath.Base(a.AppBinary))
+	binDest := filepath.Join(binDir, filepath.Base(a.Info.AppBinary))
 	w, err := os.OpenFile(binDest, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755) // create or overwrite
 	if err != nil {
 		return trace.Wrap(err)
 	}
 	defer w.Close()
 
-	r, err := os.OpenFile(a.AppBinary, os.O_RDONLY, 0)
+	r, err := os.OpenFile(a.Info.AppBinary, os.O_RDONLY, 0)
 	defer r.Close()
 	if err != nil {
 		return trace.Wrap(err)
@@ -57,12 +75,17 @@ func (a *AppBundle) Build() error {
 		return trace.Wrap(err)
 	}
 
+	if a.notaryTool == nil {
+		a.log.Info("notarization skipped")
+		return nil
+	}
+
 	// Notarize the app bundle
-	a.NotaryTool.WithEntitlements(a.Entitlements)
-	return trace.Wrap(a.NotaryTool.NotarizeAppBundle(a.Skeleton))
+	a.notaryTool.WithEntitlements(a.Info.Entitlements)
+	return trace.Wrap(a.notaryTool.NotarizeAppBundle(a.Info.Skeleton))
 }
 
-func (a *AppBundle) validate() error {
+func (a *AppBundleInfo) validate() error {
 	// Validate skeleton
 	info, err := os.Stat(a.Skeleton)
 	if err != nil {

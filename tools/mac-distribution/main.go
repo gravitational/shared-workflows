@@ -54,11 +54,14 @@ func main() {
 }
 
 func (c *AppBundleCmd) Run(g *GlobalFlags) error {
-	pkg := packaging.AppBundle{
-		Skeleton:     c.Skeleton,
-		Entitlements: c.Entitlements,
-		AppBinary:    c.AppBinary,
-	}
+	pkg := packaging.NewAppBundlePackager(
+		&packaging.AppBundleInfo{
+			Skeleton:     c.Skeleton,
+			Entitlements: c.Entitlements,
+			AppBinary:    c.AppBinary,
+		},
+		&packaging.AppBundlePackagerOpts{},
+	)
 
-	return pkg.Build()
+	return pkg.Package()
 }
