@@ -50,9 +50,6 @@ type Client interface {
 	// GetPullRequest returns a specific Pull Request.
 	GetPullRequest(ctx context.Context, organization string, repository string, number int) (github.PullRequest, error)
 
-	// GetPullRequestWithCommits returns a specific Pull Request with commits.
-	GetPullRequestWithCommits(ctx context.Context, organization string, repository string, number int) (github.PullRequest, error)
-
 	// CreatePullRequest will create a Pull Request.
 	CreatePullRequest(ctx context.Context, organization string, repository string, title string, head string, base string, body string, draft bool) (int, error)
 

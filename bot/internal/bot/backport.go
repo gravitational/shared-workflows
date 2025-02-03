@@ -46,7 +46,7 @@ func (b *Bot) Backport(ctx context.Context) error {
 		return trace.BadParameter("automatic backports are only supported for internal contributors")
 	}
 
-	pull, err := b.c.GitHub.GetPullRequestWithCommits(ctx,
+	pull, err := b.c.GitHub.GetPullRequest(ctx,
 		b.c.Environment.Organization,
 		b.c.Environment.Repository,
 		b.c.Environment.Number)
@@ -155,7 +155,7 @@ func (b *Bot) Backport(ctx context.Context) error {
 // BackportLocal executes dry run backport workflow locally. No git commands
 // are actually executed, just printed in the console.
 func (b *Bot) BackportLocal(ctx context.Context, branch string) error {
-	pull, err := b.c.GitHub.GetPullRequestWithCommits(ctx,
+	pull, err := b.c.GitHub.GetPullRequest(ctx,
 		b.c.Environment.Organization,
 		b.c.Environment.Repository,
 		b.c.Environment.Number)
@@ -236,16 +236,15 @@ func (b *Bot) createBackportBranch(ctx context.Context, organization string, rep
 		return trace.Wrap(err)
 	}
 
-	// Cherry-pick all commits from the PR to the backport branch.
-	for _, commit := range pull.Commits {
-		if err := git("cherry-pick", commit); err != nil {
-			// If cherry-pick fails with conflict, abort it, otherwise we
-			// won't be able to switch branch for the next backport.
-			if errAbrt := git("cherry-pick", "--abort"); errAbrt != nil {
-				return trace.NewAggregate(err, errAbrt)
-			}
-			return trace.Wrap(err)
+	// Cherry-pick the _merged_ commit on the base branch instead of
+	// the individual commits from the PR to the backport branch.
+	if err := git("cherry-pick", pull.MergeCommitSHA); err != nil {
+		// If cherry-pick fails with conflict, abort it, otherwise we
+		// won't be able to switch branch for the next backport.
+		if errAbrt := git("cherry-pick", "--abort"); errAbrt != nil {
+			return trace.NewAggregate(err, errAbrt)
 		}
+		return trace.Wrap(err)
 	}
 
 	// Push the backport branch to Github.
