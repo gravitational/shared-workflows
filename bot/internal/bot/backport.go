@@ -91,9 +91,6 @@ func (b *Bot) Backport(ctx context.Context) error {
 
 		// Create and push git branch for backport to GitHub.
 		err := b.createBackportBranch(ctx,
-			b.c.Environment.Organization,
-			b.c.Environment.Repository,
-			b.c.Environment.Number,
 			base,
 			pull,
 			head,
@@ -164,9 +161,6 @@ func (b *Bot) BackportLocal(ctx context.Context, branch string) error {
 	}
 
 	err = b.createBackportBranch(ctx,
-		b.c.Environment.Organization,
-		b.c.Environment.Repository,
-		b.c.Environment.Number,
 		branch,
 		pull,
 		b.backportBranchName(branch),
@@ -211,7 +205,7 @@ func findBranches(labels []string) []string {
 //
 // TODO(russjones): Refactor to use go-git (so similar git library) instead of
 // executing git from disk.
-func (b *Bot) createBackportBranch(ctx context.Context, organization string, repository string, number int, base string, pull github.PullRequest, newHead string, git func(...string) error) error {
+func (b *Bot) createBackportBranch(ctx context.Context, base string, pull github.PullRequest, newHead string, git func(...string) error) error {
 	log.Println("--> Backporting to", base, "<--")
 
 	if err := git("config", "--global", "user.name", "github-actions"); err != nil {
@@ -221,8 +215,8 @@ func (b *Bot) createBackportBranch(ctx context.Context, organization string, rep
 		log.Printf("Failed to set user.email: %v.", err)
 	}
 
-	// Fetch the refs for the base branch and the Github PR.
-	if err := git("fetch", "origin", base, fmt.Sprintf("pull/%d/head", number)); err != nil {
+	// Fetch the refs for the base branch and the merged commit.
+	if err := git("fetch", "origin", base, pull.MergeCommitSHA); err != nil {
 		return trace.Wrap(err)
 	}
 
