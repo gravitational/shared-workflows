@@ -39,7 +39,15 @@ type AppBundleCmd struct {
 	Entitlements string `flag:"" help:"Entitlements file to use for the app bundle."`
 }
 
-type PackageInstallerCmd struct{}
+type PackageInstallerCmd struct {
+	RootPath          string `arg:"" help:"Path to the root directory of the package installer."`
+	PackageOutputPath string `arg:"" help:"Path to the output package installer."`
+
+	InstallLocation string `flag:"" required:"" help:"Location where the package contents will be installed."`
+	BundleID        string `flag:"" required:"" help:"Unique identifier for the package installer."`
+	ScriptsDir      string `flag:"" help:"Path to the scripts directory. Contains preinstall and postinstall scripts."`
+	Version         string `flag:"" help:"Version of the package. Used in determining upgrade behavior."`
+}
 
 type WaitCmd struct{}
 
@@ -61,6 +69,21 @@ func (c *AppBundleCmd) Run(g *GlobalFlags) error {
 			AppBinary:    c.AppBinary,
 		},
 		&packaging.AppBundlePackagerOpts{},
+	)
+
+	return pkg.Package()
+}
+
+func (c *PackageInstallerCmd) Run(g *GlobalFlags) error {
+	pkg := packaging.NewPackageInstallerPackager(
+		&packaging.PackageInstallerInfo{
+			RootPath:        c.RootPath,
+			InstallLocation: c.InstallLocation,
+			BundleID:        c.BundleID,
+			PackageName:     c.PackageOutputPath,
+			ScriptsDir:      c.ScriptsDir,
+		},
+		&packaging.PackageInstallerPackagerOpts{},
 	)
 
 	return pkg.Package()
