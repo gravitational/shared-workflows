@@ -196,14 +196,11 @@ type PullRequest struct {
 	UnsafeLabels []string
 	// Fork determines if the pull request is from a fork.
 	Fork bool
-	// MergeCommitSHA changes depending on the state of the pull request. Before merging a pull request,
-	// the MergeCommitSHA holds the SHA of the test merge commit. After merging a pull request,
-	// the MergeCommitSHA changes depending on how you merged the pull request:
+	// Commits is a list of commit SHAs for the pull request.
 	//
-	// If merged as a merge commit, MergeCommitSHA represents the SHA of the merge commit.
-	// If merged via a squash, MergeCommitSHA represents the SHA of the squashed commit on the base branch.
-	// If rebased, MergeCommitSHA represents the commit that the base branch was updated to.
-	MergeCommitSHA string
+	// It is only populated if the pull request was fetched using
+	// GetPullRequestWithCommits method.
+	Commits []string
 }
 
 // Branch is a git Branch.
@@ -283,6 +280,27 @@ func (f PullRequestFiles) SourceFiles() (files PullRequestFiles) {
 	return files
 }
 
+// GetPullRequestWithCommits returns the specified pull request with commits.
+func (c *Client) GetPullRequestWithCommits(ctx context.Context, organization string, repository string, number int) (PullRequest, error) {
+	pull, err := c.GetPullRequest(ctx, organization, repository, number)
+	if err != nil {
+		return PullRequest{}, trace.Wrap(err)
+	}
+
+	commits, _, err := c.client.PullRequests.ListCommits(ctx, organization, repository, number, &go_github.ListOptions{})
+	if err != nil {
+		return PullRequest{}, trace.Wrap(err)
+	}
+
+	for _, commit := range commits {
+		if len(commit.Parents) <= 1 { // Skip merge commits.
+			pull.Commits = append(pull.Commits, *commit.SHA)
+		}
+	}
+
+	return pull, nil
+}
+
 // GetPullRequest returns a specific Pull Request.
 func (c *Client) GetPullRequest(ctx context.Context, organization string, repository string, number int) (PullRequest, error) {
 	pull, _, err := c.client.PullRequests.Get(ctx,
@@ -311,11 +329,10 @@ func (c *Client) GetPullRequest(ctx context.Context, organization string, reposi
 			Ref: pull.GetHead().GetRef(),
 			SHA: pull.GetHead().GetSHA(),
 		},
-		UnsafeTitle:    pull.GetTitle(),
-		UnsafeBody:     pull.GetBody(),
-		UnsafeLabels:   labels,
-		Fork:           pull.GetHead().GetRepo().GetFork(),
-		MergeCommitSHA: pull.GetMergeCommitSHA(),
+		UnsafeTitle:  pull.GetTitle(),
+		UnsafeBody:   pull.GetBody(),
+		UnsafeLabels: labels,
+		Fork:         pull.GetHead().GetRepo().GetFork(),
 	}, nil
 }
 
@@ -358,11 +375,10 @@ func (c *Client) ListPullRequests(ctx context.Context, organization string, repo
 					Ref: pull.GetHead().GetRef(),
 					SHA: pull.GetHead().GetSHA(),
 				},
-				UnsafeTitle:    pull.GetTitle(),
-				UnsafeBody:     pull.GetBody(),
-				UnsafeLabels:   labels,
-				Fork:           pull.GetHead().GetRepo().GetFork(),
-				MergeCommitSHA: pull.GetMergeCommitSHA(),
+				UnsafeTitle:  pull.GetTitle(),
+				UnsafeBody:   pull.GetBody(),
+				UnsafeLabels: labels,
+				Fork:         pull.GetHead().GetRepo().GetFork(),
 			})
 		}
 		if resp.NextPage == 0 {
