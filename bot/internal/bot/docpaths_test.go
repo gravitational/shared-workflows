@@ -11,7 +11,7 @@ func TestMissingRedirectSources(t *testing.T) {
 	cases := []struct {
 		description string
 		files       github.PullRequestFiles
-		redirects   RedirectConfig
+		redirects   []DocsRedirect
 		expected    []string
 	}{
 		{
@@ -25,7 +25,7 @@ func TestMissingRedirectSources(t *testing.T) {
 					PreviousName: "docs/pages/databases/mysql.mdx",
 				},
 			},
-			redirects: RedirectConfig{
+			redirects: []DocsRedirect{
 				{
 					Source:      "/databases/mysql/",
 					Destination: "/databases/protect-mysql/",
@@ -45,7 +45,7 @@ func TestMissingRedirectSources(t *testing.T) {
 					PreviousName: "docs/pages/databases/mysql.mdx",
 				},
 			},
-			redirects: RedirectConfig{},
+			redirects: []DocsRedirect{},
 			expected:  []string{"/databases/mysql/"},
 		},
 		{
@@ -58,7 +58,7 @@ func TestMissingRedirectSources(t *testing.T) {
 					Status:    "removed",
 				},
 			},
-			redirects: RedirectConfig{
+			redirects: []DocsRedirect{
 				{
 					Source:      "/databases/mysql/",
 					Destination: "/databases/protect-mysql/",
@@ -76,7 +76,7 @@ func TestMissingRedirectSources(t *testing.T) {
 					Status:    "removed",
 				},
 			},
-			redirects: RedirectConfig{},
+			redirects: []DocsRedirect{},
 			expected:  []string{"/databases/mysql/"},
 		},
 		{
@@ -89,7 +89,7 @@ func TestMissingRedirectSources(t *testing.T) {
 					Status:    "modified",
 				},
 			},
-			redirects: RedirectConfig{},
+			redirects: []DocsRedirect{},
 			expected:  []string{},
 		},
 		{
@@ -109,7 +109,7 @@ func TestMissingRedirectSources(t *testing.T) {
 		{
 			description: "redirects with nil files",
 			files:       nil,
-			redirects: RedirectConfig{
+			redirects: []DocsRedirect{
 				{
 					Source:      "/databases/mysql/",
 					Destination: "/databases/protect-mysql/",
@@ -132,7 +132,7 @@ func TestMissingRedirectSources(t *testing.T) {
 					PreviousName: "docs/pages/databases/databases.mdx",
 				},
 			},
-			redirects: RedirectConfig{
+			redirects: []DocsRedirect{
 				{
 					Source:      "/databases/",
 					Destination: "/enroll-resources/databases/",
@@ -152,7 +152,7 @@ func TestMissingRedirectSources(t *testing.T) {
 					PreviousName: "docs/pages/applications/applications.mdx",
 				},
 			},
-			redirects: RedirectConfig{
+			redirects: []DocsRedirect{
 				{
 					Source:      "/applications/",
 					Destination: "/enroll-resources/applications/applications/",
