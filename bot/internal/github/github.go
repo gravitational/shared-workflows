@@ -252,6 +252,10 @@ type PullRequestFile struct {
 	Deletions int
 	// Status is either added, removed, modified, renamed, copied, changed, unchanged
 	Status string
+	// PreviousName is the name of the file prior to renaming. The GitHub
+	// API only assigns this if Status is "renamed". For deleted files, the
+	// GitHub API uses Name.
+	PreviousName string
 }
 
 // PullRequestFiles is a list of pull request files.
@@ -410,10 +414,11 @@ func (c *Client) ListFiles(ctx context.Context, organization string, repository 
 
 		for _, file := range page {
 			files = append(files, PullRequestFile{
-				Name:      file.GetFilename(),
-				Additions: file.GetAdditions(),
-				Deletions: file.GetDeletions(),
-				Status:    file.GetStatus(),
+				Name:         file.GetFilename(),
+				Additions:    file.GetAdditions(),
+				Deletions:    file.GetDeletions(),
+				Status:       file.GetStatus(),
+				PreviousName: file.GetPreviousFilename(),
 			})
 		}
 
