@@ -46,6 +46,8 @@ func (b *Bot) Backport(ctx context.Context) error {
 		return trace.BadParameter("automatic backports are only supported for internal contributors")
 	}
 
+	b.c.Environment.Number = 51791
+
 	pull, err := b.c.GitHub.GetPullRequest(ctx,
 		b.c.Environment.Organization,
 		b.c.Environment.Repository,
@@ -58,6 +60,8 @@ func (b *Bot) Backport(ctx context.Context) error {
 		b.c.Environment.Organization,
 		b.c.Environment.Repository,
 		b.c.Environment.Number)
+
+	pull.UnsafeLabels = []string{"backport/branch/v17", "backport/branch/v16"}
 
 	// Extract backport branches names from labels attached to the Pull
 	// Request. If no backports were requested, return right away.
