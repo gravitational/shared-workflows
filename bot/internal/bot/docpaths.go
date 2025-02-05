@@ -3,13 +3,12 @@ package bot
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/gravitational/shared-workflows/bot/internal/github"
 	"github.com/gravitational/trace"
+	"github.com/spf13/afero"
 )
 
 // DocsConfig represents the structure of the config.json file found in the docs
@@ -34,21 +33,21 @@ type DocsRedirect struct {
 // teleportClonePath is a relative path to a gravitational/teleport clone. It is
 // assumed that there is a file called docs/config.json at the root of the
 // directory that lists redirects in the redirects field.
-func (b *Bot) CheckDocsPathsForMissingRedirects(ctx context.Context, teleportClonePath string) error {
+func (b *Bot) CheckDocsPathsForMissingRedirects(fs afero.Fs, ctx context.Context, teleportClonePath string) error {
 	if teleportClonePath == "" {
-		return trace.Wrap(errors.New("unable to load Teleport documentation config with an empty path"))
+		return trace.BadParameter("unable to load Teleport documentation config with an empty path")
 	}
 
 	docsConfigPath := filepath.Join(teleportClonePath, "docs", "config.json")
-	f, err := os.Open(docsConfigPath)
+	f, err := fs.Open(docsConfigPath)
 	if err != nil {
-		return trace.BadParameter("unable to load Teleport documentation config with an empty path")
+		return trace.BadParameter("unable to load Teleport documentation config at %v: %v", teleportClonePath, err)
 	}
 	defer f.Close()
 
 	var c DocsConfig
 	if err := json.NewDecoder(f).Decode(&c); err != nil {
-		return trace.Wrap(err, "unable to load redirect configuration from %v: %v", docsConfigPath)
+		return trace.BadParameter("unable to load redirect configuration from %v: %v", docsConfigPath, err)
 	}
 
 	files, err := b.c.GitHub.ListFiles(ctx, b.c.Environment.Organization, b.c.Environment.Repository, b.c.Environment.Number)
@@ -58,7 +57,7 @@ func (b *Bot) CheckDocsPathsForMissingRedirects(ctx context.Context, teleportClo
 
 	m := missingRedirectSources(c.Redirects, files)
 	if len(m) > 0 {
-		return trace.Wrap(err, "docs config at %v is missing redirects for the following renamed or deleted pages: %v", docsConfigPath, strings.Join(m, ","))
+		return trace.Errorf("docs config at %v is missing redirects for the following renamed or deleted pages: %v", docsConfigPath, strings.Join(m, ","))
 	}
 
 	return nil
