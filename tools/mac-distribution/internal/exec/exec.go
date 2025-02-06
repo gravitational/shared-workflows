@@ -14,7 +14,8 @@ type CommandRunner interface {
 	RunCommand(path string, args ...string) (string, error)
 }
 
-type DefaultCommandRunner struct{}
+type DefaultCommandRunner struct {
+}
 
 func (d *DefaultCommandRunner) RunCommand(path string, args ...string) (string, error) {
 	var stdout bytes.Buffer
@@ -26,7 +27,7 @@ func (d *DefaultCommandRunner) RunCommand(path string, args ...string) (string, 
 
 	err := cmd.Run()
 	if err != nil {
-		return strings.TrimSpace(stderr.String()), trace.Wrap(err, "can't get last released version")
+		return "", trace.Wrap(err, "failed to run command: %s", stderr.String())
 	}
 	out := strings.TrimSpace(stdout.String())
 	return out, nil

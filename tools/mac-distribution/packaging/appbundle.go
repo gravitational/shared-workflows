@@ -11,6 +11,7 @@ import (
 	"github.com/gravitational/trace"
 )
 
+// AppBundlePackager is a packager for creating an app bundle (.app) for distribution.
 type AppBundlePackager struct {
 	Info *AppBundleInfo
 
@@ -28,13 +29,15 @@ type AppBundleInfo struct {
 	AppBinary string
 }
 
+// AppBundlePackagerOpts contains options for creating an AppBundlePackager.
 type AppBundlePackagerOpts struct {
 	// NotarizationEnabled determines whether to notarize the app bundle
 	NotaryTool *notarize.Tool
-
+	// Logger is the logger to use for the packager
 	Logger *slog.Logger
 }
 
+// NewAppBundlePackager creates a new AppBundlePackager.
 func NewAppBundlePackager(info *AppBundleInfo, opts *AppBundlePackagerOpts) *AppBundlePackager {
 	log := opts.Logger
 	if log == nil {
@@ -48,6 +51,7 @@ func NewAppBundlePackager(info *AppBundleInfo, opts *AppBundlePackagerOpts) *App
 	}
 }
 
+// Package creates an app bundle from the provided info.
 func (a *AppBundlePackager) Package() error {
 	if err := a.Info.validate(); err != nil {
 		return trace.Wrap(err)
@@ -81,8 +85,11 @@ func (a *AppBundlePackager) Package() error {
 	}
 
 	// Notarize the app bundle
-	a.notaryTool.WithEntitlements(a.Info.Entitlements)
-	return trace.Wrap(a.notaryTool.NotarizeAppBundle(a.Info.Skeleton))
+	if err := a.notaryTool.NotarizeAppBundle(a.Info.Skeleton, notarize.AppBundleOpts{Entitlements: a.Info.Entitlements}); err != nil {
+		return trace.Wrap(err)
+	}
+
+	return nil
 }
 
 func (a *AppBundleInfo) validate() error {
