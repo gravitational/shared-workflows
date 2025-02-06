@@ -50,23 +50,6 @@ func (b *Bot) CheckChangelog(ctx context.Context) error {
 		return nil
 	}
 
-	files, err := b.c.GitHub.ListFiles(
-		ctx,
-		b.c.Environment.Organization,
-		b.c.Environment.Repository,
-		b.c.Environment.Number,
-	)
-	if err != nil {
-		return trace.Wrap(err, "failed to retrieve pull request files for https://github.com/%s/%s/pull/%d", b.c.Environment.Organization, b.c.Environment.Repository, b.c.Environment.Number)
-
-	}
-
-	c := classifyChanges(b.c, files)
-	if c.Docs && !c.Code {
-		log.Print("PR contains only docs changes. No need for a changelog entry.")
-		return nil
-	}
-
 	changelogEntries := b.getChangelogEntries(pull.UnsafeBody)
 	if len(changelogEntries) == 0 {
 		return trace.BadParameter("Changelog entry not found in the PR body. Please add a %q label to the PR, or changelog lines starting with `%s` followed by the changelog entries for the PR.", NoChangelogLabel, ChangelogPrefix)
