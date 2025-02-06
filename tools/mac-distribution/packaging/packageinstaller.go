@@ -28,10 +28,8 @@ type PackageInstallerInfo struct {
 	// This is typically in reverse domain notation.
 	// 		Example: com.gravitational.teleport.myapp
 	BundleID string
-	// PackageName is the name of the package installer
-	// This is only used for the filename of the package installer.
-	// This has no effect on the package itself.
-	PackageName string
+	// OutputPath is desired output path of the package installer.
+	OutputPath string
 
 	// Optional fields
 	// ScriptsDir is the path to the scripts directory.
@@ -44,7 +42,7 @@ type PackageInstallerInfo struct {
 type PackageInstallerPackagerOpts struct {
 	NotaryTool *notarize.Tool
 	Logger     *slog.Logger
-	CmdRunner  exec.CommandRunner
+	DryRun     bool
 }
 
 // NewPackageInstallerPackager creates a new PackageInstallerPackager.
@@ -54,32 +52,37 @@ func NewPackageInstallerPackager(info *PackageInstallerInfo, opts *PackageInstal
 		log = slog.Default()
 	}
 
+	var runner exec.CommandRunner = &exec.DefaultCommandRunner{}
+	if opts.DryRun {
+		runner = exec.NewDryRunner(log)
+	}
+
 	return &PackageInstallerPackager{
 		Info:       info,
 		log:        log,
 		notaryTool: opts.NotaryTool,
-		cmdRunner:  opts.CmdRunner,
+		cmdRunner:  runner,
 	}
 }
 
+// Package creates a package installer.
 func (p *PackageInstallerPackager) Package() error {
 	if err := p.Info.validate(); err != nil {
 		return trace.Wrap(err)
 	}
 
 	// Create a plist file for the package installer
-	plistPath := filepath.Join(p.Info.RootPath, ".plist")
+	plistPath := filepath.Join(p.Info.RootPath, filepath.Base(p.Info.OutputPath)+".plist")
 	if err := p.nonRelocatablePlist(plistPath); err != nil {
 		return trace.Wrap(err)
 	}
 
 	args := []string{
 		"--root", p.Info.RootPath,
-		"--identifier", p.Info.PackageName,
-		"--version", p.Info.Version,
+		"--identifier", p.Info.OutputPath,
 		"--install-location", p.Info.InstallLocation,
 		"--component-plist", plistPath,
-		p.Info.PackageName,
+		p.Info.OutputPath,
 	}
 
 	if p.Info.ScriptsDir != "" {
@@ -90,6 +93,7 @@ func (p *PackageInstallerPackager) Package() error {
 		args = append(args, "--version", p.Info.Version)
 	}
 
+	p.log.Info("building package installer...")
 	out, err := p.cmdRunner.RunCommand("pkgbuild", args...)
 	if err != nil {
 		return trace.Wrap(err, "failed to create package installer")
@@ -97,7 +101,7 @@ func (p *PackageInstallerPackager) Package() error {
 	p.log.Info("pkgbuild output", "output", out)
 
 	if p.notaryTool != nil {
-		if err := p.notaryTool.NotarizePackageInstaller(p.Info.PackageName, p.Info.PackageName); err != nil {
+		if err := p.notaryTool.NotarizePackageInstaller(p.Info.OutputPath, p.Info.OutputPath); err != nil {
 			return trace.Wrap(err)
 		}
 	}
@@ -108,7 +112,7 @@ func (p *PackageInstallerPackager) Package() error {
 // nonRelocatablePlist analyzes the root path to create a compponent plist file.
 // This plist is then modified to be non-relocatable.
 func (p *PackageInstallerPackager) nonRelocatablePlist(plistPath string) error {
-	out, err := p.cmdRunner.RunCommand("pkgbuild", "--analyze", p.Info.RootPath, plistPath)
+	out, err := p.cmdRunner.RunCommand("pkgbuild", "--analyze", "--root", p.Info.RootPath, plistPath)
 	if err != nil {
 		return trace.Wrap(err, "failed to analyze package installer")
 	}
@@ -127,7 +131,7 @@ func (p *PackageInstallerInfo) validate() error {
 		return trace.BadParameter("root path is required")
 	}
 
-	if p.PackageName == "" {
+	if p.OutputPath == "" {
 		return trace.BadParameter("package name is required")
 	}
 

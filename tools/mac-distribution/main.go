@@ -1,20 +1,22 @@
 package main
 
 import (
+	"fmt"
+	"log/slog"
+
 	"github.com/alecthomas/kong"
+	"github.com/gravitational/shared-workflows/tools/mac-distribution/notarize"
 	"github.com/gravitational/shared-workflows/tools/mac-distribution/packaging"
+	"github.com/gravitational/trace"
 )
 
-type Task interface {
-	Run()
-}
+var log = slog.Default()
 
 type CLI struct {
 	// Subcommands
-	Notarize         NotarizeCmd         `cmd:"" help:"Utility for notarizing files"`
-	Wait             WaitCmd             `cmd:"" help:"Wait for a notarization submission to complete"`
-	AppBundle        AppBundleCmd        `cmd:"" group:"packaging" help:"Create an Application Bundle (.app)"`
-	PackageInstaller PackageInstallerCmd `cmd:"" group:"packaging" help:"Create a package installer (.pkg)"`
+	Notarize   NotarizeCmd         `cmd:"" help:"Utility for notarizing files"`
+	PackageApp AppBundleCmd        `cmd:"" help:"Create an Application Bundle (.app)"`
+	PackagePkg PackageInstallerCmd `cmd:"" help:"Create a package installer (.pkg)"`
 
 	GlobalFlags
 }
@@ -49,8 +51,6 @@ type PackageInstallerCmd struct {
 	Version         string `flag:"" help:"Version of the package. Used in determining upgrade behavior."`
 }
 
-type WaitCmd struct{}
-
 func main() {
 	cli := CLI{
 		GlobalFlags: GlobalFlags{},
@@ -62,29 +62,77 @@ func main() {
 }
 
 func (c *AppBundleCmd) Run(g *GlobalFlags) error {
+	notaryTool, err := g.InitNotaryTool()
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
 	pkg := packaging.NewAppBundlePackager(
 		&packaging.AppBundleInfo{
 			Skeleton:     c.Skeleton,
 			Entitlements: c.Entitlements,
 			AppBinary:    c.AppBinary,
 		},
-		&packaging.AppBundlePackagerOpts{},
+		&packaging.AppBundlePackagerOpts{
+			NotaryTool: notaryTool,
+			Logger:     log,
+		},
 	)
 
 	return pkg.Package()
 }
 
 func (c *PackageInstallerCmd) Run(g *GlobalFlags) error {
+	notaryTool, err := g.InitNotaryTool()
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
 	pkg := packaging.NewPackageInstallerPackager(
 		&packaging.PackageInstallerInfo{
 			RootPath:        c.RootPath,
 			InstallLocation: c.InstallLocation,
 			BundleID:        c.BundleID,
-			PackageName:     c.PackageOutputPath,
+			OutputPath:      c.PackageOutputPath,
 			ScriptsDir:      c.ScriptsDir,
 		},
-		&packaging.PackageInstallerPackagerOpts{},
+		&packaging.PackageInstallerPackagerOpts{
+			NotaryTool: notaryTool,
+			Logger:     log,
+		},
 	)
 
 	return pkg.Package()
+}
+
+func (c *NotarizeCmd) Run(g *GlobalFlags) error {
+	tool, err := g.InitNotaryTool()
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return trace.Wrap(tool.NotarizeBinaries(c.Files))
+}
+
+func (g *GlobalFlags) InitNotaryTool() (*notarize.Tool, error) {
+	// Dry run if no credentials are provided
+	dryRun := g.AppleUsername == "" || g.ApplePassword == "" || g.SigningID == ""
+	if dryRun && g.ForceNotarization {
+		return nil, fmt.Errorf("notarization credentials not provided")
+	}
+
+	if dryRun {
+		log.Warn("notarization dry run enabled", "reason", "notarization credentials missing")
+	}
+
+	// Initialize notary tool
+	return notarize.NewTool(
+		g.AppleUsername,
+		g.ApplePassword,
+		g.SigningID,
+		notarize.ToolOpts{
+			Retry:  g.Retry,
+			DryRun: dryRun,
+			Logger: log,
+		},
+	), nil
 }

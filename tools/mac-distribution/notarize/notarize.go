@@ -1,12 +1,12 @@
 package notarize
 
 import (
-	"bytes"
+	"io"
 	"log/slog"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
+
+	"github.com/gravitational/shared-workflows/tools/mac-distribution/internal/exec"
 
 	"github.com/gravitational/trace"
 )
@@ -17,12 +17,8 @@ type Tool struct {
 	AppleUsername string
 	ApplePassword string
 
-	// ApplicationIdentifier is the unique ID of the package being distributed.
-	ApplicationIdentifier string
-
-	// Entitlements is the path to the entitlements file.
-	// Entitlements are tied to a specific ApplicationIdentifier.
-	Entitlements string
+	// BundleID is the unique ID of the package being distributed.
+	BundleID string
 
 	// SigningIdentity is the identity used to sign the package.
 	// This is typically the Developer ID Application identity.
@@ -31,31 +27,56 @@ type Tool struct {
 	// Retry sets the max number of attempts for a succesful notarization
 	Retry int
 
-	log slog.Logger
+	log *slog.Logger
 
-	cmdRunner commandRunner
+	dryRun    bool
+	cmdRunner exec.CommandRunner
 	zipper    zipper
 }
 
-func NewTool(appleUsername, applePassword, applicationIdentifier string, retry int, logger slog.Logger) *Tool {
+type ToolOpts struct {
+	Logger *slog.Logger
+	Retry  int
+	DryRun bool
+}
+
+func NewTool(appleUsername, applePassword, bundleID string, opts ToolOpts) *Tool {
+	logger := opts.Logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+
+	var runner exec.CommandRunner = &exec.DefaultCommandRunner{}
+	if opts.DryRun {
+		runner = exec.NewDryRunner(logger)
+	}
+
+	if appleUsername == "" && opts.DryRun {
+		appleUsername = "dryrun"
+	}
+
+	if applePassword == "" && opts.DryRun {
+		applePassword = "dryrun"
+	}
+
+	if bundleID == "" && opts.DryRun {
+		bundleID = "dryrun"
+	}
+
 	return &Tool{
-		AppleUsername:         appleUsername,
-		ApplePassword:         applePassword,
-		ApplicationIdentifier: applicationIdentifier,
-		Retry:                 retry,
-		log:                   logger,
-		cmdRunner:             &defaultCommandRunner{},
-		zipper:                &defaultZipper{},
+		AppleUsername: appleUsername,
+		ApplePassword: applePassword,
+		BundleID:      bundleID,
+		Retry:         opts.Retry,
+		log:           logger,
+		cmdRunner:     runner,
+		zipper:        &defaultZipper{},
+		dryRun:        opts.DryRun,
 	}
 }
 
-func NewDryRunTool(logger slog.Logger) *Tool {
-	return &Tool{
-		log:       logger,
-		cmdRunner: &defaultCommandRunner{},
-	}
-}
-
+// NotarizeBinaries will notarize the provided binaries.
+// This will sign the binaries and submit them for notarization.
 func (t *Tool) NotarizeBinaries(files []string) error {
 	// Codesign
 	args := []string{
@@ -65,37 +86,80 @@ func (t *Tool) NotarizeBinaries(files []string) error {
 		"--options", "runtime",
 	}
 	args = append(args, files...)
-	cmd := exec.Command("codesign", args...)
+	out, err := t.cmdRunner.RunCommand("codesign", args...)
+	if err != nil {
+		return trace.Wrap(err, "failed to codesign binaries: %v", out)
+	}
+	t.log.Info("codesign output", "output", out)
 
-	if err := cmd.Run(); err != nil {
-		return err
+	// The Apple Notary Service requires a zip file for notarization.
+	// The files will be staged in a temporary directory and zipped for submission.
+	notaryDir, err := os.MkdirTemp("", "notarize-binaries-*")
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	defer os.RemoveAll(notaryDir)
+
+	// Stage files for notarization
+	for _, file := range files {
+		dest := filepath.Join(notaryDir, filepath.Base(file))
+		r, err := os.OpenFile(file, os.O_RDONLY, 0)
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		defer r.Close()
+
+		w, err := os.OpenFile(dest, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755)
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		defer w.Close()
+
+		if _, err := io.Copy(w, r); err != nil {
+			return trace.Wrap(err)
+		}
 	}
 
-	// Setup zip for notarization
+	// Zip the staged directory where the binaries are located
+	notaryfile, err := os.CreateTemp("", "notarize-binaries-*.zip")
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	defer notaryfile.Close()
+	defer os.Remove(notaryfile.Name())
 
-	// Notarize
-	// Stapling is not done for binaries
-	if err := t.SubmitAndWait(""); err != nil {
+	if err := t.zipper.ZipDir(notaryDir, notaryfile, zipDirOpts{}); err != nil {
 		return trace.Wrap(err)
 	}
 
-	return cmd.Run()
+	// Notarize
+	if err := t.SubmitAndWait(notaryfile.Name()); err != nil {
+		return trace.Wrap(err)
+	}
+	// Stapling is not done for binaries
+	return nil
+}
+
+type AppBundleOpts struct {
+	// Entitlements is the path to the entitlements file.
+	// Entitlements are tied to a specific BundleID.
+	Entitlements string
 }
 
 // NotarizeAppBundle will notarize the app bundle located at the specified path.
-func (t *Tool) NotarizeAppBundle(appBundlePath string) error {
+func (t *Tool) NotarizeAppBundle(appBundlePath string, opts AppBundleOpts) error {
 	// build args
 	args := []string{
 		"--sign", t.SigningIdentity,
-		"--identifier", t.ApplicationIdentifier,
+		"--identifier", t.BundleID,
 		"--force",
 		"--verbose",
 		"--timestamp",
 		"--options", "kill,hard,runtime",
 	}
 
-	if t.Entitlements != "" { // add entitlements if provided
-		args = append(args, "--entitlements", t.Entitlements)
+	if opts.Entitlements != "" { // add entitlements if provided
+		args = append(args, "--entitlements", opts.Entitlements)
 	}
 
 	// codesign the app bundle
@@ -156,31 +220,4 @@ func (t *Tool) NotarizePackageInstaller(pathToUnsigned, pathToSigned string) err
 	t.log.Info("stapler output", "output", out)
 
 	return nil
-}
-
-func (t *Tool) WithEntitlements(entitlements string) {
-	t.Entitlements = entitlements
-}
-
-// commandWrapper is a wrapper around [exec.Command] that is useful for testing.
-type commandRunner interface {
-	RunCommand(path string, args ...string) (string, error)
-}
-
-type defaultCommandRunner struct{}
-
-func (d *defaultCommandRunner) RunCommand(path string, args ...string) (string, error) {
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-
-	cmd := exec.Command(path, args...)
-	cmd.Stderr = &stderr
-	cmd.Stdout = &stdout
-
-	err := cmd.Run()
-	if err != nil {
-		return strings.TrimSpace(stderr.String()), trace.Wrap(err, "can't get last released version")
-	}
-	out := strings.TrimSpace(stdout.String())
-	return out, nil
 }

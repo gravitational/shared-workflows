@@ -32,7 +32,7 @@ func (t *Tool) Submit(pathToPackage string) (id string, err error) {
 	args := []string{
 		"notarytool",
 		"submit", pathToPackage,
-		"--team-id", t.ApplicationIdentifier,
+		"--team-id", t.BundleID,
 		"--apple-id", t.AppleUsername,
 		"--apple-password", t.ApplePassword,
 		"--output-format", "json",
@@ -49,6 +49,10 @@ func (t *Tool) Submit(pathToPackage string) (id string, err error) {
 		return "", trace.Wrap(err, "failed to submit package for notarization for %d attempts", t.Retry)
 	}
 
+	if t.dryRun { // If dry run, return a fake submission ID
+		return "0", nil
+	}
+
 	var sub SubmissionResponseData
 	if err := json.Unmarshal([]byte(stdout), &sub); err != nil {
 		return "", trace.Wrap(err, "failed to parse output from submission request")
@@ -62,7 +66,7 @@ func (t *Tool) WaitForSubmission(id string) error {
 	args := []string{
 		"notarytool",
 		"wait", id,
-		"--team-id", t.ApplicationIdentifier,
+		"--team-id", t.BundleID,
 		"--apple-id", t.AppleUsername,
 		"--apple-password", t.ApplePassword,
 		"--output-format", "json",

@@ -2,7 +2,6 @@ package notarize
 
 import (
 	"errors"
-	"log/slog"
 	"testing"
 
 	"github.com/zeebo/assert"
@@ -45,13 +44,10 @@ func TestSubmit_retries(t *testing.T) {
 			counter := &cmdCounter{
 				failedAttempts: tt.failedAttempts,
 			}
-			tool := &Tool{
-				AppleUsername: "FAKE_USERNAME",
-				ApplePassword: "FAKE_PASSWORD",
-				Retry:         tt.maxRetries,
-				cmdRunner:     counter,
-				log:           *slog.Default(),
-			}
+			tool := NewTool("FAKE_USERNAME", "FAKE_PASSWORD", "FAKE_IDENTIFIER", ToolOpts{
+				Retry: tt.maxRetries,
+			})
+			tool.cmdRunner = counter
 			_, err := tool.Submit("fake/package.zip")
 			if tt.wantErr {
 				assert.Error(t, err)
