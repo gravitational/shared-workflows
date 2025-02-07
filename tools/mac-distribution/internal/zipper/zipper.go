@@ -1,4 +1,4 @@
-package notarize
+package zipper
 
 import (
 	"archive/zip"
@@ -7,28 +7,35 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/gravitational/trace"
 )
 
-type zipper interface {
-	ZipDir(dir string, out io.Writer, opts zipDirOpts) error
+type DirZipper interface {
+	ZipDir(dir string, out io.Writer, opts DirZipperOpts) error
 }
 
-type zipDirOpts struct {
+type DirZipperOpts struct {
 	// IncludePrefix determines whether to keep the root directory as a prefix in the zip file.
 	// This is particularly useful for App Bundles where the root directory (.app) should be included.
 	IncludePrefix bool
 }
 
-type defaultZipper struct{}
+func NewDirZipper() DirZipper {
+	return &DefaultZipper{}
+}
 
-// zipDir will zip the directory into the specified output file
-func (z *defaultZipper) ZipDir(dir string, out io.Writer, opts zipDirOpts) error {
+// DefaultZipper is the default implementation of DirZipper
+type DefaultZipper struct{}
+
+// ZipDir will zip the directory into the specified output file
+func (z *DefaultZipper) ZipDir(dir string, out io.Writer, opts DirZipperOpts) error {
 	zipwriter := zip.NewWriter(out)
 	defer zipwriter.Close()
 
 	root := filepath.Clean(dir)
 
-	filepath.WalkDir(root, fs.WalkDirFunc(func(path string, d fs.DirEntry, err error) error {
+	err := filepath.WalkDir(root, fs.WalkDirFunc(func(path string, d fs.DirEntry, err error) error {
 		// Ignore zipping directories
 		if d.IsDir() {
 			return nil
@@ -52,5 +59,5 @@ func (z *defaultZipper) ZipDir(dir string, out io.Writer, opts zipDirOpts) error
 		_, err = io.Copy(w, f)
 		return err
 	}))
-	return nil
+	return trace.Wrap(err)
 }

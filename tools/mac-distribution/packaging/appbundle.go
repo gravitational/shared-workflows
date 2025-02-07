@@ -2,11 +2,11 @@ package packaging
 
 import (
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
 
+	"github.com/gravitational/shared-workflows/tools/mac-distribution/internal/fileutil"
 	"github.com/gravitational/shared-workflows/tools/mac-distribution/notarize"
 	"github.com/gravitational/trace"
 )
@@ -64,18 +64,7 @@ func (a *AppBundlePackager) Package() error {
 	}
 
 	binDest := filepath.Join(binDir, filepath.Base(a.Info.AppBinary))
-	w, err := os.OpenFile(binDest, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755) // create or overwrite
-	if err != nil {
-		return trace.Wrap(err)
-	}
-	defer w.Close()
-
-	r, err := os.OpenFile(a.Info.AppBinary, os.O_RDONLY, 0)
-	defer r.Close()
-	if err != nil {
-		return trace.Wrap(err)
-	}
-	if _, err = io.Copy(w, r); err != nil {
+	if err := fileutil.CopyFile(a.Info.AppBinary, binDest); err != nil {
 		return trace.Wrap(err)
 	}
 

@@ -1,37 +1,44 @@
 package notarize
 
 import (
-	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
 
 	"github.com/gravitational/shared-workflows/tools/mac-distribution/internal/exec"
+	"github.com/gravitational/shared-workflows/tools/mac-distribution/internal/fileutil"
+	"github.com/gravitational/shared-workflows/tools/mac-distribution/internal/zipper"
 
 	"github.com/gravitational/trace"
 )
 
 // Tool is a wrapper around the MacOS codesigning/notarizing utilities.
 type Tool struct {
-	// Credentials for authenticating with Apple Notary Service
-	AppleUsername string
-	ApplePassword string
-
-	// BundleID is the unique ID of the package being distributed.
-	BundleID string
-
-	// SigningIdentity is the identity used to sign the package.
-	// This is typically the Developer ID Application identity.
-	SigningIdentity string
-
+	Creds Creds
 	// Retry sets the max number of attempts for a succesful notarization
-	Retry int
+	retry int
 
 	log *slog.Logger
 
 	dryRun    bool
 	cmdRunner exec.CommandRunner
-	zipper    zipper
+	zip       zipper.DirZipper
+}
+
+// Creds is
+type Creds struct {
+	// Credentials for authenticating with Apple Notary Service
+	AppleUsername string
+	ApplePassword string
+	// SigningIdentity is the identity used to sign the package.
+	// This is typically the Developer ID Application identity.
+	SigningIdentity string
+	// BundleID is a unique identifier for the package to be signed.
+	// The codesign CLI doesn't normally require this but it will be infered if not present.
+	// In an effort to make the process a bit more deterministic we will require it.
+	// This is typically in reverse domain notation.
+	// 		Example: com.gravitational.teleport.myapp
+	BundleID string
 }
 
 type ToolOpts struct {
@@ -40,38 +47,36 @@ type ToolOpts struct {
 	DryRun bool
 }
 
-func NewTool(appleUsername, applePassword, bundleID string, opts ToolOpts) *Tool {
+func NewTool(creds Creds, opts ToolOpts) *Tool {
 	logger := opts.Logger
 	if logger == nil {
 		logger = slog.Default()
 	}
 
-	var runner exec.CommandRunner = &exec.DefaultCommandRunner{}
+	var runner exec.CommandRunner = exec.NewDefaultCommandRunner()
 	if opts.DryRun {
 		runner = exec.NewDryRunner(logger)
 	}
 
-	if appleUsername == "" && opts.DryRun {
-		appleUsername = "dryrun"
+	if creds.AppleUsername == "" && opts.DryRun {
+		creds.AppleUsername = "dryrun"
 	}
 
-	if applePassword == "" && opts.DryRun {
-		applePassword = "dryrun"
+	if creds.ApplePassword == "" && opts.DryRun {
+		creds.ApplePassword = "dryrun"
 	}
 
-	if bundleID == "" && opts.DryRun {
-		bundleID = "dryrun"
+	if creds.BundleID == "" && opts.DryRun {
+		creds.BundleID = "dryrun"
 	}
 
 	return &Tool{
-		AppleUsername: appleUsername,
-		ApplePassword: applePassword,
-		BundleID:      bundleID,
-		Retry:         opts.Retry,
-		log:           logger,
-		cmdRunner:     runner,
-		zipper:        &defaultZipper{},
-		dryRun:        opts.DryRun,
+		Creds:     creds,
+		retry:     opts.Retry,
+		log:       logger,
+		cmdRunner: runner,
+		zip:       zipper.NewDirZipper(),
+		dryRun:    opts.DryRun,
 	}
 }
 
@@ -80,6 +85,7 @@ func NewTool(appleUsername, applePassword, bundleID string, opts ToolOpts) *Tool
 func (t *Tool) NotarizeBinaries(files []string) error {
 	// Codesign
 	args := []string{
+		"--sign", t.Creds.SigningIdentity,
 		"--force",
 		"--verbose",
 		"--timestamp",
@@ -103,19 +109,7 @@ func (t *Tool) NotarizeBinaries(files []string) error {
 	// Stage files for notarization
 	for _, file := range files {
 		dest := filepath.Join(notaryDir, filepath.Base(file))
-		r, err := os.OpenFile(file, os.O_RDONLY, 0)
-		if err != nil {
-			return trace.Wrap(err)
-		}
-		defer r.Close()
-
-		w, err := os.OpenFile(dest, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755)
-		if err != nil {
-			return trace.Wrap(err)
-		}
-		defer w.Close()
-
-		if _, err := io.Copy(w, r); err != nil {
+		if err := fileutil.CopyFile(file, dest); err != nil {
 			return trace.Wrap(err)
 		}
 	}
@@ -128,7 +122,7 @@ func (t *Tool) NotarizeBinaries(files []string) error {
 	defer notaryfile.Close()
 	defer os.Remove(notaryfile.Name())
 
-	if err := t.zipper.ZipDir(notaryDir, notaryfile, zipDirOpts{}); err != nil {
+	if err := t.zip.ZipDir(notaryDir, notaryfile, zipper.DirZipperOpts{}); err != nil {
 		return trace.Wrap(err)
 	}
 
@@ -150,8 +144,8 @@ type AppBundleOpts struct {
 func (t *Tool) NotarizeAppBundle(appBundlePath string, opts AppBundleOpts) error {
 	// build args
 	args := []string{
-		"--sign", t.SigningIdentity,
-		"--identifier", t.BundleID,
+		"--sign", t.Creds.SigningIdentity,
+		"--identifier", t.Creds.BundleID,
 		"--force",
 		"--verbose",
 		"--timestamp",
@@ -176,7 +170,7 @@ func (t *Tool) NotarizeAppBundle(appBundlePath string, opts AppBundleOpts) error
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	if err := t.zipper.ZipDir(appBundlePath, notaryfile, zipDirOpts{IncludePrefix: true}); err != nil {
+	if err := t.zip.ZipDir(appBundlePath, notaryfile, zipper.DirZipperOpts{IncludePrefix: true}); err != nil {
 		return trace.Wrap(err)
 	}
 
@@ -195,7 +189,7 @@ func (t *Tool) NotarizeAppBundle(appBundlePath string, opts AppBundleOpts) error
 func (t *Tool) NotarizePackageInstaller(pathToUnsigned, pathToSigned string) error {
 	// Productsign
 	args := []string{
-		"--sign", t.SigningIdentity,
+		"--sign", t.Creds.SigningIdentity,
 		"--timestamp",
 		pathToUnsigned,
 		pathToSigned,

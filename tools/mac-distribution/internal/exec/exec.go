@@ -14,8 +14,14 @@ type CommandRunner interface {
 	RunCommand(path string, args ...string) (string, error)
 }
 
+func NewDefaultCommandRunner() *DefaultCommandRunner {
+	return &DefaultCommandRunner{}
+}
+
 type DefaultCommandRunner struct {
 }
+
+var _ CommandRunner = &DefaultCommandRunner{}
 
 func (d *DefaultCommandRunner) RunCommand(path string, args ...string) (string, error) {
 	var stdout bytes.Buffer
@@ -26,10 +32,10 @@ func (d *DefaultCommandRunner) RunCommand(path string, args ...string) (string, 
 	cmd.Stdout = &stdout
 
 	err := cmd.Run()
-	if err != nil {
-		return "", trace.Wrap(err, "failed to run command: %s", stderr.String())
-	}
 	out := strings.TrimSpace(stdout.String())
+	if err != nil {
+		return out, trace.Wrap(err, "failed to run command: %s", stderr.String())
+	}
 	return out, nil
 }
 
@@ -38,6 +44,8 @@ func (d *DefaultCommandRunner) RunCommand(path string, args ...string) (string, 
 type DryRunner struct {
 	log *slog.Logger
 }
+
+var _ CommandRunner = &DryRunner{}
 
 // NewDryRunner creates a new dry runner.
 func NewDryRunner(logger *slog.Logger) *DryRunner {
