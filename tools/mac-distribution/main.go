@@ -27,7 +27,7 @@ type NotarizeCmd struct {
 
 type GlobalFlags struct {
 	Retry             int  `group:"notarization options" help:"Retry notarization in case of failure."`
-	ForceNotarization bool `group:"notarization options" help:"Always attempt notarization. By default notarization will be skipped if apple-password or apple-username is not set."`
+	ForceNotarization bool `group:"notarization options" help:"Always attempt notarization. By default notarization will be skipped if notarization creds are not set."`
 
 	AppleUsername string `group:"notarization creds" and:"notarization creds" env:"APPLE_USERNAME" help:"Apple Username. Required for notarization. Must use with apple-password."`
 	ApplePassword string `group:"notarization creds" and:"notarization creds" env:"APPLE_PASSWORD" help:"Apple Password. Required for notarization. Must use with apple-username."`
@@ -117,7 +117,7 @@ func (g *GlobalFlags) InitNotaryTool() (*notarize.Tool, error) {
 	// Dry run if no credentials are provided
 	dryRun := g.AppleUsername == "" || g.ApplePassword == "" || g.SigningID == ""
 	if dryRun && g.ForceNotarization {
-		return nil, fmt.Errorf("notarization credentials not provided")
+		return nil, fmt.Errorf("notarization credentials not provided and force-notarization is enabled")
 	}
 
 	if dryRun {

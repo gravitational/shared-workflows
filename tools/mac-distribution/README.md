@@ -2,27 +2,41 @@
 
 ## Usage
 
-Notarize Binaries
+### Packaging
 
+App Bundle (.app)
+```shell
+mac-distribution package-app tsh tsh.app/
 ```
+
+Package Installer (.pkg)
+
+```shell
+# Staging files
+mkdir "${STAGING_PKG}"
+cp "file1" "file2" "${STAGING_PKG}"
+
+# Package
+mac-distribution package-pkg --install-location /usr/local/bin "${STAGING_PKG}" "my-app.pkg"
+```
+
+### Notarization
+
+By default, notarization is disabled and will output dryrun logs. To enable it you must either set the following options:
+```shell
+mac-distribution --apple-username="" --apple-password="" --signing-identity="" --bundle-id="" ...
+```
+
+These flags can also be set through the environment.
+```shell
 APPLE_USERNAME=""
 APPLE_PASSWORD=""
-APPLE_DEVELOPER_TEAM_ID=""
-
-
-mkdir ${STAGING_DIR}
-ditto ${BINARIES} ${STAGING_DIR}
-mac-distribution notarize-binaries --retry 2 --force-notarization ${STAGING_DIR}
+SIGNING_IDENTITY=""
+BUNDLE_ID=""
 ```
 
-Notarize App Bundle
+If all of these are set then notarization will be enabled and the tool will notarize after packaging.
+This is to make it convenient to test locally without having to set up creds to build packages.
 
-```
-mac-distribution app-bundle \
-    --name tsh \
-    --version $(VERSION) \
-    --bundle $(TSH_APP_BUNDLE) \
-    --entitlements $(TSH_APP_ENTITLEMENTS) \
-    --app-binary $(BUILDDIR)/tsh
-```
-
+However this isn't desirable in CI environments where notarization must happen. Enabling dryrun will "silently" cause a failure.
+For convenience the `--force-notarization` flag is provided to fail in the scenario where creds are missing.
