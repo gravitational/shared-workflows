@@ -32,6 +32,7 @@ type GlobalFlags struct {
 	AppleUsername string `group:"notarization creds" and:"notarization creds" env:"APPLE_USERNAME" help:"Apple Username. Required for notarization. Must use with apple-password."`
 	ApplePassword string `group:"notarization creds" and:"notarization creds" env:"APPLE_PASSWORD" help:"Apple Password. Required for notarization. Must use with apple-username."`
 	SigningID     string `group:"notarization creds" and:"notarization creds" env:"SIGNING_ID" help:"Signing Identity to use for codesigning. Required for notarization."`
+	BundleID      string `group:"notarization creds" and:"notarization creds" env:"BUNDLE_ID" help:"Bundle ID is a unique identifier used for codesigning & notarization. Required for notarization."`
 }
 
 type AppBundleCmd struct {
@@ -46,7 +47,6 @@ type PackageInstallerCmd struct {
 	PackageOutputPath string `arg:"" help:"Path to the output package installer."`
 
 	InstallLocation string `flag:"" required:"" help:"Location where the package contents will be installed."`
-	BundleID        string `flag:"" required:"" help:"Unique identifier for the package installer."`
 	ScriptsDir      string `flag:"" help:"Path to the scripts directory. Contains preinstall and postinstall scripts."`
 	Version         string `flag:"" help:"Version of the package. Used in determining upgrade behavior."`
 }
@@ -92,9 +92,9 @@ func (c *PackageInstallerCmd) Run(g *GlobalFlags) error {
 		&packaging.PackageInstallerInfo{
 			RootPath:        c.RootPath,
 			InstallLocation: c.InstallLocation,
-			BundleID:        c.BundleID,
 			OutputPath:      c.PackageOutputPath,
 			ScriptsDir:      c.ScriptsDir,
+			BundleID:        g.BundleID, // Only populated for notarization
 		},
 		&packaging.PackageInstallerPackagerOpts{
 			NotaryTool: notaryTool,
@@ -126,9 +126,12 @@ func (g *GlobalFlags) InitNotaryTool() (*notarize.Tool, error) {
 
 	// Initialize notary tool
 	return notarize.NewTool(
-		g.AppleUsername,
-		g.ApplePassword,
-		g.SigningID,
+		notarize.Creds{
+			AppleUsername:   g.AppleUsername,
+			ApplePassword:   g.ApplePassword,
+			SigningIdentity: g.SigningID,
+			BundleID:        g.BundleID,
+		},
 		notarize.ToolOpts{
 			Retry:  g.Retry,
 			DryRun: dryRun,

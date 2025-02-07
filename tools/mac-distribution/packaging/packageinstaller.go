@@ -2,6 +2,7 @@ package packaging
 
 import (
 	"log/slog"
+	"os"
 	"path/filepath"
 
 	"github.com/gravitational/shared-workflows/tools/mac-distribution/internal/exec"
@@ -72,6 +73,11 @@ func (p *PackageInstallerPackager) Package() error {
 	}
 
 	// Create a plist file for the package installer
+	tmpFile, err := os.CreateTemp("", "packageinstaller.plist")
+	if err != nil {
+		return trace.Wrap(err, "failed to create temp file")
+	}
+	defer os.Remove(tmpFile.Name())
 	plistPath := filepath.Join(p.Info.RootPath, filepath.Base(p.Info.OutputPath)+".plist")
 	if err := p.nonRelocatablePlist(plistPath); err != nil {
 		return trace.Wrap(err)
@@ -79,10 +85,12 @@ func (p *PackageInstallerPackager) Package() error {
 
 	args := []string{
 		"--root", p.Info.RootPath,
-		"--identifier", p.Info.OutputPath,
 		"--install-location", p.Info.InstallLocation,
 		"--component-plist", plistPath,
-		p.Info.OutputPath,
+	}
+
+	if p.Info.BundleID != "" {
+		args = append(args, "--identifier", p.Info.BundleID)
 	}
 
 	if p.Info.ScriptsDir != "" {
@@ -94,6 +102,7 @@ func (p *PackageInstallerPackager) Package() error {
 	}
 
 	p.log.Info("building package installer...")
+	args = append(args, p.Info.OutputPath)
 	out, err := p.cmdRunner.RunCommand("pkgbuild", args...)
 	if err != nil {
 		return trace.Wrap(err, "failed to create package installer")
@@ -118,7 +127,20 @@ func (p *PackageInstallerPackager) nonRelocatablePlist(plistPath string) error {
 	}
 	p.log.Info("pkgbuild analyze output", "output", out)
 
+	// todo: Use a plist library instead of shelling out to replace plist attributes.
+	//       It's currently convenient to shell out to confirm parity to existing pipeline code
+
+	// Set BundleIsRelocatable to false for consistency.
+	// We have a lot of automation scripts that expect binaries to be in a specific location.
 	out, err = p.cmdRunner.RunCommand("plutil", "-replace", "BundleIsRelocatable", "-bool", "NO", plistPath)
+	if err != nil {
+		return trace.Wrap(err, "failed to modify plist")
+	}
+	p.log.Info("plutil output", "output", out)
+
+	// Set BundleIsVersionChecked to false to allow for downgrades of the package.
+	// Normal operation is to only allow version upgrades to overwrite. This disables that.
+	out, err = p.cmdRunner.RunCommand("plutil", "-replace", "BundleIsVersionChecked", "-bool", "NO", plistPath)
 	if err != nil {
 		return trace.Wrap(err, "failed to modify plist")
 	}
@@ -132,7 +154,7 @@ func (p *PackageInstallerInfo) validate() error {
 	}
 
 	if p.OutputPath == "" {
-		return trace.BadParameter("package name is required")
+		return trace.BadParameter("output path is required")
 	}
 
 	if p.BundleID == "" {

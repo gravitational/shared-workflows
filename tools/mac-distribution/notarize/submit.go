@@ -32,21 +32,21 @@ func (t *Tool) Submit(pathToPackage string) (id string, err error) {
 	args := []string{
 		"notarytool",
 		"submit", pathToPackage,
-		"--team-id", t.BundleID,
-		"--apple-id", t.AppleUsername,
-		"--apple-password", t.ApplePassword,
+		"--team-id", t.Creds.BundleID,
+		"--apple-id", t.Creds.AppleUsername,
+		"--apple-password", t.Creds.ApplePassword,
 		"--output-format", "json",
 	}
 
 	stdout, err := t.cmdRunner.RunCommand("xcrun", args...)
-	for i := 0; err != nil && i < t.Retry; i += 1 {
+	for i := 0; err != nil && i < t.retry; i += 1 {
 		t.log.Error("submission error", "error", err)
 		t.log.Info("retrying submission", "count", i+1)
 		stdout, err = t.cmdRunner.RunCommand("xcrun", args...)
 	}
 
 	if err != nil {
-		return "", trace.Wrap(err, "failed to submit package for notarization for %d attempts", t.Retry)
+		return "", trace.Wrap(err, "failed to submit package for notarization for %d attempts", t.retry)
 	}
 
 	if t.dryRun { // If dry run, return a fake submission ID
@@ -66,9 +66,9 @@ func (t *Tool) WaitForSubmission(id string) error {
 	args := []string{
 		"notarytool",
 		"wait", id,
-		"--team-id", t.BundleID,
-		"--apple-id", t.AppleUsername,
-		"--apple-password", t.ApplePassword,
+		"--team-id", t.Creds.BundleID,
+		"--apple-id", t.Creds.AppleUsername,
+		"--apple-password", t.Creds.ApplePassword,
 		"--output-format", "json",
 	}
 	stdout, err := t.cmdRunner.RunCommand("xcrun", args...)

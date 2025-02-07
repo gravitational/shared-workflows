@@ -44,9 +44,17 @@ func TestSubmit_retries(t *testing.T) {
 			counter := &cmdCounter{
 				failedAttempts: tt.failedAttempts,
 			}
-			tool := NewTool("FAKE_USERNAME", "FAKE_PASSWORD", "FAKE_IDENTIFIER", ToolOpts{
-				Retry: tt.maxRetries,
-			})
+			tool := NewTool(
+				Creds{
+					AppleUsername:   "FAKE_USERNAME",
+					ApplePassword:   "FAKE_PASSWORD",
+					SigningIdentity: "FAKE_IDENTITY",
+					BundleID:        "FAKE_BUNDLE_ID",
+				},
+				ToolOpts{
+					Retry: tt.maxRetries,
+				},
+			)
 			tool.cmdRunner = counter
 			_, err := tool.Submit("fake/package.zip")
 			if tt.wantErr {
