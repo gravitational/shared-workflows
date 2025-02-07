@@ -70,6 +70,10 @@ func NewTool(creds Creds, opts ToolOpts) *Tool {
 		creds.BundleID = "dryrun"
 	}
 
+	if creds.SigningIdentity == "" && opts.DryRun {
+		creds.SigningIdentity = "dryrun"
+	}
+
 	return &Tool{
 		Creds:     creds,
 		retry:     opts.Retry,
