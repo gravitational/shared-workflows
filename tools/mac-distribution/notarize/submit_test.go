@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/zeebo/assert"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestSubmit_retries(t *testing.T) {

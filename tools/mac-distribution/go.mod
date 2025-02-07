@@ -6,7 +6,6 @@ require (
 	github.com/alecthomas/kong v1.6.1
 	github.com/gravitational/trace v1.5.0
 	github.com/stretchr/testify v1.8.3
-	github.com/zeebo/assert v1.3.1
 )
 
 require (
