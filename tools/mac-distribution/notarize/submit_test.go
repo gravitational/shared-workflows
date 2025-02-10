@@ -75,10 +75,10 @@ type cmdCounter struct {
 	failedAttempts int
 }
 
-func (c *cmdCounter) RunCommand(path string, args ...string) (string, error) {
+func (c *cmdCounter) RunCommand(path string, args ...string) ([]byte, error) {
 	c.count += 1
 	if c.count > c.failedAttempts {
-		return "{\"id\": \"0\"}", nil
+		return []byte("{\"id\": \"0\"}"), nil
 	}
-	return "", errors.New("failed")
+	return nil, errors.New("failed")
 }

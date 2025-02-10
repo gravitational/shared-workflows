@@ -1,4 +1,4 @@
-package packaging
+package packageinstaller
 
 import (
 	"log/slog"
@@ -10,17 +10,18 @@ import (
 	"github.com/gravitational/trace"
 )
 
-// PackageInstallerPackager is a packager for creating a package installer (.pkg) for distribution.
-type PackageInstallerPackager struct {
-	Info *PackageInstallerInfo
+// Packager creates a package installer (.pkg) for distribution.
+type Packager struct {
+	Info Info
 
 	log        *slog.Logger
 	notaryTool *notarize.Tool
 	cmdRunner  exec.CommandRunner
+	dryRun     bool
 }
 
-// PackageInstallerInfo represents a package installer to be packaged for distribution.
-type PackageInstallerInfo struct {
+// Info represents a package installer to be packaged for distribution.
+type Info struct {
 	// RootPath should contain the entire contents you want to package.
 	RootPath string
 	// InstallLocation is the location where the package contents will be installed.
@@ -39,35 +40,40 @@ type PackageInstallerInfo struct {
 	Version string
 }
 
-// PackageInstallerPackagerOpts contains options for creating a PackageInstallerPackager.
-type PackageInstallerPackagerOpts struct {
-	NotaryTool *notarize.Tool
-	Logger     *slog.Logger
-	DryRun     bool
+// Opt is a functional option for configuring a Packager.
+type Opt func(*Packager)
+
+var defaultOpts = []Opt{
+	WithLogger(slog.Default()),
 }
 
-// NewPackageInstallerPackager creates a new PackageInstallerPackager.
-func NewPackageInstallerPackager(info *PackageInstallerInfo, opts *PackageInstallerPackagerOpts) *PackageInstallerPackager {
-	log := opts.Logger
-	if log == nil {
-		log = slog.Default()
+// NewPackager creates a new PackageInstallerPackager.
+func NewPackager(info Info, opts ...Opt) (*Packager, error) {
+	if err := info.validate(); err != nil {
+		return nil, trace.Wrap(err)
+	}
+	pkg := &Packager{
+		Info: info,
+	}
+	for _, opt := range defaultOpts {
+		opt(pkg)
+	}
+
+	for _, opt := range opts {
+		opt(pkg)
 	}
 
 	var runner exec.CommandRunner = &exec.DefaultCommandRunner{}
-	if opts.DryRun {
-		runner = exec.NewDryRunner(log)
+	if pkg.dryRun {
+		runner = exec.NewDryRunner(pkg.log)
 	}
+	pkg.cmdRunner = runner
 
-	return &PackageInstallerPackager{
-		Info:       info,
-		log:        log,
-		notaryTool: opts.NotaryTool,
-		cmdRunner:  runner,
-	}
+	return pkg, nil
 }
 
 // Package creates a package installer.
-func (p *PackageInstallerPackager) Package() error {
+func (p *Packager) Package() error {
 	if err := p.Info.validate(); err != nil {
 		return trace.Wrap(err)
 	}
@@ -120,7 +126,7 @@ func (p *PackageInstallerPackager) Package() error {
 
 // nonRelocatablePlist analyzes the root path to create a compponent plist file.
 // This plist is then modified to be non-relocatable.
-func (p *PackageInstallerPackager) nonRelocatablePlist(plistPath string) error {
+func (p *Packager) nonRelocatablePlist(plistPath string) error {
 	out, err := p.cmdRunner.RunCommand("pkgbuild", "--analyze", "--root", p.Info.RootPath, plistPath)
 	if err != nil {
 		return trace.Wrap(err, "failed to analyze package installer")
@@ -148,7 +154,7 @@ func (p *PackageInstallerPackager) nonRelocatablePlist(plistPath string) error {
 	return nil
 }
 
-func (p *PackageInstallerInfo) validate() error {
+func (p *Info) validate() error {
 	if p.RootPath == "" {
 		return trace.BadParameter("root path is required")
 	}
@@ -166,4 +172,27 @@ func (p *PackageInstallerInfo) validate() error {
 	}
 
 	return nil
+}
+
+// WithLogger sets the logger for the packager.
+// By default, the packager will use slog.Default().
+func WithLogger(log *slog.Logger) Opt {
+	return func(a *Packager) {
+		a.log = log
+	}
+}
+
+// WithNotaryTool sets the notary tool for the packager.
+func WithNotaryTool(tool *notarize.Tool) Opt {
+	return func(a *Packager) {
+		a.notaryTool = tool
+	}
+}
+
+// DryRun sets the packager to dry run mode.
+// In dry run mode, the packager will not execute commands and will not actually create the package installer.
+func DryRun() Opt {
+	return func(a *Packager) {
+		a.dryRun = true
+	}
 }
