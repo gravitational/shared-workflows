@@ -29,7 +29,6 @@ import (
 	"github.com/gravitational/shared-workflows/bot/internal/env"
 	"github.com/gravitational/shared-workflows/bot/internal/github"
 	"github.com/gravitational/shared-workflows/bot/internal/review"
-	"github.com/spf13/afero"
 
 	"github.com/gravitational/trace"
 )
@@ -82,7 +81,7 @@ func main() {
 	case "changelog":
 		err = b.CheckChangelog(ctx)
 	case "docpaths":
-		err = b.CheckDocsPathsForMissingRedirects(afero.NewOsFs(), ctx, flags.teleportClonePath)
+		err = b.CheckDocsPathsForMissingRedirects(ctx, flags.teleportClonePath)
 	default:
 		err = trace.BadParameter("unknown workflow: %v", flags.workflow)
 	}

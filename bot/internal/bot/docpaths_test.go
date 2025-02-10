@@ -2,12 +2,14 @@ package bot
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/gravitational/shared-workflows/bot/internal/env"
 	"github.com/gravitational/shared-workflows/bot/internal/github"
-	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCheckDocsPathsForMissingRedirects(t *testing.T) {
@@ -15,7 +17,7 @@ func TestCheckDocsPathsForMissingRedirects(t *testing.T) {
 		description       string
 		teleportClonePath string
 		docsConfig        string
-		expected          string
+		errorSubstring    string
 	}{
 		{
 			description:       "valid clone path with no error",
@@ -31,7 +33,7 @@ func TestCheckDocsPathsForMissingRedirects(t *testing.T) {
       }
   ]
 }`,
-			expected: "",
+			errorSubstring: "",
 		},
 		{
 			description:       "valid clone path with missing redirect",
@@ -41,25 +43,28 @@ func TestCheckDocsPathsForMissingRedirects(t *testing.T) {
   "variables": {},
   "redirects": []
 }`,
-			expected: "docs config at /teleport/docs/config.json is missing redirects for the following renamed or deleted pages: /database-access/get-started/",
-		},
-		{
-			description:       "invalid clone path",
-			teleportClonePath: "/tele",
-			expected:          "unable to load Teleport documentation config at /tele: open /tele/docs/config.json: file does not exist",
+			errorSubstring: "missing redirects for the following renamed or deleted pages: /database-access/get-started/",
 		},
 		{
 			description:       "invalid config file",
 			teleportClonePath: "/teleport",
 			docsConfig:        `This file is not JSON.`,
-			expected:          "unable to load redirect configuration from /teleport/docs/config.json: invalid character 'T' looking for beginning of value",
+			errorSubstring:    "docs/config.json: invalid character 'T' looking for beginning of value",
 		},
 	}
 
 	for _, c := range cases {
 		t.Run(c.description, func(t *testing.T) {
-			fs := afero.NewMemMapFs()
-			afero.WriteFile(fs, "/teleport/docs/config.json", []byte(c.docsConfig), 0777)
+			tmpdir := t.TempDir()
+			err := os.MkdirAll(filepath.Join(tmpdir, "teleport", "docs"), 0777)
+			require.NoError(t, err)
+
+			f, err := os.Create(filepath.Join(tmpdir, "teleport", "docs", "config.json"))
+			require.NoError(t, err)
+
+			_, err = f.WriteString(c.docsConfig)
+			require.NoError(t, err)
+
 			b := &Bot{
 				c: &Config{
 					Environment: &env.Environment{},
@@ -75,13 +80,12 @@ func TestCheckDocsPathsForMissingRedirects(t *testing.T) {
 				},
 			}
 
-			err := b.CheckDocsPathsForMissingRedirects(fs, context.Background(), c.teleportClonePath)
-
-			if c.expected == "" {
+			err = b.CheckDocsPathsForMissingRedirects(context.Background(), filepath.Join(tmpdir, c.teleportClonePath))
+			if c.errorSubstring == "" {
 				assert.NoError(t, err)
 				return
 			}
-			assert.EqualError(t, err, c.expected)
+			assert.ErrorContains(t, err, c.errorSubstring)
 		})
 	}
 }

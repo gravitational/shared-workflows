@@ -3,12 +3,12 @@ package bot
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/gravitational/shared-workflows/bot/internal/github"
 	"github.com/gravitational/trace"
-	"github.com/spf13/afero"
 )
 
 // DocsConfig represents the structure of the config.json file found in the docs
@@ -33,13 +33,13 @@ type DocsRedirect struct {
 // teleportClonePath is a relative path to a gravitational/teleport clone. It is
 // assumed that there is a file called docs/config.json at the root of the
 // directory that lists redirects in the redirects field.
-func (b *Bot) CheckDocsPathsForMissingRedirects(fs afero.Fs, ctx context.Context, teleportClonePath string) error {
+func (b *Bot) CheckDocsPathsForMissingRedirects(ctx context.Context, teleportClonePath string) error {
 	if teleportClonePath == "" {
 		return trace.BadParameter("unable to load Teleport documentation config with an empty path")
 	}
 
 	docsConfigPath := filepath.Join(teleportClonePath, "docs", "config.json")
-	f, err := fs.Open(docsConfigPath)
+	f, err := os.Open(docsConfigPath)
 	if err != nil {
 		return trace.BadParameter("unable to load Teleport documentation config at %v: %v", teleportClonePath, err)
 	}
