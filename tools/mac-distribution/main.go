@@ -1,12 +1,12 @@
 package main
 
 import (
-	"fmt"
 	"log/slog"
 
 	"github.com/alecthomas/kong"
 	"github.com/gravitational/shared-workflows/tools/mac-distribution/notarize"
-	"github.com/gravitational/shared-workflows/tools/mac-distribution/packaging"
+	"github.com/gravitational/shared-workflows/tools/mac-distribution/packaging/appbundle"
+	"github.com/gravitational/shared-workflows/tools/mac-distribution/packaging/packageinstaller"
 	"github.com/gravitational/trace"
 )
 
@@ -33,6 +33,8 @@ type GlobalFlags struct {
 	ApplePassword string `group:"notarization creds" and:"notarization creds" env:"APPLE_PASSWORD" help:"Apple Password. Required for notarization. Must use with apple-username."`
 	SigningID     string `group:"notarization creds" and:"notarization creds" env:"SIGNING_ID" help:"Signing Identity to use for codesigning. Required for notarization."`
 	BundleID      string `group:"notarization creds" and:"notarization creds" env:"BUNDLE_ID" help:"Bundle ID is a unique identifier used for codesigning & notarization. Required for notarization."`
+
+	notaryTool *notarize.Tool
 }
 
 type AppBundleCmd struct {
@@ -52,80 +54,65 @@ type PackageInstallerCmd struct {
 }
 
 func main() {
-	cli := CLI{
-		GlobalFlags: GlobalFlags{},
-	}
+	var cli CLI
 
 	kctx := kong.Parse(&cli)
-	err := kctx.Run(&cli.GlobalFlags)
+	err := kctx.Run()
 	kctx.FatalIfErrorf(err)
 }
 
-func (c *AppBundleCmd) Run(g *GlobalFlags) error {
-	notaryTool, err := g.InitNotaryTool()
-	if err != nil {
-		return trace.Wrap(err)
-	}
-
-	pkg := packaging.NewAppBundlePackager(
-		&packaging.AppBundleInfo{
+func (c *AppBundleCmd) Run(cli *CLI) error {
+	pkg, err := appbundle.NewPackager(
+		appbundle.Info{
 			Skeleton:     c.Skeleton,
 			Entitlements: c.Entitlements,
 			AppBinary:    c.AppBinary,
 		},
-		&packaging.AppBundlePackagerOpts{
-			NotaryTool: notaryTool,
-			Logger:     log,
-		},
+		appbundle.WithLogger(log),
+		appbundle.WithNotaryTool(cli.notaryTool),
 	)
-
-	return pkg.Package()
-}
-
-func (c *PackageInstallerCmd) Run(g *GlobalFlags) error {
-	notaryTool, err := g.InitNotaryTool()
 	if err != nil {
 		return trace.Wrap(err)
 	}
 
-	pkg := packaging.NewPackageInstallerPackager(
-		&packaging.PackageInstallerInfo{
+	return pkg.Package()
+}
+
+func (c *PackageInstallerCmd) Run(cli *CLI) error {
+	pkg, err := packageinstaller.NewPackager(
+		packageinstaller.Info{
 			RootPath:        c.RootPath,
 			InstallLocation: c.InstallLocation,
 			OutputPath:      c.PackageOutputPath,
 			ScriptsDir:      c.ScriptsDir,
-			BundleID:        g.BundleID, // Only populated for notarization
+			BundleID:        cli.BundleID, // Only populated for notarization
 		},
-		&packaging.PackageInstallerPackagerOpts{
-			NotaryTool: notaryTool,
-			Logger:     log,
-		},
+		packageinstaller.WithLogger(log),
+		packageinstaller.WithNotaryTool(cli.notaryTool),
 	)
+	if err != nil {
+		return trace.Wrap(err)
+	}
 
 	return pkg.Package()
 }
 
-func (c *NotarizeCmd) Run(g *GlobalFlags) error {
-	tool, err := g.InitNotaryTool()
-	if err != nil {
-		return trace.Wrap(err)
-	}
-	return trace.Wrap(tool.NotarizeBinaries(c.Files))
+func (c *NotarizeCmd) Run(cli *CLI) error {
+	return trace.Wrap(cli.notaryTool.NotarizeBinaries(c.Files))
 }
 
-func (g *GlobalFlags) InitNotaryTool() (*notarize.Tool, error) {
+func (g *GlobalFlags) AfterApply() error {
 	// Dry run if no credentials are provided
 	dryRun := g.AppleUsername == "" || g.ApplePassword == "" || g.SigningID == ""
 	if dryRun && g.ForceNotarization {
-		return nil, fmt.Errorf("notarization credentials not provided and force-notarization is enabled")
+		return trace.BadParameter("notarization credentials not provided and force-notarization is enabled")
 	}
 
 	if dryRun {
 		log.Warn("notarization dry run enabled", "reason", "notarization credentials missing")
 	}
 
-	// Initialize notary tool
-	return notarize.NewTool(
+	g.notaryTool = notarize.NewTool(
 		notarize.Creds{
 			AppleUsername:   g.AppleUsername,
 			ApplePassword:   g.ApplePassword,
@@ -137,5 +124,6 @@ func (g *GlobalFlags) InitNotaryTool() (*notarize.Tool, error) {
 			DryRun: dryRun,
 			Logger: log,
 		},
-	), nil
+	)
+	return nil
 }

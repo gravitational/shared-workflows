@@ -1,4 +1,4 @@
-package packaging
+package packageinstaller
 
 import (
 	"os"
@@ -16,27 +16,20 @@ func TestPackageInstallerPackager(t *testing.T) {
 	// It then uninstalls the package and checks that the expected files are removed.
 	bundleID := "com.gravitational.testingpackage"
 
-	testdataPath, err := filepath.Abs("testdata")
-	require.NoError(t, err)
-	tempOutdir, err := os.MkdirTemp(testdataPath, "pkgstaging")
-	require.NoError(t, err)
-	defer os.RemoveAll(tempOutdir)
-
-	tempInstallDir, err := os.MkdirTemp(testdataPath, "pkginstall")
-	require.NoError(t, err)
-	defer os.RemoveAll(tempInstallDir)
+	tempOutdir := t.TempDir()
+	tempInstallDir := t.TempDir()
 
 	// Create a new package installer packager.
-	pkg := NewPackageInstallerPackager(
-		&PackageInstallerInfo{
+	pkg, err := NewPackager(
+		Info{
 			BundleID:        bundleID,
 			Version:         "1.0",
 			InstallLocation: tempInstallDir,
 			RootPath:        "testdata/packageinstaller",
 			OutputPath:      filepath.Join(tempOutdir, "packageinstaller.pkg"),
 		},
-		&PackageInstallerPackagerOpts{},
 	)
+	require.NoError(t, err)
 
 	err = pkg.Package()
 	require.NoError(t, err)

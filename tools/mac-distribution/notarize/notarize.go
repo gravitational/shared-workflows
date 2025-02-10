@@ -1,12 +1,13 @@
 package notarize
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/gravitational/shared-workflows/tools/mac-distribution/internal/exec"
-	"github.com/gravitational/shared-workflows/tools/mac-distribution/internal/fileutil"
 	"github.com/gravitational/shared-workflows/tools/mac-distribution/internal/zipper"
 
 	"github.com/gravitational/trace"
@@ -22,10 +23,9 @@ type Tool struct {
 
 	dryRun    bool
 	cmdRunner exec.CommandRunner
-	zip       zipper.DirZipper
 }
 
-// Creds is
+// Creds contains the credentials needed to authenticate with the Apple Notary Service.
 type Creds struct {
 	// Credentials for authenticating with Apple Notary Service
 	AppleUsername string
@@ -79,7 +79,6 @@ func NewTool(creds Creds, opts ToolOpts) *Tool {
 		retry:     opts.Retry,
 		log:       logger,
 		cmdRunner: runner,
-		zip:       zipper.NewDirZipper(),
 		dryRun:    opts.DryRun,
 	}
 }
@@ -87,6 +86,8 @@ func NewTool(creds Creds, opts ToolOpts) *Tool {
 // NotarizeBinaries will notarize the provided binaries.
 // This will sign the binaries and submit them for notarization.
 func (t *Tool) NotarizeBinaries(files []string) error {
+	slices.Sort(files) // Sort the files for deterministic notarization
+
 	// Codesign
 	args := []string{
 		"--sign", t.Creds.SigningIdentity,
@@ -102,23 +103,12 @@ func (t *Tool) NotarizeBinaries(files []string) error {
 	}
 	t.log.Info("codesign output", "output", out)
 
-	// The Apple Notary Service requires a zip file for notarization.
-	// The files will be staged in a temporary directory and zipped for submission.
-	notaryDir, err := os.MkdirTemp("", "notarize-binaries-*")
-	if err != nil {
-		return trace.Wrap(err)
-	}
-	defer os.RemoveAll(notaryDir)
-
-	// Stage files for notarization
-	for _, file := range files {
-		dest := filepath.Join(notaryDir, filepath.Base(file))
-		if err := fileutil.CopyFile(file, dest); err != nil {
-			return trace.Wrap(err)
-		}
+	// Prepare zip files for notarization
+	archiveFiles := []zipper.FileInfo{}
+	for _, f := range files {
+		archiveFiles = append(archiveFiles, zipper.FileInfo{Path: f})
 	}
 
-	// Zip the staged directory where the binaries are located
 	notaryfile, err := os.CreateTemp("", "notarize-binaries-*.zip")
 	if err != nil {
 		return trace.Wrap(err)
@@ -126,11 +116,11 @@ func (t *Tool) NotarizeBinaries(files []string) error {
 	defer notaryfile.Close()
 	defer os.Remove(notaryfile.Name())
 
-	if err := t.zip.ZipDir(notaryDir, notaryfile, zipper.DirZipperOpts{}); err != nil {
+	t.log.Info("zipping binaries", "zipfile", notaryfile.Name())
+	if err := zipper.ZipFiles(notaryfile, archiveFiles); err != nil {
 		return trace.Wrap(err)
 	}
 
-	// Notarize
 	if err := t.SubmitAndWait(notaryfile.Name()); err != nil {
 		return trace.Wrap(err)
 	}
@@ -170,12 +160,13 @@ func (t *Tool) NotarizeAppBundle(appBundlePath string, opts AppBundleOpts) error
 	t.log.Info("codesign output", "output", out)
 
 	// Zip the app bundle and submit for notarization
-	notaryfile, err := os.CreateTemp("", "notarize-app-bundle-"+filepath.Base(appBundlePath))
+	notaryfile, err := os.CreateTemp("", fmt.Sprintf("notarize-*-%s.zip", filepath.Base(appBundlePath)))
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	if err := t.zip.ZipDir(appBundlePath, notaryfile, zipper.DirZipperOpts{IncludePrefix: true}); err != nil {
-		return trace.Wrap(err)
+	t.log.Info("zipping app bundle", "zipfile", notaryfile.Name())
+	if err := zipper.ZipDir(appBundlePath, notaryfile, zipper.IncludeParent()); err != nil {
+		return trace.Wrap(err, "failed to zip app bundle")
 	}
 
 	// Staple the app bundle

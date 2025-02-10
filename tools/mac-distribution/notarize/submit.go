@@ -9,7 +9,7 @@ import (
 // SubmissionResponseData contains information about the status of a submission.
 //
 // Reference: https://developer.apple.com/documentation/notaryapi/submissionresponse/data-data.dictionary
-type SubmissionResponseData struct {
+type submissionResponseData struct {
 	ID string `json:"id,omitempty"`
 }
 
@@ -53,7 +53,7 @@ func (t *Tool) Submit(pathToPackage string) (id string, err error) {
 		return "0", nil
 	}
 
-	var sub SubmissionResponseData
+	var sub submissionResponseData
 	if err := json.Unmarshal([]byte(stdout), &sub); err != nil {
 		return "", trace.Wrap(err, "failed to parse output from submission request")
 	}

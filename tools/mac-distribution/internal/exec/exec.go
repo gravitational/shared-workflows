@@ -4,14 +4,13 @@ import (
 	"bytes"
 	"log/slog"
 	"os/exec"
-	"strings"
 
 	"github.com/gravitational/trace"
 )
 
 // CommandRunner is a wrapper around [exec.Command] that is useful for testing.
 type CommandRunner interface {
-	RunCommand(path string, args ...string) (string, error)
+	RunCommand(path string, args ...string) ([]byte, error)
 }
 
 func NewDefaultCommandRunner() *DefaultCommandRunner {
@@ -23,7 +22,7 @@ type DefaultCommandRunner struct {
 
 var _ CommandRunner = &DefaultCommandRunner{}
 
-func (d *DefaultCommandRunner) RunCommand(path string, args ...string) (string, error) {
+func (d *DefaultCommandRunner) RunCommand(path string, args ...string) ([]byte, error) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
@@ -32,8 +31,9 @@ func (d *DefaultCommandRunner) RunCommand(path string, args ...string) (string, 
 	cmd.Stdout = &stdout
 
 	err := cmd.Run()
-	out := strings.TrimSpace(stdout.String())
+	out := bytes.TrimSpace(stdout.Bytes())
 	if err != nil {
+		// stdout is also returned since it may contain useful information
 		return out, trace.Wrap(err, "failed to run command: %s", stderr.String())
 	}
 	return out, nil
@@ -55,7 +55,7 @@ func NewDryRunner(logger *slog.Logger) *DryRunner {
 }
 
 // RunCommand logs the command that would have been run.
-func (d *DryRunner) RunCommand(path string, args ...string) (string, error) {
+func (d *DryRunner) RunCommand(path string, args ...string) ([]byte, error) {
 	d.log.Info("dry run", "path", path, "args", args)
-	return "dry run", nil
+	return []byte("dry run"), nil
 }

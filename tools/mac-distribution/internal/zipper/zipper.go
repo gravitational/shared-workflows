@@ -11,53 +11,101 @@ import (
 	"github.com/gravitational/trace"
 )
 
-type DirZipper interface {
-	ZipDir(dir string, out io.Writer, opts DirZipperOpts) error
+// FileInfo contains information about a file to archive.
+type FileInfo struct {
+	// Path is the path to the file.
+	Path string
+
+	// ArchiveName is the desired name of the file in the archive.
+	// If ArchiveName is empty, the base name of path will be used.
+	ArchiveName string
 }
 
-type DirZipperOpts struct {
-	// IncludePrefix determines whether to keep the root directory as a prefix in the zip file.
-	// This is particularly useful for App Bundles where the root directory (.app) should be included.
-	IncludePrefix bool
+// ZipFiles will create a zip with the specified files and write the archive to the specified writer.
+func ZipFiles(out io.Writer, files []FileInfo) (err error) {
+	zipwriter := zip.NewWriter(out)
+	defer func() {
+		if err == nil { // if NO errors
+			// Closing finishes the write by writing the central directory.
+			// To avoid propagating an error from an earlier operation only close if there is no error.
+			err = trace.Wrap(zipwriter.Close())
+		}
+	}()
+
+	for _, file := range files {
+		if file.ArchiveName == "" {
+			file.ArchiveName = filepath.Base(file.Path)
+		}
+
+		w, err := zipwriter.Create(file.ArchiveName)
+		if err != nil {
+			return trace.Wrap(err)
+		}
+
+		f, err := os.Open(file.Path)
+		if err != nil {
+			return trace.Wrap(err)
+		}
+
+		_, err = io.Copy(w, f)
+		if err != nil {
+			f.Close() // Ignore close error since we already have an error to return.
+			return trace.Wrap(err)
+		}
+
+		if err := f.Close(); err != nil {
+			return trace.Wrap(err)
+		}
+	}
+
+	return nil
 }
 
-func NewDirZipper() DirZipper {
-	return &DefaultZipper{}
+// DirZipperOpt is a functional option for configuring a DirZipper.
+type DirZipperOpt func(*dirZipperOpts)
+
+type dirZipperOpts struct {
+	includeParent bool
 }
 
-// DefaultZipper is the default implementation of DirZipper
-type DefaultZipper struct{}
+// IncludeParent determines whether to keep the root directory as a prefix in the zip file.
+// This is particularly useful for App Bundles where the root directory (.app) should be included.
+func IncludeParent() DirZipperOpt {
+	return func(o *dirZipperOpts) {
+		o.includeParent = true
+	}
+}
 
 // ZipDir will zip the directory into the specified output file
-func (z *DefaultZipper) ZipDir(dir string, out io.Writer, opts DirZipperOpts) error {
-	zipwriter := zip.NewWriter(out)
-	defer zipwriter.Close()
+func ZipDir(dir string, out io.Writer, opts ...DirZipperOpt) (err error) {
+	var o dirZipperOpts
+	for _, opt := range opts {
+		opt(&o)
+	}
 
-	root := filepath.Clean(dir)
+	files := []FileInfo{}
+	parentDir := filepath.Base(dir)
 
-	err := filepath.WalkDir(root, fs.WalkDirFunc(func(path string, d fs.DirEntry, err error) error {
+	// Construct a list of files to include in the zip
+	err = filepath.WalkDir(dir, fs.WalkDirFunc(func(path string, d fs.DirEntry, err error) error {
 		// Ignore zipping directories
 		if d.IsDir() {
 			return nil
 		}
 
-		if !opts.IncludePrefix {
-			path, _ = strings.CutPrefix(path, root+string(os.PathSeparator))
+		// Avoid including root path structure in the zip file.
+		archiveName := strings.TrimPrefix(path, dir)
+
+		if o.includeParent {
+			archiveName = filepath.Join(parentDir, archiveName)
 		}
 
-		w, err := zipwriter.Create(path)
-		if err != nil {
-			return err
-		}
-
-		f, err := os.OpenFile(path, os.O_RDONLY, 0)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
-
-		_, err = io.Copy(w, f)
-		return err
+		files = append(files, FileInfo{
+			Path:        path,
+			ArchiveName: archiveName,
+		})
+		return nil
 	}))
-	return trace.Wrap(err)
+
+	return trace.Wrap(ZipFiles(out, files))
 }
