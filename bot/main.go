@@ -149,7 +149,7 @@ func parseFlags() (flags, error) {
 
 	var decodedReviewers string
 	// Support base64-encoded JSON reviewer string and just JSON without base64 encoding
-	if reviewers != nil && strings.Contains(*reviewers, "{") {
+	if strings.Contains(*reviewers, "{") {
 		decodedReviewers = *reviewers
 	} else {
 		reviewerBytes, err := base64.StdEncoding.DecodeString(*reviewers)
