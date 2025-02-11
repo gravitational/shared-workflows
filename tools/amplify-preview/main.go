@@ -98,6 +98,8 @@ func run(ctx context.Context) error {
 		return fmt.Errorf("failed to post preview URL: %w", err)
 	}
 
+	setAmplifyInfoToGithubOutputs(branch, currentJob)
+
 	slog.Info("Successfully posted PR comment")
 
 	if *wait {
@@ -145,6 +147,30 @@ func ensureAmplifyDeployment(ctx context.Context, amp AmplifyPreview, branch *ty
 		return currentJob, activeJob, err
 	} else {
 		return nil, nil, fmt.Errorf("failed to lookup amplify job for branch %q: %w", amp.branchName, err)
+	}
+}
+
+func setAmplifyInfoToGithubOutputs(branch *types.Branch, job *types.JobSummary) {
+	kv := make(map[string]string)
+
+	if branch.BranchName != nil {
+		kv["AMPLIFY_BRANCH"] = *branch.BranchName
+	}
+
+	if branch.BranchArn != nil {
+		if appId, err := appIDFromBranchARN(*branch.BranchArn); err != nil {
+			slog.Error("failed to extract app ID from branch ARN", "branch_arn", *branch.BranchArn, "error", err)
+		} else {
+			kv["AMPLIFY_APP_ID"] = appId
+		}
+	}
+
+	if job.JobId != nil {
+		kv["AMPLIFY_JOB_ID"] = *job.JobId
+	}
+
+	if err := setGithubOutputs(kv); err != nil {
+		slog.Error("failed to set Amplify info to GitHub outputs", "error", err)
 	}
 }
 
