@@ -147,9 +147,16 @@ func parseFlags() (flags, error) {
 		return flags{}, trace.BadParameter("reviewers required for assign and check")
 	}
 
-	data, err := base64.StdEncoding.DecodeString(*reviewers)
-	if err != nil {
-		return flags{}, trace.Wrap(err)
+	var decodedReviewers string
+	// Support base64-encoded JSON reviewer string and just JSON without base64 encoding
+	if reviewers != nil && strings.Contains(*reviewers, "{") {
+		decodedReviewers = *reviewers
+	} else {
+		reviewerBytes, err := base64.StdEncoding.DecodeString(*reviewers)
+		if err != nil {
+			return flags{}, trace.Wrap(err)
+		}
+		decodedReviewers = string(reviewerBytes)
 	}
 
 	stats, err := base64.StdEncoding.DecodeString(*baseStats)
@@ -160,7 +167,7 @@ func parseFlags() (flags, error) {
 	return flags{
 		workflow:          *workflow,
 		token:             *token,
-		reviewers:         string(data),
+		reviewers:         decodedReviewers,
 		local:             *local,
 		org:               *org,
 		repo:              *repo,
