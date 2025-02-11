@@ -33,5 +33,10 @@ func TestParseFlagsReviewers(t *testing.T) {
 	plainTextFlags, err := parseFlags()
 	require.NoError(t, err)
 
+	// Verify that the results are the same regardless of whether or not the reviewers
+	// flag is base64 encoded
 	assert.Equal(t, b64Flags.reviewers, plainTextFlags.reviewers)
+
+	// Basic checks
+	assert.Equal(t, testValueJSON, b64Flags.reviewers)
 }
