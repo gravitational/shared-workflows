@@ -58,7 +58,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: 'Dependency Review'
-        uses: actions/dependency-review-action@5bbc3ba658137598168acb2ab73b21c432dd411b # v4.2.5
+        uses: actions/dependency-review-action@3b139cfc5fae8b618d3eae3675e383bb1769c019 # v4.5.0
         with:
           fail-on-severity: ${{ inputs.fail-on-severity }}
           # NOTE: List shouldn't end with comma
