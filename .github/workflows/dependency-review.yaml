@@ -83,6 +83,7 @@ jobs:
             ISC AND MIT,
             ISC,
             LGPL-2.1,
+            LicenseRef-scancode-unicode AND MIT,
             MIT AND BSD-3-Clause,
             MIT AND WTFPL,
             MIT AND Zlib,
