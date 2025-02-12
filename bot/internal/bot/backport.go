@@ -84,6 +84,10 @@ func (b *Bot) Backport(ctx context.Context) error {
 		g = b.c.Git
 	}
 
+	// Temporary experiment to change the order of backport attempts.
+	// TODO(zmb3): remove this
+	slices.Reverse(branches)
+
 	// Loop over all requested backport branches and create backport branch and
 	// GitHub Pull Request.
 	for _, base := range branches {
@@ -249,7 +253,7 @@ func (b *Bot) createBackportBranch(ctx context.Context, organization string, rep
 	}
 
 	// Push the backport branch to Github.
-	if err := git("push", "origin", newHead); err != nil {
+	if err := git("push", "--verbose", "origin", newHead); err != nil {
 		return trace.Wrap(err)
 	}
 
