@@ -1,5 +1,19 @@
 package main
 
+import (
+	"context"
+	"log"
+	"log/slog"
+	"net/http"
+
+	"github.com/google/go-github/v69/github"
+	"github.com/gravitational/shared-workflows/libs/github/webhook"
+	"github.com/gravitational/trace"
+	"golang.org/x/sync/errgroup"
+)
+
+var logger = slog.Default()
+
 // Process:
 // 1. Take in events from CI/CD systems
 // 2. Extract common information
@@ -28,19 +42,22 @@ func main() {
 	eventSources := []EventSource{
 		NewGitHubEventSource(processor),
 	}
-
 	for _, eventSource := range eventSources {
 		_ = eventSource.Setup()
 	}
 
-	done := make(chan struct{}) // TODO replace with error?
+	// 3. Start event sources
+	eg, ctx := errgroup.WithContext(context.Background())
 	for _, eventSource := range eventSources {
-		_ = eventSource.Run(done)
+		eg.Go(func() error {
+			return eventSource.Run(ctx)
+		})
 	}
 
 	// Block until an event source has a fatal error
-	<-done
-	close(done)
+	if err := eg.Wait(); err != nil {
+		log.Fatal(err)
+	}
 }
 
 // This contains information needed to process a request
@@ -99,12 +116,15 @@ type EventSource interface {
 	Setup() error
 
 	// Handle actual requests. This should not block.
-	Run(chan struct{}) error
+	Run(ctx context.Context) error
 }
 
 type GitHubEventSource struct {
 	processor ApprovalProcessor
-	// TODO
+
+	deployReviewChan chan *github.DeploymentReviewEvent
+	addr             string
+	srv              *http.Server
 }
 
 func NewGitHubEventSource(processor ApprovalProcessor) *GitHubEventSource {
@@ -114,43 +134,73 @@ func NewGitHubEventSource(processor ApprovalProcessor) *GitHubEventSource {
 // Setup GH client, webhook secret, etc.
 // https://github.com/go-playground/webhooks may help here
 func (ghes *GitHubEventSource) Setup() error {
-	// TODO
+	deployReviewChan := make(chan *github.DeploymentReviewEvent)
+	ghes.deployReviewChan = deployReviewChan
+
+	mux := http.NewServeMux()
+	eventProcessor := webhook.EventHandlerFunc(func(event interface{}) error {
+		switch event := event.(type) {
+		case *github.DeploymentReviewEvent:
+			deployReviewChan <- event
+			return nil
+		default:
+			return trace.Errorf("unknown event type: %T", event)
+		}
+	})
+	mux.Handle("/webhook", webhook.NewHandler(
+		eventProcessor,
+		webhook.WithSecretToken([]byte("secret-token")), // TODO: get from config
+		webhook.WithLogger(logger),
+	))
+
+	ghes.srv = &http.Server{
+		Addr:    ghes.addr,
+		Handler: mux,
+	}
+
 	return nil
 }
 
 // Take incoming events and respond to them
-func (ghes *GitHubEventSource) Run(done chan struct{}) error {
-	// If anything errors, deny the request. For safety, maybe `defer`
-	// the "response" function?
+func (ghes *GitHubEventSource) Run(ctx context.Context) error {
+	errc := make(chan error)
+
+	// Start the HTTP server
 	go func() {
-		// Notify the service that the listener is completely done.
-		// Normally this should only be hit if there is a fatal error
-		defer func() { done <- struct{}{} }()
+		logger.Info("Listening for GitHub Webhooks", "address", ghes.addr)
+		errc <- ghes.srv.ListenAndServe()
+		close(errc)
+	}()
 
-		// Incoming webhook payloads
-		// This should be closed by the webhook listener func
-		payloads := make(chan interface{})
-
-		// Listen for webhook calls
-		go ghes.listenForPayloads(payloads, done)
-
-		for payload := range payloads {
-			go ghes.processWebhookPayload(payload, done)
+	// Process incoming events
+	go func() {
+		defer close(ghes.deployReviewChan)
+		logger.Info("Starting GitHub event processor")
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case deployReview := <-ghes.deployReviewChan:
+				// Process the event
+				go ghes.processDeploymentReviewEvent(deployReview)
+			}
 		}
 	}()
 
-	return nil
+	var err error
+	// This will block until an error occurs or the context is done
+	select {
+	case err = <-errc:
+		ghes.srv.Shutdown(context.Background()) // Ignore error - we're already handling one
+	case <-ctx.Done():
+		err = ghes.srv.Shutdown(context.Background())
+		<-errc // flush the error channel to avoid a goroutine leak
+	}
+
+	return trace.Wrap(err)
 }
 
-// Listen for incoming webhook events. Register HTTP routes, start server, etc. Long running, blocking.
-func (ghes *GitHubEventSource) listenForPayloads(payloads chan interface{}, done chan struct{}) {
-	// Once a call is received, it should return a 200 response immediately.
-
-	// TODO
-}
-
-// Given an event, approve or deny it. This is a long running, blocking function.
-func (ghes *GitHubEventSource) processWebhookPayload(payload interface{}, done chan struct{}) {
+func (ghes *GitHubEventSource) processDeploymentReviewEvent(payload *github.DeploymentReviewEvent) error {
 	// Do GitHub-specific checks. Don't approve based off ot this - just deny
 	// if one fails.
 	automatedDenial, err := ghes.performAutomatedChecks(payload)
@@ -170,6 +220,11 @@ func (ghes *GitHubEventSource) processWebhookPayload(payload interface{}, done c
 	}
 
 	_ = ghes.respondToDeployRequest(true, payload)
+	return nil
+}
+
+// Given an event, approve or deny it. This is a long running, blocking function.
+func (ghes *GitHubEventSource) processWebhookPayload(payload interface{}, done chan struct{}) {
 }
 
 // Turns GH-specific information into "common" information for the approver
@@ -183,10 +238,13 @@ func (ghes *GitHubEventSource) convertWebhookPayloadToEvent(payload interface{})
 
 // Performs approval checks that are GH-specific. This should only be used to deny requests,
 // never approve them.
-func (ghes *GitHubEventSource) performAutomatedChecks(payload interface{}) (pass bool, err error) {
+func (ghes *GitHubEventSource) performAutomatedChecks(payload *github.DeploymentReviewEvent) (pass bool, err error) {
 	// Verify request is from Gravitational org repo
 	// Verify request is from Gravitational org member
 	// See RFD for additional examples
+	if *payload.Organization.Login != "gravitational" {
+		return true, nil
+	}
 
 	return false, nil
 }
