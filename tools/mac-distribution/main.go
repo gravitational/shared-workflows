@@ -104,7 +104,7 @@ func (c *NotarizeCmd) Run(cli *CLI) error {
 
 func (g *GlobalFlags) AfterApply() error {
 	// Dry run if no credentials are provided
-	credsMissing := g.AppleUsername == "" || g.ApplePassword == "" || g.SigningID == ""
+	credsMissing := g.AppleUsername == "" || g.ApplePassword == "" || g.SigningID == "" || g.BundleID == "" || g.TeamID == ""
 
 	if !g.DryRun && credsMissing {
 		return trace.BadParameter("notarization credentials required, use --dry-run to skip")
