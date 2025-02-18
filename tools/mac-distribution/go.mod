@@ -1,9 +1,9 @@
 module github.com/gravitational/shared-workflows/tools/mac-distribution
 
-go 1.23.2
+go 1.24.0
 
 require (
-	github.com/alecthomas/kong v1.6.1
+	github.com/alecthomas/kong v1.8.1
 	github.com/gravitational/trace v1.5.0
 	github.com/stretchr/testify v1.8.3
 )
