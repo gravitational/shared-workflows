@@ -2,7 +2,9 @@ package exec
 
 import (
 	"bytes"
+	"io"
 	"log/slog"
+	"os"
 	"os/exec"
 
 	"github.com/gravitational/trace"
@@ -28,7 +30,7 @@ func (d *DefaultCommandRunner) RunCommand(path string, args ...string) ([]byte, 
 
 	cmd := exec.Command(path, args...)
 	cmd.Stderr = &stderr
-	cmd.Stdout = &stdout
+	cmd.Stdout = io.MultiWriter(&stdout, os.Stdout)
 
 	err := cmd.Run()
 	out := bytes.TrimSpace(stdout.Bytes())
@@ -56,6 +58,6 @@ func NewDryRunner(logger *slog.Logger) *DryRunner {
 
 // RunCommand logs the command that would have been run.
 func (d *DryRunner) RunCommand(path string, args ...string) ([]byte, error) {
-	d.log.Info("dry run", "path", path, "args", args)
+	d.log.Info("dry run", "path", path)
 	return []byte("dry run"), nil
 }
