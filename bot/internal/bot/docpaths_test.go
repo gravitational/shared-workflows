@@ -18,6 +18,7 @@ func TestCheckDocsPathsForMissingRedirects(t *testing.T) {
 		teleportClonePath string
 		docsConfig        string
 		errorSubstring    string
+		number            int
 	}{
 		{
 			description:       "valid clone path with no error",
@@ -33,6 +34,7 @@ func TestCheckDocsPathsForMissingRedirects(t *testing.T) {
       }
   ]
 }`,
+			number:         1,
 			errorSubstring: "",
 		},
 		{
@@ -43,13 +45,22 @@ func TestCheckDocsPathsForMissingRedirects(t *testing.T) {
   "variables": {},
   "redirects": []
 }`,
+			number:         1,
 			errorSubstring: "missing redirects for the following renamed or deleted pages: /database-access/get-started/",
 		},
 		{
 			description:       "invalid config file",
 			teleportClonePath: "/teleport",
 			docsConfig:        `This file is not JSON.`,
+			number:            1,
 			errorSubstring:    "docs/config.json: invalid character 'T' looking for beginning of value",
+		},
+		{
+			description:       "invalid config file with PR 0",
+			teleportClonePath: "/teleport",
+			docsConfig:        `This file is not JSON.`,
+			number:            0,
+			errorSubstring:    "",
 		},
 	}
 
@@ -67,7 +78,9 @@ func TestCheckDocsPathsForMissingRedirects(t *testing.T) {
 
 			b := &Bot{
 				c: &Config{
-					Environment: &env.Environment{},
+					Environment: &env.Environment{
+						Number: c.number,
+					},
 					GitHub: &fakeGithub{
 						files: []github.PullRequestFile{
 							{

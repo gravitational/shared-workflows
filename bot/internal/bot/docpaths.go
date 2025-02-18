@@ -34,6 +34,11 @@ type DocsRedirect struct {
 // assumed that there is a file called docs/config.json at the root of the
 // directory that lists redirects in the redirects field.
 func (b *Bot) CheckDocsPathsForMissingRedirects(ctx context.Context, teleportClonePath string) error {
+	// The event is not a pull request, so don't check PR files.
+	if b.c.Environment.Number == 0 {
+		return nil
+	}
+
 	if teleportClonePath == "" {
 		return trace.BadParameter("unable to load Teleport documentation config with an empty path")
 	}
