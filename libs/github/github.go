@@ -18,9 +18,10 @@ package github
 
 import (
 	"context"
+	"net/http"
 	"time"
 
-	go_github "github.com/google/go-github/v63/github"
+	go_github "github.com/google/go-github/v69/github"
 	"golang.org/x/oauth2"
 )
 
@@ -44,6 +45,19 @@ func New(ctx context.Context, token string) (*Client, error) {
 
 	clt.Timeout = ClientTimeout
 	cl := go_github.NewClient(clt)
+	return &Client{
+		client: cl,
+		search: cl.Search,
+	}, nil
+}
+
+func NewAppClient(ctx context.Context, appID int64, installationID int64, privateKey []byte) (*Client, error) {
+	itr, err := go_github.NewAppClientTransport(appID, installationID, privateKey)
+	if err != nil {
+		return nil, err
+	}
+
+	cl := go_github.NewClient(&http.Client{Transport: itr})
 	return &Client{
 		client: cl,
 		search: cl.Search,
