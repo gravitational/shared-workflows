@@ -16,8 +16,8 @@ import (
 // Tool is a wrapper around the MacOS codesigning/notarizing utilities.
 type Tool struct {
 	Creds Creds
-	// Retry sets the max number of attempts for a succesful notarization
-	retry int
+	// maxRetries sets the max number of attempts for a succesful notarization
+	maxRetries int
 
 	log *slog.Logger
 
@@ -39,48 +39,69 @@ type Creds struct {
 	// This is typically in reverse domain notation.
 	// 		Example: com.gravitational.teleport.myapp
 	BundleID string
+
+	// TeamID is the team identifier for the Apple Developer account.
+	TeamID string
 }
 
-type ToolOpts struct {
-	Logger *slog.Logger
-	Retry  int
-	DryRun bool
+type Opt func(*Tool) error
+
+// WithLogger sets the logger for the Tool.
+func WithLogger(logger *slog.Logger) Opt {
+	return func(t *Tool) error {
+		t.log = logger
+		return nil
+	}
 }
 
-func NewTool(creds Creds, opts ToolOpts) *Tool {
-	logger := opts.Logger
-	if logger == nil {
-		logger = slog.Default()
+// MaxRetries sets the maximum number of retries for a successful notarization.
+func MaxRetries(retries int) Opt {
+	return func(t *Tool) error {
+		t.maxRetries = retries
+		return nil
+	}
+}
+
+// DryRun sets the Tool to run in dry-run mode.
+func DryRun() Opt {
+	return func(t *Tool) error {
+		t.dryRun = true
+		return nil
+	}
+}
+
+var defaultOpts = []Opt{
+	WithLogger(slog.Default()),
+	MaxRetries(3),
+}
+
+func NewTool(creds Creds, opts ...Opt) (*Tool, error) {
+	t := &Tool{
+		Creds: creds,
+	}
+	for _, opt := range defaultOpts {
+		if err := opt(t); err != nil {
+			return nil, trace.Wrap(err)
+		}
 	}
 
-	var runner exec.CommandRunner = exec.NewDefaultCommandRunner()
-	if opts.DryRun {
-		runner = exec.NewDryRunner(logger)
+	for _, opt := range opts {
+		if err := opt(t); err != nil {
+			return nil, trace.Wrap(err)
+		}
 	}
 
-	if creds.AppleUsername == "" && opts.DryRun {
+	t.cmdRunner = exec.NewDefaultCommandRunner()
+
+	if t.dryRun {
+		t.cmdRunner = exec.NewDryRunner(t.log)
 		creds.AppleUsername = "dryrun"
-	}
-
-	if creds.ApplePassword == "" && opts.DryRun {
 		creds.ApplePassword = "dryrun"
-	}
-
-	if creds.BundleID == "" && opts.DryRun {
 		creds.BundleID = "dryrun"
-	}
-
-	if creds.SigningIdentity == "" && opts.DryRun {
 		creds.SigningIdentity = "dryrun"
 	}
 
-	return &Tool{
-		Creds:     creds,
-		retry:     opts.Retry,
-		log:       logger,
-		cmdRunner: runner,
-		dryRun:    opts.DryRun,
-	}
+	return t, nil
 }
 
 // NotarizeBinaries will notarize the provided binaries.
@@ -97,11 +118,11 @@ func (t *Tool) NotarizeBinaries(files []string) error {
 		"--options", "runtime",
 	}
 	args = append(args, files...)
+	t.log.Info("codesigning binaries")
 	out, err := t.cmdRunner.RunCommand("codesign", args...)
 	if err != nil {
 		return trace.Wrap(err, "failed to codesign binaries: %v", out)
 	}
-	t.log.Info("codesign output", "output", out)
 
 	// Prepare zip files for notarization
 	archiveFiles := []zipper.FileInfo{}
@@ -152,12 +173,11 @@ func (t *Tool) NotarizeAppBundle(appBundlePath string, opts AppBundleOpts) error
 
 	// codesign the app bundle
 	args = append(args, appBundlePath)
+	t.log.Info("codesigning app bundle")
 	out, err := t.cmdRunner.RunCommand("codesign", args...)
 	if err != nil {
-		return trace.Wrap(err, "failed to codesign app bundle: %v", out)
+		return trace.Wrap(err, "failed to codesign app bundle: %s", out)
 	}
-
-	t.log.Info("codesign output", "output", out)
 
 	// Zip the app bundle and submit for notarization
 	notaryfile, err := os.CreateTemp("", fmt.Sprintf("notarize-*-%s.zip", filepath.Base(appBundlePath)))
@@ -169,12 +189,22 @@ func (t *Tool) NotarizeAppBundle(appBundlePath string, opts AppBundleOpts) error
 		return trace.Wrap(err, "failed to zip app bundle")
 	}
 
+	if err := t.SubmitAndWait(notaryfile.Name()); err != nil {
+		return trace.Wrap(err)
+	}
+
 	// Staple the app bundle
-	out, err = t.cmdRunner.RunCommand("xcrun", "stapler", "staple", appBundlePath)
+	t.log.Info("stapling app bundle")
+	out, err = t.runRetryable(func() ([]byte, error) {
+		out, err := t.cmdRunner.RunCommand("xcrun", "stapler", "staple", appBundlePath)
+		if err != nil {
+			t.log.Error("failed to staple package", "error", err)
+		}
+		return out, err
+	})
 	if err != nil {
 		return trace.Wrap(err, "failed to staple package")
 	}
-	t.log.Info("stapler output", "output", out)
 
 	return nil
 }
@@ -202,11 +232,27 @@ func (t *Tool) NotarizePackageInstaller(pathToUnsigned, pathToSigned string) err
 	}
 
 	// Staple
-	out, err = t.cmdRunner.RunCommand("xcrun", "stapler", "staple", pathToSigned)
+	t.log.Info("stapling package", "package", pathToSigned)
+	out, err = t.runRetryable(func() ([]byte, error) {
+		out, err := t.cmdRunner.RunCommand("xcrun", "stapler", "staple", pathToSigned)
+		if err != nil {
+			t.log.Error("failed to staple package", "error", err)
+		}
+		return out, err
+	})
 	if err != nil {
 		return trace.Wrap(err, "failed to staple package")
 	}
-	t.log.Info("stapler output", "output", out)
 
 	return nil
+}
+
+func (t *Tool) runRetryable(retryableFunc func() ([]byte, error)) ([]byte, error) {
+	t.log.Info("attempting command", "attempt", 1)
+	stdout, err := retryableFunc()
+	for i := 0; err != nil && i < t.maxRetries; i += 1 {
+		t.log.Info("retrying command", "attempt", i+2)
+		stdout, err = retryableFunc()
+	}
+	return stdout, err
 }

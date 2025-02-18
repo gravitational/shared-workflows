@@ -44,19 +44,18 @@ func TestSubmit_retries(t *testing.T) {
 			counter := &cmdCounter{
 				failedAttempts: tt.failedAttempts,
 			}
-			tool := NewTool(
+			tool, err := NewTool(
 				Creds{
 					AppleUsername:   "FAKE_USERNAME",
 					ApplePassword:   "FAKE_PASSWORD",
 					SigningIdentity: "FAKE_IDENTITY",
 					BundleID:        "FAKE_BUNDLE_ID",
 				},
-				ToolOpts{
-					Retry: tt.maxRetries,
-				},
+				MaxRetries(tt.maxRetries),
 			)
+			assert.NoError(t, err)
 			tool.cmdRunner = counter
-			_, err := tool.Submit("fake/package.zip")
+			_, err = tool.Submit("fake/package.zip")
 			if tt.wantErr {
 				assert.Error(t, err)
 				return

@@ -26,13 +26,14 @@ type NotarizeCmd struct {
 }
 
 type GlobalFlags struct {
-	Retry             int  `group:"notarization options" help:"Retry notarization in case of failure."`
-	ForceNotarization bool `group:"notarization options" help:"Always attempt notarization. By default notarization will be skipped if notarization creds are not set."`
+	Retry  int  `group:"notarization options" help:"Retry notarization in case of failure."`
+	DryRun bool `group:"notarization options" help:"Dry run notarization."`
 
 	AppleUsername string `group:"notarization creds" and:"notarization creds" env:"APPLE_USERNAME" help:"Apple Username. Required for notarization. Must use with apple-password."`
 	ApplePassword string `group:"notarization creds" and:"notarization creds" env:"APPLE_PASSWORD" help:"Apple Password. Required for notarization. Must use with apple-username."`
 	SigningID     string `group:"notarization creds" and:"notarization creds" env:"SIGNING_ID" help:"Signing Identity to use for codesigning. Required for notarization."`
 	BundleID      string `group:"notarization creds" and:"notarization creds" env:"BUNDLE_ID" help:"Bundle ID is a unique identifier used for codesigning & notarization. Required for notarization."`
+	TeamID        string `group:"notarization creds" and:"notarization creds" env:"TEAM_ID" help:"Team ID is the unique identifier for the Apple Developer account."`
 
 	notaryTool *notarize.Tool
 }
@@ -103,27 +104,38 @@ func (c *NotarizeCmd) Run(cli *CLI) error {
 
 func (g *GlobalFlags) AfterApply() error {
 	// Dry run if no credentials are provided
-	dryRun := g.AppleUsername == "" || g.ApplePassword == "" || g.SigningID == ""
-	if dryRun && g.ForceNotarization {
-		return trace.BadParameter("notarization credentials not provided and force-notarization is enabled")
+	credsMissing := g.AppleUsername == "" || g.ApplePassword == "" || g.SigningID == ""
+
+	if !g.DryRun && credsMissing {
+		return trace.BadParameter("notarization credentials required, use --dry-run to skip")
 	}
 
-	if dryRun {
-		log.Warn("notarization dry run enabled", "reason", "notarization credentials missing")
+	extraOpts := []notarize.Opt{}
+
+	if g.DryRun {
+		extraOpts = append(extraOpts, notarize.DryRun())
 	}
 
-	g.notaryTool = notarize.NewTool(
+	t, err := notarize.NewTool(
 		notarize.Creds{
 			AppleUsername:   g.AppleUsername,
 			ApplePassword:   g.ApplePassword,
 			SigningIdentity: g.SigningID,
 			BundleID:        g.BundleID,
+			TeamID:          g.TeamID,
 		},
-		notarize.ToolOpts{
-			Retry:  g.Retry,
-			DryRun: dryRun,
-			Logger: log,
-		},
+		append(
+			extraOpts,
+			notarize.MaxRetries(g.Retry),
+			notarize.WithLogger(log),
+		)...,
 	)
+
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	g.notaryTool = t
+
 	return nil
 }
