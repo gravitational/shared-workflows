@@ -1,7 +1,6 @@
 package webhook
 
 import (
-	"fmt"
 	"log/slog"
 	"net/http"
 
@@ -45,9 +44,9 @@ type Opt func(*Handler) error
 // If not set, the webhook will not verify the signature of the request.
 //
 // For more information, see: https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries
-func WithSecretToken(secretToken []byte) Opt {
+func WithSecretToken(secretToken string) Opt {
 	return func(p *Handler) error {
-		p.secretToken = secretToken
+		p.secretToken = []byte(secretToken)
 		return nil
 	}
 }
@@ -101,6 +100,7 @@ type Headers struct {
 
 // ServeHTTP handles a webhook request.
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
 	// Parse headers for debugging and audit purposes.
 	var head Headers
 	head.GithubHookID = r.Header.Get("X-GitHub-Hook-ID")
@@ -110,9 +110,15 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	head.GitHubHookInstallationTargetID = r.Header.Get("X-GitHub-Hook-Installation-Target-ID")
 	head.HubSignature256 = r.Header.Get("X-Hub-Signature-256")
 
+	if h.secretToken == nil && head.HubSignature256 != "" {
+		h.log.Warn("received signature but no secret token is set", "github_headers", head)
+		http.Error(w, "invalid request", http.StatusInternalServerError)
+		return
+	}
+
 	payload, err := github.ValidatePayload(r, h.secretToken) // If secretToken is empty, the signature will not be verified.
 	if err != nil {
-		h.log.Warn("webhook validation failed", "headers", head)
+		h.log.Warn("webhook validation failed", "github_headers", head)
 		http.Error(w, "invalid request", http.StatusBadRequest)
 		return
 	}
@@ -134,8 +140,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// String returns a string representation of the Headers.
-func (h *Headers) String() string {
-	return fmt.Sprintf("GithubHookID: %s\nGithubEvent: %s\nGithubDelivery: %s\nGitHubHookInstallationTargetType: %s\nGitHubHookInstallationTargetID: %s\nHubSignature256: %s\n",
-		h.GithubHookID, h.GithubEvent, h.GithubDelivery, h.GitHubHookInstallationTargetType, h.GitHubHookInstallationTargetID, h.HubSignature256)
+func (h *Headers) LogValue() slog.Value {
+	return slog.GroupValue(
+		slog.String("github_hook_id", h.GithubHookID),
+		slog.String("github_event", h.GithubEvent),
+		slog.String("github_delivery", h.GithubDelivery),
+		slog.String("github_hook_installation_target_type", h.GitHubHookInstallationTargetType),
+		slog.String("github_hook_installation_target_id", h.GitHubHookInstallationTargetID),
+		slog.String("hub_signature_256", h.HubSignature256),
+	)
 }
