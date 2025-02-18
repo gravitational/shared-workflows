@@ -6,6 +6,7 @@ import (
 	"log"
 	"log/slog"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/google/go-github/v69/github"
@@ -123,9 +124,11 @@ type EventSource interface {
 type GitHubEventSource struct {
 	processor ApprovalProcessor
 
-	deployReviewChan chan *github.DeploymentReviewEvent
-	addr             string
-	srv              *http.Server
+	deployReviewChan  chan *github.DeploymentReviewEvent
+	addr              string
+	srv               *http.Server
+	validEnvironments []string
+	validRepos        []string
 }
 
 func NewGitHubEventSource(processor ApprovalProcessor) *GitHubEventSource {
@@ -155,8 +158,21 @@ func (ghes *GitHubEventSource) Setup() error {
 	))
 
 	ghes.srv = &http.Server{
-		Addr:    ghes.addr,
+		Addr:    ":8080", // TODO: get from config
 		Handler: mux,
+	}
+
+	// TODO: get from config
+	ghes.validEnvironments = []string{
+		"prod/build",
+		"prod/publish",
+		"stage/build",
+		"stage/publish",
+	}
+
+	// TODO: get from config
+	ghes.validRepos = []string{
+		"teleport.e",
 	}
 
 	return nil
@@ -201,7 +217,7 @@ func (ghes *GitHubEventSource) Run(ctx context.Context) error {
 	}
 
 	if err != nil {
-		return fmt.Errorf("error enconutered while running GitHub event source: %w", err)
+		return fmt.Errorf("error encountered while running GitHub event source: %w", err)
 	}
 	return nil
 }
@@ -249,6 +265,14 @@ func (ghes *GitHubEventSource) performAutomatedChecks(payload *github.Deployment
 	// Verify request is from Gravitational org member
 	// See RFD for additional examples
 	if *payload.Organization.Login != "gravitational" {
+		return true, nil
+	}
+
+	if !slices.Contains(ghes.validEnvironments, *payload.Environment) {
+		return true, nil
+	}
+
+	if !slices.Contains(ghes.validRepos, *payload.Repo.Name) {
 		return true, nil
 	}
 
