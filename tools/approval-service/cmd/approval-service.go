@@ -2,13 +2,14 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/google/go-github/v69/github"
 	"github.com/gravitational/shared-workflows/libs/github/webhook"
-	"github.com/gravitational/trace"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -144,12 +145,12 @@ func (ghes *GitHubEventSource) Setup() error {
 			deployReviewChan <- event
 			return nil
 		default:
-			return trace.Errorf("unknown event type: %T", event)
+			return fmt.Errorf("unknown event type: %T", event)
 		}
 	})
 	mux.Handle("/webhook", webhook.NewHandler(
 		eventProcessor,
-		webhook.WithSecretToken([]byte("secret-token")), // TODO: get from config
+		webhook.WithSecretToken("secret-token"), // TODO: get from config
 		webhook.WithLogger(logger),
 	))
 
@@ -193,11 +194,16 @@ func (ghes *GitHubEventSource) Run(ctx context.Context) error {
 	case err = <-errc:
 		ghes.srv.Shutdown(context.Background()) // Ignore error - we're already handling one
 	case <-ctx.Done():
-		err = ghes.srv.Shutdown(context.Background())
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		err = ghes.srv.Shutdown(ctx)
 		<-errc // flush the error channel to avoid a goroutine leak
 	}
 
-	return trace.Wrap(err)
+	if err != nil {
+		return fmt.Errorf("error enconutered while running GitHub event source: %w", err)
+	}
+	return nil
 }
 
 func (ghes *GitHubEventSource) processDeploymentReviewEvent(payload *github.DeploymentReviewEvent) error {
