@@ -1,5 +1,11 @@
 [
     {
+        "body": "Backport #52154 to branch/v17\r\n\r\nchangelog: Fixed broken `Download Metadata File` button from the SAML enrolling resource flow in the web UI.\r\nchangelog: Fixed broken `Refresh` button in the Access Monitoring reports page in the web UI.\r\nchangelog: Fixed broken `Download app.zip` menu item in the Integrations list dropdown menu for Microsoft Teams in the web UI.\r\nchangelog: Fixed `Unexpected end of JSON input` error in an otherwise successful web API call.\r\n",
+        "number": 52276,
+        "title": "[v17] Web: Fixes handling native fetch response that can result in unexpected errors",
+        "url": "https://github.com/gravitational/teleport/pull/52276"
+    },
+    {
         "body": "Backport #43245 to branch/v16\r\n\r\nchangelog: Add audit event field describing if the \"MFA for admin actions\" requirement changed\r\n",
         "number": 43541,
         "title": "[v16] audit when the MFA for admin actions requirement is changed",
