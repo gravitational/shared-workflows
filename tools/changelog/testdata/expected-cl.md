@@ -1,3 +1,7 @@
+* Fixed broken `Download Metadata File` button from the SAML enrolling resource flow in the web UI. [#52276](https://github.com/gravitational/teleport/pull/52276)
+* Fixed broken `Refresh` button in the Access Monitoring reports page in the web UI. [#52276](https://github.com/gravitational/teleport/pull/52276)
+* Fixed broken `Download app.zip` menu item in the Integrations list dropdown menu for Microsoft Teams in the web UI. [#52276](https://github.com/gravitational/teleport/pull/52276)
+* Fixed `Unexpected end of JSON input` error in an otherwise successful web API call. [#52276](https://github.com/gravitational/teleport/pull/52276)
 * Add audit event field describing if the "MFA for admin actions" requirement changed. [#43541](https://github.com/gravitational/teleport/pull/43541)
 * Display errors in the web UI console for SSH and Kubernetes sessions. [#43485](https://github.com/gravitational/teleport/pull/43485)
 * Update go-retryablehttp to v0.7.7 (fixes CVE-2024-6104). [#43474](https://github.com/gravitational/teleport/pull/43474)
