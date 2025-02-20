@@ -90,6 +90,10 @@ func (t *Tool) WaitForSubmission(id string) error {
 		return trace.Wrap(err, "failed while waiting for submission to finish processing")
 	}
 
+	if t.dryRun {
+		return nil
+	}
+
 	var sub submissionResponseData
 	if err := json.Unmarshal([]byte(out), &sub); err != nil {
 		return trace.Wrap(err, "failed to parse output from submission request")
