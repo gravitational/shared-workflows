@@ -35,6 +35,8 @@ type GlobalFlags struct {
 	BundleID      string `group:"notarization creds" and:"notarization creds" env:"BUNDLE_ID" help:"Bundle ID is a unique identifier used for codesigning & notarization. Required for notarization."`
 	TeamID        string `group:"notarization creds" and:"notarization creds" env:"TEAM_ID" help:"Team ID is the unique identifier for the Apple Developer account."`
 
+	CI bool `hidden:"" env:"CI" help:"CI mode. Disables dry-run."`
+
 	notaryTool *notarize.Tool
 }
 
@@ -108,6 +110,10 @@ func (g *GlobalFlags) AfterApply() error {
 
 	if !g.DryRun && credsMissing {
 		return trace.BadParameter("notarization credentials required, use --dry-run to skip")
+	}
+
+	if g.CI && g.DryRun {
+		return trace.BadParameter("dry-run mode cannot be used in CI")
 	}
 
 	extraOpts := []notarize.Opt{}
