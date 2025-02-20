@@ -79,13 +79,19 @@ func (t *Tool) WaitForSubmission(id string) error {
 		"--output-format", "json",
 	}
 	t.log.Info("waiting for submission to finish processing", "id", id)
-	stdout, err := t.cmdRunner.RunCommand("xcrun", args...)
+	out, err := t.runRetryable(func() ([]byte, error) {
+		stdout, err := t.cmdRunner.RunCommand("xcrun", args...)
+		if err != nil {
+			t.log.Error("submission wait error", "error", err)
+		}
+		return stdout, err
+	})
 	if err != nil {
 		return trace.Wrap(err, "failed while waiting for submission to finish processing")
 	}
 
 	var sub submissionResponseData
-	if err := json.Unmarshal([]byte(stdout), &sub); err != nil {
+	if err := json.Unmarshal([]byte(out), &sub); err != nil {
 		return trace.Wrap(err, "failed to parse output from submission request")
 	}
 	t.log.Info("waiting done", "response", sub)
