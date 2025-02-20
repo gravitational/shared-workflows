@@ -119,7 +119,15 @@ func (t *Tool) NotarizeBinaries(files []string) error {
 	}
 	args = append(args, files...)
 	t.log.Info("codesigning binaries")
-	out, err := t.cmdRunner.RunCommand("codesign", args...)
+	out, err := t.runRetryable(func() ([]byte, error) {
+		// Sometimes codesign can fail due to transient issues, so we retry
+		// For example, we've seen "The timestamp service is not available."
+		out, err := t.cmdRunner.RunCommand("codesign", args...)
+		if err != nil {
+			t.log.Error("failed to codesign binaries", "error", err)
+		}
+		return out, err
+	})
 	if err != nil {
 		return trace.Wrap(err, "failed to codesign binaries: %v", out)
 	}
@@ -184,6 +192,7 @@ func (t *Tool) NotarizeAppBundle(appBundlePath string, opts AppBundleOpts) error
 	if err != nil {
 		return trace.Wrap(err)
 	}
+	defer os.Remove(notaryfile.Name())
 	t.log.Info("zipping app bundle", "zipfile", notaryfile.Name())
 	if err := zipper.ZipDir(appBundlePath, notaryfile, zipper.IncludeParent()); err != nil {
 		return trace.Wrap(err, "failed to zip app bundle")
