@@ -97,6 +97,11 @@ func toURLPath(p string) string {
 	return redir + "/"
 }
 
+// includeSegment is a file path segment that indicates the presence of
+// includes, which we don't check for redirects if a PR renames or deletes them.
+// Since PR filenames come from the GitHub API, paths include forward slashes.
+const includeSegment = "/includes/"
+
 // missingRedirectSources checks renamed or deleted docs pages in files to
 // ensure that there is a corresponding redirect source in conf. For any missing
 // redirects, it lists redirect sources that should be in conf.
@@ -109,6 +114,11 @@ func missingRedirectSources(conf []DocsRedirect, files github.PullRequestFiles) 
 	res := []string{}
 	for _, f := range files {
 		if !strings.HasPrefix(f.Name, docsPrefix) {
+			continue
+		}
+
+		// Skip partials
+		if strings.Contains(f.Name, includeSegment) {
 			continue
 		}
 

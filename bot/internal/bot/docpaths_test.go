@@ -257,6 +257,34 @@ func TestMissingRedirectSources(t *testing.T) {
 			},
 			expected: []string{},
 		},
+		{
+			description: "renamed 3rd-level includes path with no redirects",
+			files: github.PullRequestFiles{
+				{
+					Name:         "docs/pages/includes/databases/mysql-certs.mdx",
+					Additions:    0,
+					Deletions:    0,
+					Status:       "renamed",
+					PreviousName: "docs/pages/includes/databases/mysql.mdx",
+				},
+			},
+			redirects: []DocsRedirect{},
+			expected:  []string{},
+		},
+		{
+			description: "renamed 4rd-level includes path with no redirects",
+			files: github.PullRequestFiles{
+				{
+					Name:         "docs/pages/connect-your-client/includes/mysql-certs.mdx",
+					Additions:    0,
+					Deletions:    0,
+					Status:       "renamed",
+					PreviousName: "docs/pages/connect-your-client/includes/mysql.mdx",
+				},
+			},
+			redirects: []DocsRedirect{},
+			expected:  []string{},
+		},
 	}
 
 	for _, c := range cases {
