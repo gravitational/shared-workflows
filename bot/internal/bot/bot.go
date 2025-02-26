@@ -31,7 +31,7 @@ import (
 
 // isCRDRegex matches Teleport operator CRD file paths.
 // Those files receive a special treatment as they're automatically generated.
-var isCRDRegex = regexp.MustCompile(`.*/resources\.teleport\.dev_[[:alpha:]]+\.yaml$`)
+var isCRDRegex = regexp.MustCompile(`.*/resources\.teleport\.dev_[[:alnum:]]+\.yaml$`)
 
 // Client implements the GitHub API.
 type Client interface {
