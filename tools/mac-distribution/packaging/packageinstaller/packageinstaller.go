@@ -121,6 +121,7 @@ func (p *Packager) Package() error {
 		}
 	}
 
+	p.log.Info("successfully created package isntaller", "path", p.Info.OutputPath)
 	return nil
 }
 

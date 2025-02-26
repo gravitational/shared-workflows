@@ -154,6 +154,7 @@ func (t *Tool) NotarizeBinaries(files []string) error {
 		return trace.Wrap(err)
 	}
 	// Stapling is not done for binaries
+	t.log.Info("successfully notarized binaries", "files", files)
 	return nil
 }
 
