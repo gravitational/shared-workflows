@@ -79,6 +79,7 @@ func (a *Packager) Package() error {
 		return trace.Wrap(err)
 	}
 
+	a.log.Info("successfully created app bundle", "path", a.Info.Skeleton)
 	return nil
 }
 
