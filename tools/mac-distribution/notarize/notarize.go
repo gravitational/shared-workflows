@@ -33,12 +33,6 @@ type Creds struct {
 	// SigningIdentity is the identity used to sign the package.
 	// This is typically the Developer ID Application identity.
 	SigningIdentity string
-	// BundleID is a unique identifier for the package to be signed.
-	// The codesign CLI doesn't normally require this but it will be infered if not present.
-	// In an effort to make the process a bit more deterministic we will require it.
-	// This is typically in reverse domain notation.
-	// 		Example: com.gravitational.teleport.myapp
-	BundleID string
 
 	// TeamID is the team identifier for the Apple Developer account.
 	TeamID string
@@ -97,7 +91,6 @@ func NewTool(creds Creds, opts ...Opt) (*Tool, error) {
 		t.cmdRunner = exec.NewDryRunner(t.log)
 		t.Creds.AppleUsername = "dryrun"
 		t.Creds.ApplePassword = "dryrun"
-		t.Creds.BundleID = "dryrun"
 		t.Creds.SigningIdentity = "dryrun"
 		t.Creds.TeamID = "dryrun"
 	}
@@ -167,14 +160,23 @@ type AppBundleOpts struct {
 	// Entitlements is the path to the entitlements file.
 	// Entitlements are tied to a specific BundleID.
 	Entitlements string
+	// BundleID is a unique identifier for the package to be signed.
+	// The codesign CLI doesn't normally require this but it will be infered if not present.
+	// In an effort to make the process a bit more deterministic we will require it.
+	// This is typically in reverse domain notation.
+	// 		Example: com.gravitational.teleport.myapp
+	BundleID string
 }
 
 // NotarizeAppBundle will notarize the app bundle located at the specified path.
 func (t *Tool) NotarizeAppBundle(appBundlePath string, opts AppBundleOpts) error {
+	if opts.BundleID == "" {
+		return trace.BadParameter("Bundle ID is required to notarize app bundle")
+	}
 	// build args
 	args := []string{
 		"--sign", t.Creds.SigningIdentity,
-		"--identifier", t.Creds.BundleID,
+		"--identifier", opts.BundleID,
 		"--force",
 		"--verbose",
 		"--timestamp",
@@ -210,7 +212,7 @@ func (t *Tool) NotarizeAppBundle(appBundlePath string, opts AppBundleOpts) error
 
 	// Staple the app bundle
 	t.log.Info("stapling app bundle")
-	out, err = t.runRetryable(func() ([]byte, error) {
+	_, err = t.runRetryable(func() ([]byte, error) {
 		out, err := t.cmdRunner.RunCommand("xcrun", "stapler", "staple", appBundlePath)
 		if err != nil {
 			t.log.Error("failed to staple package", "error", err)
@@ -248,7 +250,7 @@ func (t *Tool) NotarizePackageInstaller(pathToUnsigned, pathToSigned string) err
 
 	// Staple
 	t.log.Info("stapling package", "package", pathToSigned)
-	out, err = t.runRetryable(func() ([]byte, error) {
+	_, err = t.runRetryable(func() ([]byte, error) {
 		out, err := t.cmdRunner.RunCommand("xcrun", "stapler", "staple", pathToSigned)
 		if err != nil {
 			t.log.Error("failed to staple package", "error", err)
@@ -283,9 +285,6 @@ func (t *Tool) validate() error {
 	}
 	if t.Creds.SigningIdentity == "" {
 		missing = append(missing, "SigningIdentity")
-	}
-	if t.Creds.BundleID == "" {
-		missing = append(missing, "BundleID")
 	}
 	if t.Creds.TeamID == "" {
 		missing = append(missing, "TeamID")

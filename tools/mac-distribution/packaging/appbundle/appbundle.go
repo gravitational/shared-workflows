@@ -18,6 +18,7 @@ type Packager struct {
 
 	log        *slog.Logger
 	notaryTool *notarize.Tool
+	bundleID   string
 }
 
 // Info contains the information needed to create an app bundle.
@@ -75,7 +76,7 @@ func (a *Packager) Package() error {
 	}
 
 	// Notarize the app bundle
-	if err := a.notaryTool.NotarizeAppBundle(a.Info.Skeleton, notarize.AppBundleOpts{Entitlements: a.Info.Entitlements}); err != nil {
+	if err := a.notaryTool.NotarizeAppBundle(a.Info.Skeleton, notarize.AppBundleOpts{Entitlements: a.Info.Entitlements, BundleID: a.bundleID}); err != nil {
 		return trace.Wrap(err)
 	}
 
@@ -131,5 +132,12 @@ func WithLogger(log *slog.Logger) Opt {
 func WithNotaryTool(tool *notarize.Tool) Opt {
 	return func(a *Packager) {
 		a.notaryTool = tool
+	}
+}
+
+// WithBundleID sets the bundle ID  which is required for notarization of the app bundle.
+func WithBundleID(bundleID string) Opt {
+	return func(a *Packager) {
+		a.bundleID = bundleID
 	}
 }
