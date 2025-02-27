@@ -74,17 +74,13 @@ func NewPackager(info Info, opts ...Opt) (*Packager, error) {
 
 // Package creates a package installer.
 func (p *Packager) Package() error {
-	if err := p.Info.validate(); err != nil {
-		return trace.Wrap(err)
-	}
-
 	// Create a plist file for the package installer
-	tmpFile, err := os.CreateTemp("", "packageinstaller.plist")
+	tmpdir, err := os.MkdirTemp("", "packageinstaller-*")
 	if err != nil {
-		return trace.Wrap(err, "failed to create temp file")
+		return trace.Wrap(err, "failed to create temp dir")
 	}
-	defer os.Remove(tmpFile.Name())
-	plistPath := filepath.Join(p.Info.RootPath, filepath.Base(p.Info.OutputPath)+".plist")
+	defer os.RemoveAll(tmpdir)
+	plistPath := filepath.Join(tmpdir, filepath.Base(p.Info.OutputPath)+".plist")
 	if err := p.nonRelocatablePlist(plistPath); err != nil {
 		return trace.Wrap(err)
 	}
@@ -109,11 +105,10 @@ func (p *Packager) Package() error {
 
 	p.log.Info("building package installer...")
 	args = append(args, p.Info.OutputPath)
-	out, err := p.cmdRunner.RunCommand("pkgbuild", args...)
+	_, err = p.cmdRunner.RunCommand("pkgbuild", args...)
 	if err != nil {
 		return trace.Wrap(err, "failed to create package installer")
 	}
-	p.log.Info("pkgbuild output", "output", out)
 
 	if p.notaryTool != nil {
 		if err := p.notaryTool.NotarizePackageInstaller(p.Info.OutputPath, p.Info.OutputPath); err != nil {
@@ -121,37 +116,37 @@ func (p *Packager) Package() error {
 		}
 	}
 
-	p.log.Info("successfully created package isntaller", "path", p.Info.OutputPath)
+	p.log.Info("successfully created package installer", "path", p.Info.OutputPath)
 	return nil
 }
 
-// nonRelocatablePlist analyzes the root path to create a compponent plist file.
+// nonRelocatablePlist analyzes the root path to create a component plist file.
 // This plist is then modified to be non-relocatable.
 func (p *Packager) nonRelocatablePlist(plistPath string) error {
-	out, err := p.cmdRunner.RunCommand("pkgbuild", "--analyze", "--root", p.Info.RootPath, plistPath)
+	p.log.Info("analyzing package...")
+	_, err := p.cmdRunner.RunCommand("pkgbuild", "--analyze", "--root", p.Info.RootPath, plistPath)
 	if err != nil {
 		return trace.Wrap(err, "failed to analyze package installer")
 	}
-	p.log.Info("pkgbuild analyze output", "output", out)
 
 	// todo: Use a plist library instead of shelling out to replace plist attributes.
 	//       It's currently convenient to shell out to confirm parity to existing pipeline code
 
 	// Set BundleIsRelocatable to false for consistency.
 	// We have a lot of automation scripts that expect binaries to be in a specific location.
-	out, err = p.cmdRunner.RunCommand("plutil", "-replace", "BundleIsRelocatable", "-bool", "NO", plistPath)
+	_, err = p.cmdRunner.RunCommand("plutil", "-replace", "BundleIsRelocatable", "-bool", "NO", plistPath)
 	if err != nil {
 		return trace.Wrap(err, "failed to modify plist")
 	}
-	p.log.Info("plutil output", "output", out)
 
 	// Set BundleIsVersionChecked to false to allow for downgrades of the package.
 	// Normal operation is to only allow version upgrades to overwrite. This disables that.
-	out, err = p.cmdRunner.RunCommand("plutil", "-replace", "BundleIsVersionChecked", "-bool", "NO", plistPath)
+	_, err = p.cmdRunner.RunCommand("plutil", "-replace", "BundleIsVersionChecked", "-bool", "NO", plistPath)
 	if err != nil {
 		return trace.Wrap(err, "failed to modify plist")
 	}
-	p.log.Info("plutil output", "output", out)
+
+	p.log.Info("created component plist", "path", plistPath)
 	return nil
 }
 

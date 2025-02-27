@@ -95,10 +95,15 @@ func NewTool(creds Creds, opts ...Opt) (*Tool, error) {
 
 	if t.dryRun {
 		t.cmdRunner = exec.NewDryRunner(t.log)
-		creds.AppleUsername = "dryrun"
-		creds.ApplePassword = "dryrun"
-		creds.BundleID = "dryrun"
-		creds.SigningIdentity = "dryrun"
+		t.Creds.AppleUsername = "dryrun"
+		t.Creds.ApplePassword = "dryrun"
+		t.Creds.BundleID = "dryrun"
+		t.Creds.SigningIdentity = "dryrun"
+		t.Creds.TeamID = "dryrun"
+	}
+
+	if err := t.validate(); err != nil {
+		return nil, trace.Wrap(err)
 	}
 
 	return t, nil
@@ -265,4 +270,30 @@ func (t *Tool) runRetryable(retryableFunc func() ([]byte, error)) ([]byte, error
 		stdout, err = retryableFunc()
 	}
 	return stdout, err
+}
+
+func (t *Tool) validate() error {
+	missing := []string{}
+
+	if t.Creds.AppleUsername == "" {
+		missing = append(missing, "AppleUsername")
+	}
+	if t.Creds.ApplePassword == "" {
+		missing = append(missing, "ApplePassword")
+	}
+	if t.Creds.SigningIdentity == "" {
+		missing = append(missing, "SigningIdentity")
+	}
+	if t.Creds.BundleID == "" {
+		missing = append(missing, "BundleID")
+	}
+	if t.Creds.TeamID == "" {
+		missing = append(missing, "TeamID")
+	}
+
+	if len(missing) > 0 {
+		return trace.BadParameter("missing required credentials: %v", missing)
+	}
+
+	return nil
 }
