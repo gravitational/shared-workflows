@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/gravitational/shared-workflows/tools/mac-distribution/internal/exec"
 	"github.com/gravitational/shared-workflows/tools/mac-distribution/internal/zipper"
@@ -228,13 +229,19 @@ func (t *Tool) NotarizeAppBundle(appBundlePath string, opts AppBundleOpts) error
 
 // NotarizePackageInstaller will notarize a given package installer (.pkg).
 // Signing the package installer creates a new file for the signed package.
-func (t *Tool) NotarizePackageInstaller(pathToUnsigned, pathToSigned string) error {
+func (t *Tool) NotarizePackageInstaller(pathToPkg string) error {
+	pathToUnsigned := strings.Trim(pathToPkg, filepath.Ext(pathToPkg)) + "-unsigned.pkg"
+	t.log.Info("renaming package", "before", pathToPkg, "after", pathToUnsigned)
+	if err := os.Rename(pathToPkg, pathToUnsigned); err != nil {
+		return trace.Wrap(err, "failed to rename package")
+	}
+
 	// Productsign
 	args := []string{
 		"--sign", t.Creds.SigningIdentity,
 		"--timestamp",
 		pathToUnsigned,
-		pathToSigned,
+		pathToPkg,
 	}
 
 	out, err := t.cmdRunner.RunCommand("productsign", args...)
@@ -244,14 +251,14 @@ func (t *Tool) NotarizePackageInstaller(pathToUnsigned, pathToSigned string) err
 	t.log.Info("productsign output", "output", out)
 
 	// Notarize
-	if err := t.SubmitAndWait(pathToSigned); err != nil {
+	if err := t.SubmitAndWait(pathToPkg); err != nil {
 		return trace.Wrap(err)
 	}
 
 	// Staple
-	t.log.Info("stapling package", "package", pathToSigned)
+	t.log.Info("stapling package", "package", pathToPkg)
 	_, err = t.runRetryable(func() ([]byte, error) {
-		out, err := t.cmdRunner.RunCommand("xcrun", "stapler", "staple", pathToSigned)
+		out, err := t.cmdRunner.RunCommand("xcrun", "stapler", "staple", pathToPkg)
 		if err != nil {
 			t.log.Error("failed to staple package", "error", err)
 		}

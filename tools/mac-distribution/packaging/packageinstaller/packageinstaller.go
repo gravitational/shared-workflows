@@ -111,7 +111,7 @@ func (p *Packager) Package() error {
 	}
 
 	if p.notaryTool != nil {
-		if err := p.notaryTool.NotarizePackageInstaller(p.Info.OutputPath, p.Info.OutputPath); err != nil {
+		if err := p.notaryTool.NotarizePackageInstaller(p.Info.OutputPath); err != nil {
 			return trace.Wrap(err)
 		}
 	}
