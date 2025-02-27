@@ -32,7 +32,7 @@ type GlobalFlags struct {
 	AppleUsername string `group:"notarization creds" and:"notarization creds" env:"APPLE_USERNAME" help:"Apple Username. Required for notarization. Must use with apple-password."`
 	ApplePassword string `group:"notarization creds" and:"notarization creds" env:"APPLE_PASSWORD" help:"Apple Password. Required for notarization. Must use with apple-username."`
 	SigningID     string `group:"notarization creds" and:"notarization creds" env:"SIGNING_ID" help:"Signing Identity to use for codesigning. Required for notarization."`
-	BundleID      string `group:"notarization creds" and:"notarization creds" env:"BUNDLE_ID" help:"Bundle ID is a unique identifier used for codesigning & notarization. Required for notarization."`
+	BundleID      string `group:"notarization creds" env:"BUNDLE_ID" help:"Bundle ID is a unique identifier used for codesigning & notarization. Required for notarization."`
 	TeamID        string `group:"notarization creds" and:"notarization creds" env:"TEAM_ID" help:"Team ID is the unique identifier for the Apple Developer account."`
 
 	CI bool `hidden:"" env:"CI" help:"CI mode. Disables dry-run."`
