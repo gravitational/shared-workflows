@@ -49,7 +49,7 @@ func TestSubmit_retries(t *testing.T) {
 					AppleUsername:   "FAKE_USERNAME",
 					ApplePassword:   "FAKE_PASSWORD",
 					SigningIdentity: "FAKE_IDENTITY",
-					BundleID:        "FAKE_BUNDLE_ID",
+					TeamID:          "FAKE_TEAM_ID",
 				},
 				MaxRetries(tt.maxRetries),
 			)

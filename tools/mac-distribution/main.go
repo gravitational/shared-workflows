@@ -17,23 +17,22 @@ type CLI struct {
 	Notarize   NotarizeCmd         `cmd:"" help:"Utility for notarizing files"`
 	PackageApp AppBundleCmd        `cmd:"" help:"Create an Application Bundle (.app)"`
 	PackagePkg PackageInstallerCmd `cmd:"" help:"Create a package installer (.pkg)"`
-
-	GlobalFlags
 }
 
 type NotarizeCmd struct {
 	Files []string `arg:"" help:"List of files to notarize."`
+
+	NotaryCmd
 }
 
-type GlobalFlags struct {
+type NotaryCmd struct {
 	Retry  int  `group:"notarization options" help:"Retry notarization in case of failure."`
 	DryRun bool `group:"notarization options" help:"Dry run notarization."`
 
-	AppleUsername string `group:"notarization creds" and:"notarization creds" env:"APPLE_USERNAME" help:"Apple Username. Required for notarization. Must use with apple-password."`
-	ApplePassword string `group:"notarization creds" and:"notarization creds" env:"APPLE_PASSWORD" help:"Apple Password. Required for notarization. Must use with apple-username."`
-	SigningID     string `group:"notarization creds" and:"notarization creds" env:"SIGNING_ID" help:"Signing Identity to use for codesigning. Required for notarization."`
-	BundleID      string `group:"notarization creds" env:"BUNDLE_ID" help:"Bundle ID is a unique identifier used for codesigning & notarization. Required for notarization."`
-	TeamID        string `group:"notarization creds" and:"notarization creds" env:"TEAM_ID" help:"Team ID is the unique identifier for the Apple Developer account."`
+	AppleUsername string `group:"notarization creds" env:"APPLE_USERNAME" help:"Apple Username. Required for notarization. Must use with apple-password."`
+	ApplePassword string `group:"notarization creds" env:"APPLE_PASSWORD" help:"Apple Password. Required for notarization. Must use with apple-username."`
+	SigningID     string `group:"notarization creds" env:"SIGNING_ID" help:"Signing Identity to use for codesigning. Required for notarization."`
+	TeamID        string `group:"notarization creds" env:"TEAM_ID" help:"Team ID is the unique identifier for the Apple Developer account."`
 
 	CI bool `hidden:"" env:"CI" help:"CI mode. Disables dry-run."`
 
@@ -45,6 +44,9 @@ type AppBundleCmd struct {
 	Skeleton  string `arg:"" help:"Skeleton directory to use as the base for the app bundle."`
 
 	Entitlements string `flag:"" help:"Entitlements file to use for the app bundle."`
+	BundleID     string `flag:"" required:"" help:"Bundle ID is a unique identifier for the app bundle. Required for notarization."`
+
+	NotaryCmd
 }
 
 type PackageInstallerCmd struct {
@@ -52,8 +54,11 @@ type PackageInstallerCmd struct {
 	PackageOutputPath string `arg:"" help:"Path to the output package installer."`
 
 	InstallLocation string `flag:"" required:"" help:"Location where the package contents will be installed."`
+	BundleID        string `flag:"" required:"" help:"Bundle ID is a unique identifier for the package installer."`
 	ScriptsDir      string `flag:"" help:"Path to the scripts directory. Contains preinstall and postinstall scripts."`
 	Version         string `flag:"" help:"Version of the package. Used in determining upgrade behavior."`
+
+	NotaryCmd
 }
 
 func main() {
@@ -72,7 +77,8 @@ func (c *AppBundleCmd) Run(cli *CLI) error {
 			AppBinary:    c.AppBinary,
 		},
 		appbundle.WithLogger(log),
-		appbundle.WithNotaryTool(cli.notaryTool),
+		appbundle.WithNotaryTool(c.notaryTool),
+		appbundle.WithBundleID(c.BundleID),
 	)
 	if err != nil {
 		return trace.Wrap(err)
@@ -88,10 +94,10 @@ func (c *PackageInstallerCmd) Run(cli *CLI) error {
 			InstallLocation: c.InstallLocation,
 			OutputPath:      c.PackageOutputPath,
 			ScriptsDir:      c.ScriptsDir,
-			BundleID:        cli.BundleID, // Only populated for notarization
+			BundleID:        c.BundleID,
 		},
 		packageinstaller.WithLogger(log),
-		packageinstaller.WithNotaryTool(cli.notaryTool),
+		packageinstaller.WithNotaryTool(c.notaryTool),
 	)
 	if err != nil {
 		return trace.Wrap(err)
@@ -100,13 +106,21 @@ func (c *PackageInstallerCmd) Run(cli *CLI) error {
 	return pkg.Package()
 }
 
-func (c *NotarizeCmd) Run(cli *CLI) error {
-	return trace.Wrap(cli.notaryTool.NotarizeBinaries(c.Files))
+func (c *PackageInstallerCmd) Validate() error {
+	if c.BundleID == "" {
+		return trace.BadParameter("Bundle ID is required for package installer regardless of notarization")
+	}
+
+	return nil
 }
 
-func (g *GlobalFlags) AfterApply() error {
+func (c *NotarizeCmd) Run(cli *CLI) error {
+	return trace.Wrap(c.notaryTool.NotarizeBinaries(c.Files))
+}
+
+func (g *NotaryCmd) AfterApply() error {
 	// Dry run if no credentials are provided
-	credsMissing := g.AppleUsername == "" || g.ApplePassword == "" || g.SigningID == "" || g.BundleID == "" || g.TeamID == ""
+	credsMissing := g.AppleUsername == "" || g.ApplePassword == "" || g.SigningID == "" || g.TeamID == ""
 
 	if !g.DryRun && credsMissing {
 		return trace.BadParameter("notarization credentials required, use --dry-run to skip")
@@ -127,7 +141,6 @@ func (g *GlobalFlags) AfterApply() error {
 			AppleUsername:   g.AppleUsername,
 			ApplePassword:   g.ApplePassword,
 			SigningIdentity: g.SigningID,
-			BundleID:        g.BundleID,
 			TeamID:          g.TeamID,
 		},
 		append(
