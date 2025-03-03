@@ -99,6 +99,12 @@ func (t *Tool) WaitForSubmission(id string) error {
 	}
 	t.log.Info("waiting done", "response", sub)
 
+	// Exit code is 0 if wait completes regardless of status
+	// Must check status to ensure submission was successful
+	if sub.Status != "Accepted" {
+		return fmt.Errorf("submission failed: %s", sub.Status)
+	}
+
 	return nil
 }
 
