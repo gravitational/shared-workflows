@@ -7,8 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/gravitational/trace"
 )
 
 // FileInfo contains information about a file to archive.
@@ -28,7 +26,7 @@ func ZipFiles(out io.Writer, files []FileInfo) (err error) {
 		if err == nil { // if NO errors
 			// Closing finishes the write by writing the central directory.
 			// To avoid propagating an error from an earlier operation only close if there is no error.
-			err = trace.Wrap(zipwriter.Close())
+			err = zipwriter.Close()
 		}
 	}()
 
@@ -39,22 +37,22 @@ func ZipFiles(out io.Writer, files []FileInfo) (err error) {
 
 		w, err := zipwriter.Create(file.ArchiveName)
 		if err != nil {
-			return trace.Wrap(err)
+			return err
 		}
 
 		f, err := os.Open(file.Path)
 		if err != nil {
-			return trace.Wrap(err)
+			return err
 		}
 
 		_, err = io.Copy(w, f)
 		if err != nil {
 			f.Close() // Ignore close error since we already have an error to return.
-			return trace.Wrap(err)
+			return err
 		}
 
 		if err := f.Close(); err != nil {
-			return trace.Wrap(err)
+			return err
 		}
 	}
 
@@ -106,6 +104,9 @@ func ZipDir(dir string, out io.Writer, opts ...DirZipperOpt) (err error) {
 		})
 		return nil
 	}))
+	if err != nil {
+		return err
+	}
 
-	return trace.Wrap(ZipFiles(out, files))
+	return ZipFiles(out, files)
 }

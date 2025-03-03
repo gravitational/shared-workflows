@@ -2,12 +2,11 @@ package exec
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
 	"os/exec"
-
-	"github.com/gravitational/trace"
 )
 
 // CommandRunner is a wrapper around [exec.Command] that is useful for testing.
@@ -36,7 +35,7 @@ func (d *DefaultCommandRunner) RunCommand(path string, args ...string) ([]byte, 
 	out := bytes.TrimSpace(stdout.Bytes())
 	if err != nil {
 		// stdout is also returned since it may contain useful information
-		return out, trace.Wrap(err, "failed to run command: %s", stderr.String())
+		return out, fmt.Errorf("running command: %s", stderr.String())
 	}
 	return out, nil
 }

@@ -1,13 +1,13 @@
 package main
 
 import (
+	"errors"
 	"log/slog"
 
 	"github.com/alecthomas/kong"
 	"github.com/gravitational/shared-workflows/tools/mac-distribution/notarize"
 	"github.com/gravitational/shared-workflows/tools/mac-distribution/packaging/appbundle"
 	"github.com/gravitational/shared-workflows/tools/mac-distribution/packaging/packageinstaller"
-	"github.com/gravitational/trace"
 )
 
 var log = slog.Default()
@@ -81,7 +81,7 @@ func (c *AppBundleCmd) Run(cli *CLI) error {
 		appbundle.WithBundleID(c.BundleID),
 	)
 	if err != nil {
-		return trace.Wrap(err)
+		return err
 	}
 
 	return pkg.Package()
@@ -100,7 +100,7 @@ func (c *PackageInstallerCmd) Run(cli *CLI) error {
 		packageinstaller.WithNotaryTool(c.notaryTool),
 	)
 	if err != nil {
-		return trace.Wrap(err)
+		return err
 	}
 
 	return pkg.Package()
@@ -108,14 +108,14 @@ func (c *PackageInstallerCmd) Run(cli *CLI) error {
 
 func (c *PackageInstallerCmd) Validate() error {
 	if c.BundleID == "" {
-		return trace.BadParameter("Bundle ID is required for package installer regardless of notarization")
+		return errors.New("Bundle ID is required for package installer regardless of notarization")
 	}
 
 	return nil
 }
 
 func (c *NotarizeCmd) Run(cli *CLI) error {
-	return trace.Wrap(c.notaryTool.NotarizeBinaries(c.Files))
+	return c.notaryTool.NotarizeBinaries(c.Files)
 }
 
 func (g *NotaryCmd) AfterApply() error {
@@ -123,11 +123,11 @@ func (g *NotaryCmd) AfterApply() error {
 	credsMissing := g.AppleUsername == "" || g.ApplePassword == "" || g.SigningID == "" || g.TeamID == ""
 
 	if !g.DryRun && credsMissing {
-		return trace.BadParameter("notarization credentials required, use --dry-run to skip")
+		return errors.New("notarization credentials required, use --dry-run to skip")
 	}
 
 	if g.CI && g.DryRun {
-		return trace.BadParameter("dry-run mode cannot be used in CI")
+		return errors.New("dry-run mode cannot be used in CI")
 	}
 
 	extraOpts := []notarize.Opt{}
@@ -151,7 +151,7 @@ func (g *NotaryCmd) AfterApply() error {
 	)
 
 	if err != nil {
-		return trace.Wrap(err)
+		return err
 	}
 
 	g.notaryTool = t

@@ -1,10 +1,11 @@
 package fileutil
 
 import (
+	"fmt"
 	"io"
 	"os"
 
-	"github.com/gravitational/trace"
+	"errors"
 )
 
 // CopyOpt is a functional option for configuring the copy operation.
@@ -23,7 +24,7 @@ func CopyFile(src, dst string, opts ...CopyOpt) (err error) {
 
 	r, err := os.Open(src)
 	if err != nil {
-		return trace.Wrap(err)
+		return err
 	}
 	defer r.Close()
 
@@ -31,14 +32,14 @@ func CopyFile(src, dst string, opts ...CopyOpt) (err error) {
 	if o.destPermissions == 0 {
 		info, err := r.Stat()
 		if err != nil {
-			return trace.Wrap(err)
+			return err
 		}
 		o.destPermissions = info.Mode().Perm()
 	}
 
 	w, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, o.destPermissions) // create or overwrite
 	if err != nil {
-		return trace.Wrap(err)
+		return err
 	}
 
 	// Close the writer and remove the destination file if an error occurs.
@@ -49,12 +50,15 @@ func CopyFile(src, dst string, opts ...CopyOpt) (err error) {
 		}
 		if err != nil {
 			// Attempt to remove the destination file if an error occurred.
-			err = trace.NewAggregate(err, trace.Wrap(os.Remove(dst), "failed to remove destination file"))
+			rmErr := os.Remove(dst)
+			if rmErr != nil {
+				err = errors.Join(err, fmt.Errorf("failed to remove destination file: %w", rmErr))
+			}
 		}
 	}()
 
 	if _, err = io.Copy(w, r); err != nil {
-		return trace.Wrap(err)
+		return err
 	}
 
 	return nil

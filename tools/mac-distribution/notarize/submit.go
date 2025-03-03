@@ -2,9 +2,8 @@ package notarize
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
-
-	"github.com/gravitational/trace"
 )
 
 // SubmissionResponseData contains information about the status of a submission.
@@ -21,10 +20,10 @@ type submissionResponseData struct {
 func (t *Tool) SubmitAndWait(pathToPackage string) error {
 	submissionID, err := t.Submit(pathToPackage)
 	if err != nil {
-		return trace.Wrap(err)
+		return err
 	}
 	if err := t.WaitForSubmission(submissionID); err != nil {
-		return trace.Wrap(err)
+		return err
 	}
 	return nil
 }
@@ -52,7 +51,7 @@ func (t *Tool) Submit(pathToPackage string) (id string, err error) {
 	})
 
 	if err != nil {
-		return "", trace.Wrap(err, "failed to submit package for notarization for %d attempts", t.maxRetries)
+		return "", fmt.Errorf("package submission for notarization for %d attempts: %w", t.maxRetries, err)
 	}
 
 	if t.dryRun { // If dry run, return a fake submission ID
@@ -61,7 +60,7 @@ func (t *Tool) Submit(pathToPackage string) (id string, err error) {
 
 	var sub submissionResponseData
 	if err := json.Unmarshal([]byte(stdout), &sub); err != nil {
-		return "", trace.Wrap(err, "failed to parse output from submission request")
+		return "", fmt.Errorf("parsing output from submission request: %w", err)
 	}
 	t.log.Info("submission successful", "response", sub)
 
@@ -87,7 +86,7 @@ func (t *Tool) WaitForSubmission(id string) error {
 		return stdout, err
 	})
 	if err != nil {
-		return trace.Wrap(err, "failed while waiting for submission to finish processing")
+		return fmt.Errorf("waiting for submission to finish processing: %w", err)
 	}
 
 	if t.dryRun {
@@ -96,7 +95,7 @@ func (t *Tool) WaitForSubmission(id string) error {
 
 	var sub submissionResponseData
 	if err := json.Unmarshal([]byte(out), &sub); err != nil {
-		return trace.Wrap(err, "failed to parse output from submission request")
+		return fmt.Errorf("parsing output from submission request: %w", err)
 	}
 	t.log.Info("waiting done", "response", sub)
 

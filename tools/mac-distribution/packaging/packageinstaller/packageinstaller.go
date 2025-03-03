@@ -1,13 +1,13 @@
 package packageinstaller
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
 
 	"github.com/gravitational/shared-workflows/tools/mac-distribution/internal/exec"
 	"github.com/gravitational/shared-workflows/tools/mac-distribution/notarize"
-	"github.com/gravitational/trace"
 )
 
 // Packager creates a package installer (.pkg) for distribution.
@@ -41,7 +41,33 @@ type Info struct {
 }
 
 // Opt is a functional option for configuring a Packager.
-type Opt func(*Packager)
+type Opt func(*Packager) error
+
+// WithLogger sets the logger for the packager.
+// By default, the packager will use slog.Default().
+func WithLogger(log *slog.Logger) Opt {
+	return func(a *Packager) error {
+		a.log = log
+		return nil
+	}
+}
+
+// WithNotaryTool sets the notary tool for the packager.
+func WithNotaryTool(tool *notarize.Tool) Opt {
+	return func(a *Packager) error {
+		a.notaryTool = tool
+		return nil
+	}
+}
+
+// DryRun sets the packager to dry run mode.
+// In dry run mode, the packager will not execute commands and will not actually create the package installer.
+func DryRun() Opt {
+	return func(a *Packager) error {
+		a.dryRun = true
+		return nil
+	}
+}
 
 var defaultOpts = []Opt{
 	WithLogger(slog.Default()),
@@ -50,17 +76,22 @@ var defaultOpts = []Opt{
 // NewPackager creates a new PackageInstallerPackager.
 func NewPackager(info Info, opts ...Opt) (*Packager, error) {
 	if err := info.validate(); err != nil {
-		return nil, trace.Wrap(err)
+		return nil, err
 	}
 	pkg := &Packager{
 		Info: info,
 	}
+
 	for _, opt := range defaultOpts {
-		opt(pkg)
+		if err := opt(pkg); err != nil {
+			return nil, fmt.Errorf("applying default option: %w", err)
+		}
 	}
 
 	for _, opt := range opts {
-		opt(pkg)
+		if err := opt(pkg); err != nil {
+			return nil, fmt.Errorf("applying option %w", err)
+		}
 	}
 
 	var runner exec.CommandRunner = &exec.DefaultCommandRunner{}
@@ -77,12 +108,12 @@ func (p *Packager) Package() error {
 	// Create a plist file for the package installer
 	tmpdir, err := os.MkdirTemp("", "packageinstaller-*")
 	if err != nil {
-		return trace.Wrap(err, "failed to create temp dir")
+		return fmt.Errorf("creating temp dir: %w", err)
 	}
 	defer os.RemoveAll(tmpdir)
 	plistPath := filepath.Join(tmpdir, filepath.Base(p.Info.OutputPath)+".plist")
 	if err := p.nonRelocatablePlist(plistPath); err != nil {
-		return trace.Wrap(err)
+		return err
 	}
 
 	args := []string{
@@ -107,12 +138,12 @@ func (p *Packager) Package() error {
 	args = append(args, p.Info.OutputPath)
 	_, err = p.cmdRunner.RunCommand("pkgbuild", args...)
 	if err != nil {
-		return trace.Wrap(err, "failed to create package installer")
+		return fmt.Errorf("creating package installer: %w", err)
 	}
 
 	if p.notaryTool != nil {
 		if err := p.notaryTool.NotarizePackageInstaller(p.Info.OutputPath); err != nil {
-			return trace.Wrap(err)
+			return err
 		}
 	}
 
@@ -126,7 +157,7 @@ func (p *Packager) nonRelocatablePlist(plistPath string) error {
 	p.log.Info("analyzing package...")
 	_, err := p.cmdRunner.RunCommand("pkgbuild", "--analyze", "--root", p.Info.RootPath, plistPath)
 	if err != nil {
-		return trace.Wrap(err, "failed to analyze package installer")
+		return fmt.Errorf("analyzing package installer: %w", err)
 	}
 
 	// todo: Use a plist library instead of shelling out to replace plist attributes.
@@ -136,14 +167,14 @@ func (p *Packager) nonRelocatablePlist(plistPath string) error {
 	// We have a lot of automation scripts that expect binaries to be in a specific location.
 	_, err = p.cmdRunner.RunCommand("plutil", "-replace", "BundleIsRelocatable", "-bool", "NO", plistPath)
 	if err != nil {
-		return trace.Wrap(err, "failed to modify plist")
+		return fmt.Errorf("modifying plist: %w", err)
 	}
 
 	// Set BundleIsVersionChecked to false to allow for downgrades of the package.
 	// Normal operation is to only allow version upgrades to overwrite. This disables that.
 	_, err = p.cmdRunner.RunCommand("plutil", "-replace", "BundleIsVersionChecked", "-bool", "NO", plistPath)
 	if err != nil {
-		return trace.Wrap(err, "failed to modify plist")
+		return fmt.Errorf("modifying plist: %w", err)
 	}
 
 	p.log.Info("created component plist", "path", plistPath)
@@ -151,44 +182,26 @@ func (p *Packager) nonRelocatablePlist(plistPath string) error {
 }
 
 func (p *Info) validate() error {
+	missing := []string{}
 	if p.RootPath == "" {
-		return trace.BadParameter("root path is required")
+		missing = append(missing, "RootPath")
 	}
 
 	if p.OutputPath == "" {
-		return trace.BadParameter("output path is required")
+		missing = append(missing, "OutputPath")
 	}
 
 	if p.BundleID == "" {
-		return trace.BadParameter("bundle ID is required")
+		missing = append(missing, "BundleID")
 	}
 
 	if p.InstallLocation == "" {
-		return trace.BadParameter("install location is required")
+		missing = append(missing, "InstallLocation")
+	}
+
+	if len(missing) > 0 {
+		return fmt.Errorf("missing required fields: %v", missing)
 	}
 
 	return nil
-}
-
-// WithLogger sets the logger for the packager.
-// By default, the packager will use slog.Default().
-func WithLogger(log *slog.Logger) Opt {
-	return func(a *Packager) {
-		a.log = log
-	}
-}
-
-// WithNotaryTool sets the notary tool for the packager.
-func WithNotaryTool(tool *notarize.Tool) Opt {
-	return func(a *Packager) {
-		a.notaryTool = tool
-	}
-}
-
-// DryRun sets the packager to dry run mode.
-// In dry run mode, the packager will not execute commands and will not actually create the package installer.
-func DryRun() Opt {
-	return func(a *Packager) {
-		a.dryRun = true
-	}
 }

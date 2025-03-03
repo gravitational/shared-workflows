@@ -1,6 +1,7 @@
 package notarize
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -10,8 +11,6 @@ import (
 
 	"github.com/gravitational/shared-workflows/tools/mac-distribution/internal/exec"
 	"github.com/gravitational/shared-workflows/tools/mac-distribution/internal/zipper"
-
-	"github.com/gravitational/trace"
 )
 
 // Tool is a wrapper around the MacOS codesigning/notarizing utilities.
@@ -76,13 +75,13 @@ func NewTool(creds Creds, opts ...Opt) (*Tool, error) {
 	}
 	for _, opt := range defaultOpts {
 		if err := opt(t); err != nil {
-			return nil, trace.Wrap(err)
+			return nil, fmt.Errorf("applying default option: %w", err)
 		}
 	}
 
 	for _, opt := range opts {
 		if err := opt(t); err != nil {
-			return nil, trace.Wrap(err)
+			return nil, fmt.Errorf("applying option: %w", err)
 		}
 	}
 
@@ -97,7 +96,7 @@ func NewTool(creds Creds, opts ...Opt) (*Tool, error) {
 	}
 
 	if err := t.validate(); err != nil {
-		return nil, trace.Wrap(err)
+		return nil, err
 	}
 
 	return t, nil
@@ -118,17 +117,17 @@ func (t *Tool) NotarizeBinaries(files []string) error {
 	}
 	args = append(args, files...)
 	t.log.Info("codesigning binaries")
-	out, err := t.runRetryable(func() ([]byte, error) {
+	_, err := t.runRetryable(func() ([]byte, error) {
 		// Sometimes codesign can fail due to transient issues, so we retry
 		// For example, we've seen "The timestamp service is not available."
 		out, err := t.cmdRunner.RunCommand("codesign", args...)
 		if err != nil {
-			t.log.Error("failed to codesign binaries", "error", err)
+			t.log.Error("codesigning binaries", "error", err)
 		}
 		return out, err
 	})
 	if err != nil {
-		return trace.Wrap(err, "failed to codesign binaries: %v", out)
+		return fmt.Errorf("codesigning binaries: %w", err)
 	}
 
 	// Prepare zip files for notarization
@@ -139,18 +138,18 @@ func (t *Tool) NotarizeBinaries(files []string) error {
 
 	notaryfile, err := os.CreateTemp("", "notarize-binaries-*.zip")
 	if err != nil {
-		return trace.Wrap(err)
+		return err
 	}
 	defer notaryfile.Close()
 	defer os.Remove(notaryfile.Name())
 
 	t.log.Info("zipping binaries", "zipfile", notaryfile.Name())
 	if err := zipper.ZipFiles(notaryfile, archiveFiles); err != nil {
-		return trace.Wrap(err)
+		return err
 	}
 
 	if err := t.SubmitAndWait(notaryfile.Name()); err != nil {
-		return trace.Wrap(err)
+		return err
 	}
 	// Stapling is not done for binaries
 	t.log.Info("successfully notarized binaries", "files", files)
@@ -172,7 +171,7 @@ type AppBundleOpts struct {
 // NotarizeAppBundle will notarize the app bundle located at the specified path.
 func (t *Tool) NotarizeAppBundle(appBundlePath string, opts AppBundleOpts) error {
 	if opts.BundleID == "" {
-		return trace.BadParameter("Bundle ID is required to notarize app bundle")
+		return errors.New("BundleID is required to notarize app bundle")
 	}
 	// build args
 	args := []string{
@@ -191,24 +190,24 @@ func (t *Tool) NotarizeAppBundle(appBundlePath string, opts AppBundleOpts) error
 	// codesign the app bundle
 	args = append(args, appBundlePath)
 	t.log.Info("codesigning app bundle")
-	out, err := t.cmdRunner.RunCommand("codesign", args...)
+	_, err := t.cmdRunner.RunCommand("codesign", args...)
 	if err != nil {
-		return trace.Wrap(err, "failed to codesign app bundle: %s", out)
+		return fmt.Errorf("codesigning app bundle: %w", err)
 	}
 
 	// Zip the app bundle and submit for notarization
 	notaryfile, err := os.CreateTemp("", fmt.Sprintf("notarize-*-%s.zip", filepath.Base(appBundlePath)))
 	if err != nil {
-		return trace.Wrap(err)
+		return err
 	}
 	defer os.Remove(notaryfile.Name())
 	t.log.Info("zipping app bundle", "zipfile", notaryfile.Name())
 	if err := zipper.ZipDir(appBundlePath, notaryfile, zipper.IncludeParent()); err != nil {
-		return trace.Wrap(err, "failed to zip app bundle")
+		return fmt.Errorf("zip app bundle: %w", err)
 	}
 
 	if err := t.SubmitAndWait(notaryfile.Name()); err != nil {
-		return trace.Wrap(err)
+		return err
 	}
 
 	// Staple the app bundle
@@ -216,12 +215,12 @@ func (t *Tool) NotarizeAppBundle(appBundlePath string, opts AppBundleOpts) error
 	_, err = t.runRetryable(func() ([]byte, error) {
 		out, err := t.cmdRunner.RunCommand("xcrun", "stapler", "staple", appBundlePath)
 		if err != nil {
-			t.log.Error("failed to staple package", "error", err)
+			t.log.Error("stapling package", "error", err)
 		}
 		return out, err
 	})
 	if err != nil {
-		return trace.Wrap(err, "failed to staple package")
+		return fmt.Errorf("stapling app bundle: %w", err)
 	}
 
 	return nil
@@ -233,7 +232,7 @@ func (t *Tool) NotarizePackageInstaller(pathToPkg string) error {
 	pathToUnsigned := strings.Trim(pathToPkg, filepath.Ext(pathToPkg)) + "-unsigned.pkg"
 	t.log.Info("renaming package", "before", pathToPkg, "after", pathToUnsigned)
 	if err := os.Rename(pathToPkg, pathToUnsigned); err != nil {
-		return trace.Wrap(err, "failed to rename package")
+		return fmt.Errorf("failed to rename package: %w", err)
 	}
 
 	// Productsign
@@ -246,13 +245,13 @@ func (t *Tool) NotarizePackageInstaller(pathToPkg string) error {
 
 	out, err := t.cmdRunner.RunCommand("productsign", args...)
 	if err != nil {
-		return trace.Wrap(err, "failed to productsign package")
+		return fmt.Errorf("productsign package: %w", err)
 	}
 	t.log.Info("productsign output", "output", out)
 
 	// Notarize
 	if err := t.SubmitAndWait(pathToPkg); err != nil {
-		return trace.Wrap(err)
+		return err
 	}
 
 	// Staple
@@ -260,12 +259,12 @@ func (t *Tool) NotarizePackageInstaller(pathToPkg string) error {
 	_, err = t.runRetryable(func() ([]byte, error) {
 		out, err := t.cmdRunner.RunCommand("xcrun", "stapler", "staple", pathToPkg)
 		if err != nil {
-			t.log.Error("failed to staple package", "error", err)
+			t.log.Error("stapling package", "error", err)
 		}
 		return out, err
 	})
 	if err != nil {
-		return trace.Wrap(err, "failed to staple package")
+		return fmt.Errorf("stapling package: %w", err)
 	}
 
 	return nil
@@ -298,7 +297,7 @@ func (t *Tool) validate() error {
 	}
 
 	if len(missing) > 0 {
-		return trace.BadParameter("missing required credentials: %v", missing)
+		return fmt.Errorf("missing required credentials: %v", missing)
 	}
 
 	return nil
