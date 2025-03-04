@@ -122,7 +122,7 @@ func NewPackager(info Info, opts ...Opt) (*Packager, error) {
 // Package creates a package installer.
 func (p *Packager) Package() error {
 	// Create a plist file for the package installer
-	tmpdir, err := os.MkdirTemp("", "packageinstaller-*")
+	tmpdir, err := os.MkdirTemp("", fmt.Sprintf("pkg-%s-*", p.Info.BundleID))
 	if err != nil {
 		return fmt.Errorf("creating temp dir: %w", err)
 	}

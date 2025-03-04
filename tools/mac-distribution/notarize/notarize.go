@@ -133,15 +133,7 @@ func (t *Tool) NotarizeBinaries(files []string) error {
 	}
 	args = append(args, files...)
 	t.log.Info("codesigning binaries")
-	_, err := t.runRetryable(func() ([]byte, error) {
-		// Sometimes codesign can fail due to transient issues, so we retry
-		// For example, we've seen "The timestamp service is not available."
-		out, err := t.cmdRunner.RunCommand("codesign", args...)
-		if err != nil {
-			t.log.Error("codesigning binaries", "error", err)
-		}
-		return out, err
-	})
+	err := t.runCodesign(args...)
 	if err != nil {
 		return fmt.Errorf("codesigning binaries: %w", err)
 	}
@@ -152,7 +144,7 @@ func (t *Tool) NotarizeBinaries(files []string) error {
 		archiveFiles = append(archiveFiles, zipper.FileInfo{Path: f})
 	}
 
-	notaryfile, err := os.CreateTemp("", "notarize-binaries-*.zip")
+	notaryfile, err := os.CreateTemp("", "notarize-*.zip")
 	if err != nil {
 		return err
 	}
@@ -206,7 +198,7 @@ func (t *Tool) NotarizeAppBundle(appBundlePath string, opts AppBundleOpts) error
 	// codesign the app bundle
 	args = append(args, appBundlePath)
 	t.log.Info("codesigning app bundle")
-	_, err := t.cmdRunner.RunCommand("codesign", args...)
+	err := t.runCodesign(args...)
 	if err != nil {
 		return fmt.Errorf("codesigning app bundle: %w", err)
 	}
@@ -228,14 +220,7 @@ func (t *Tool) NotarizeAppBundle(appBundlePath string, opts AppBundleOpts) error
 
 	// Staple the app bundle
 	t.log.Info("stapling app bundle")
-	_, err = t.runRetryable(func() ([]byte, error) {
-		out, err := t.cmdRunner.RunCommand("xcrun", "stapler", "staple", appBundlePath)
-		if err != nil {
-			t.log.Error("stapling package", "error", err)
-		}
-		return out, err
-	})
-	if err != nil {
+	if err := t.staple(appBundlePath); err != nil {
 		return fmt.Errorf("stapling app bundle: %w", err)
 	}
 
@@ -272,14 +257,7 @@ func (t *Tool) NotarizePackageInstaller(pathToPkg string) error {
 
 	// Staple
 	t.log.Info("stapling package", "package", pathToPkg)
-	_, err = t.runRetryable(func() ([]byte, error) {
-		out, err := t.cmdRunner.RunCommand("xcrun", "stapler", "staple", pathToPkg)
-		if err != nil {
-			t.log.Error("stapling package", "error", err)
-		}
-		return out, err
-	})
-	if err != nil {
+	if err := t.staple(pathToPkg); err != nil {
 		return fmt.Errorf("stapling package: %w", err)
 	}
 
@@ -294,6 +272,30 @@ func (t *Tool) runRetryable(retryableFunc func() ([]byte, error)) ([]byte, error
 		stdout, err = retryableFunc()
 	}
 	return stdout, err
+}
+
+func (t *Tool) runCodesign(args ...string) error {
+	_, err := t.runRetryable(func() ([]byte, error) {
+		// Sometimes codesign can fail due to transient issues, so we retry
+		// For example, we've seen "The timestamp service is not available."
+		out, err := t.cmdRunner.RunCommand("codesign", args...)
+		if err != nil {
+			t.log.Error("running codesign", "error", err)
+		}
+		return out, err
+	})
+	return err
+}
+
+func (t *Tool) staple(path string) error {
+	_, err := t.runRetryable(func() ([]byte, error) {
+		out, err := t.cmdRunner.RunCommand("xcrun", "stapler", "staple", path)
+		if err != nil {
+			t.log.Error("stapling package", "error", err)
+		}
+		return out, err
+	})
+	return err
 }
 
 func (t *Tool) validate() error {

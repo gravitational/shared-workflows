@@ -122,14 +122,6 @@ func (c *PackageInstallerCmd) Run(cli *CLI) error {
 	return pkg.Package()
 }
 
-func (c *PackageInstallerCmd) Validate() error {
-	if c.BundleID == "" {
-		return errors.New("Bundle ID is required for package installer regardless of notarization")
-	}
-
-	return nil
-}
-
 func (c *NotarizeCmd) Run(cli *CLI) error {
 	return c.notaryTool.NotarizeBinaries(c.Files)
 }
@@ -143,7 +135,7 @@ func (g *NotaryCmd) AfterApply() error {
 	}
 
 	if g.CI && g.DryRun {
-		return errors.New("dry-run mode cannot be used in CI")
+		return errors.New("--dry-run mode cannot be used in CI")
 	}
 
 	extraOpts := []notarize.Opt{}
