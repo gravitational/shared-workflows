@@ -1,9 +1,8 @@
-package main
+package github
 
 import (
 	"context"
 	"fmt"
-	"log"
 	"log/slog"
 	"net/http"
 	"slices"
@@ -11,124 +10,11 @@ import (
 
 	"github.com/google/go-github/v69/github"
 	"github.com/gravitational/shared-workflows/libs/github/webhook"
-	"github.com/gravitational/shared-workflows/tools/approval-service/internal"
-	"golang.org/x/sync/errgroup"
 )
 
 var logger = slog.Default()
 
-var cfg = internal.Config{
-	GitHubWebhook: internal.GitHubWebhookConfig{
-		Address: "127.0.0.1:0",
-		Secret:  "",
-	},
-}
-
-// Process:
-// 1. Take in events from CI/CD systems
-// 2. Extract common information
-// 3. Process information according to business rules/logic
-// 4. Callback to the event source, have it handle
-
-// One of the design goals of this is to support multiple "sources" of deployment events,
-// such as github or another CI/CD service.
-
-// Skeleton TODO:
-// * add ctx where needed
-// * err handling
-// * pass some form of "config" struct to setup funcs, which will be populated by CLI or config file
-// * maybe add some "hook" for registering CLI options?
-// * Move approval processor, event, and event source to different packages
-
-func main() {
-	// 0. Process CLI args, setup logger, etc.
-	// TODO
-
-	// 1. Setup approval processor
-	var processor ApprovalProcessor = &TeleportApprovalProcessor{}
-	_ = processor.Setup() // Error handling TODO
-
-	// 2. Setup event sources
-	eventSources := []EventSource{
-		NewGitHubEventSource(processor),
-	}
-	for _, eventSource := range eventSources {
-		_ = eventSource.Setup()
-	}
-
-	// 3. Start event sources
-	eg, ctx := errgroup.WithContext(context.Background())
-	for _, eventSource := range eventSources {
-		eg.Go(func() error {
-			return eventSource.Run(ctx)
-		})
-	}
-
-	// Block until an event source has a fatal error
-	if err := eg.Wait(); err != nil {
-		log.Fatal(err)
-	}
-}
-
-// This contains information needed to process a request
-// If multiple underlying events/payloads/etc. roll under
-// the same "root" event that approval is for, they should
-// all set the same ID.
-type Event struct {
-	// Unique for an approval request, but may be common for
-	// multiple underlying events/payloads/etc.
-	ID        string
-	Requester string
-	// Other fields TODO. Potential fields:
-	// * Source
-	// * Commit/tag/source control identifier
-	// * "Parameters" map. In the case of GHA, this would be
-	//   any input provided to a workflow dispatch event
-	// See RFD for more details
-}
-
-type ApprovalProcessor interface {
-	// This should do things like setup API clients, as well as anything
-	// needed to approve/deny events.
-	Setup() error
-
-	// This should be a blocking function that takes in an event, and
-	// approves or denies it.
-	ProcessRequest(*Event) (approved bool, err error)
-}
-
-type TeleportApprovalProcessor struct {
-	// TODO
-}
-
-func (tap *TeleportApprovalProcessor) Setup() error {
-	// Setup Teleport API client
-	return nil
-}
-
-func (tap *TeleportApprovalProcessor) ProcessRequest(e *Event) (approved bool, err error) {
-	// 1. Create a new role:
-	// 	* Set TTL to value in RFD
-	// 	* Encode event information in role for recordkeeping
-
-	// 2. Request access to the role. Include the same info as the role,
-	//    for reviewer visibility.
-
-	// 3. Wait for the request to be approved or denied.
-	// This may block for a long time (minutes, hours, days).
-	// Timeout if it takes too long.
-
-	return false, nil
-}
-
-type EventSource interface {
-	// This should do thinks like setup API clients and webhooks.
-	Setup() error
-
-	// Handle actual requests. This should not block.
-	Run(ctx context.Context) error
-}
-
+// GithubEventSource is a webhook that listens for GitHub events and processes them.
 type GitHubEventSource struct {
 	processor ApprovalProcessor
 
@@ -192,7 +78,7 @@ func (ghes *GitHubEventSource) Run(ctx context.Context) error {
 
 	// Start the HTTP server
 	go func() {
-		logger.Info("Listening for GitHub Webhooks", "address", ghes.addr)
+		logger.Info("Listening for GitHub Webhooks", "address", ghes.srv.Addr)
 		errc <- ghes.srv.ListenAndServe()
 		close(errc)
 	}()
