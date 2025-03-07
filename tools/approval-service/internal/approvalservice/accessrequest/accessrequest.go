@@ -1,0 +1,94 @@
+package accessrequest
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/gravitational/teleport/api/client"
+	"github.com/gravitational/teleport/api/types"
+)
+
+// Plugin is an Access Request plugin that listens for events from Teleport.
+type Plugin struct {
+	teleportClient *client.Client
+	reviewHandler  ReviewHandler
+}
+
+// ReviewHandler is an interface for handling approval and rejection events.
+type ReviewHandler interface {
+	HandleApproval(ctx context.Context, event types.Event) error
+	HandleRejection(ctx context.Context, event types.Event) error
+}
+
+// NewPlugin creates a new Access Request plugin.
+func NewPlugin(client *client.Client, handler ReviewHandler) (*Plugin, error) {
+	return &Plugin{
+		teleportClient: client,
+		reviewHandler:  handler,
+	}, nil
+}
+
+func (p *Plugin) Setup() error {
+	return nil
+}
+
+// Run starts the plugin and listens for events.
+// It will block until the context is cancelled.
+func (p *Plugin) Run(ctx context.Context) error {
+	watch, err := p.teleportClient.NewWatcher(ctx, types.Watch{
+		Kinds: []types.WatchKind{
+			// AccessRequest is the resource we are interested in.
+			types.WatchKind{Kind: types.KindAccessRequest},
+		},
+	})
+
+	if err != nil {
+		return err
+	}
+	defer watch.Close()
+
+	fmt.Println("Starting the watcher job")
+
+	for {
+		select {
+		case e := <-watch.Events():
+			if err := p.handleEvent(ctx, e); err != nil {
+				return fmt.Errorf("handling event: %w", err)
+			}
+		case <-watch.Done():
+			if err := watch.Error(); err != nil {
+				return fmt.Errorf("watcher error: %w", err)
+			}
+			fmt.Println("The watcher job is finished")
+			return nil
+		}
+	}
+}
+
+func (p *Plugin) handleEvent(ctx context.Context, event types.Event) error {
+	if event.Resource == nil {
+		return nil
+	}
+
+	if _, ok := event.Resource.(*types.WatchStatusV1); ok {
+		fmt.Println("Successfully started listening for Access Requests...")
+		return nil
+	}
+
+	r, ok := event.Resource.(types.AccessRequest)
+	if !ok {
+		fmt.Printf("Unknown (%T) event received, skipping.\n", event.Resource)
+		return nil
+	}
+
+	switch r.GetState() {
+	case types.RequestState_PENDING:
+		fmt.Printf("Received a new access request: %s\n", r.GetName())
+	case types.RequestState_APPROVED:
+		return p.reviewHandler.HandleApproval(ctx, event)
+	case types.RequestState_DENIED:
+		return p.reviewHandler.HandleRejection(ctx, event)
+	}
+
+	return nil
+}
