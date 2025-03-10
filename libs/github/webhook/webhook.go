@@ -4,7 +4,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/google/go-github/v63/github"
+	"github.com/google/go-github/v69/github"
 )
 
 // EventHandlerFunc is a function that handles a webhook event.
@@ -63,7 +63,16 @@ var defaultOpts = []Opt{
 	WithLogger(slog.Default()),
 }
 
-// NewHandler creates a new webhook handler.
+// NewHandler creates a new webhook handler that implements [http.Handler].
+// The handler will call the eventHandler function when a webhook event is received.
+// Example usage:
+//
+//	mux := http.NewServeMux()
+//	mux.Handle("/webhook", webhook.NewHandler(
+//		eventHandler,
+//		webhook.WithLogger(logger),
+//		... // Other options
+//	))
 func NewHandler(eventHandler EventHandlerFunc, opts ...Opt) *Handler {
 	h := Handler{
 		eventHandler: eventHandler,
@@ -110,15 +119,17 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	head.GitHubHookInstallationTargetID = r.Header.Get("X-GitHub-Hook-Installation-Target-ID")
 	head.HubSignature256 = r.Header.Get("X-Hub-Signature-256")
 
+	// Signature is present but no secret token is set.
+	// This indicates an issues with the webhook configuration.
 	if h.secretToken == nil && head.HubSignature256 != "" {
-		h.log.Warn("received signature but no secret token is set", "github_headers", head)
+		h.log.Error("received signature but no secret token is set", "github_headers", head)
 		http.Error(w, "invalid request", http.StatusInternalServerError)
 		return
 	}
 
 	payload, err := github.ValidatePayload(r, h.secretToken) // If secretToken is empty, the signature will not be verified.
 	if err != nil {
-		h.log.Warn("webhook validation failed", "github_headers", head)
+		h.log.Warn("webhook validation failed", "github_headers", head, "error", err)
 		http.Error(w, "invalid request", http.StatusBadRequest)
 		return
 	}
