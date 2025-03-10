@@ -12,3 +12,9 @@ type Config struct {
 	// Teleport is the configuration for the Teleport client.
 	Teleport TeleportConfig `json:"teleport,omitempty"`
 }
+
+// TeleportConfig is the configuration for the Teleport client.
+type TeleportConfig struct {
+	ProxyAddrs   []string `json:"proxy_addrs"`
+	IdentityFile string   `json:"identity_file"`
+}
