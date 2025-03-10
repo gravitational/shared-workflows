@@ -21,8 +21,8 @@ var cfg = approvalservice.Config{
 			"gravitational/teleport",
 		},
 		ValidEnvironments: []string{
-			"production",
-			"staging",
+			"build/stage",
+			"publish/stage",
 		},
 		ValidOrgs: []string{
 			"gravitational",
