@@ -18,8 +18,10 @@ package github
 
 import (
 	"context"
+	"net/http"
 	"time"
 
+	"github.com/bradleyfalzon/ghinstallation/v2"
 	go_github "github.com/google/go-github/v69/github"
 	"golang.org/x/oauth2"
 )
@@ -44,6 +46,22 @@ func New(ctx context.Context, token string) (*Client, error) {
 
 	clt.Timeout = ClientTimeout
 	cl := go_github.NewClient(clt)
+	return &Client{
+		client: cl,
+		search: cl.Search,
+	}, nil
+}
+
+// NewForApp returns a new GitHub Client with authentication for a GitHub App.
+func NewForApp(appID int64, installationID int64, privateKey []byte) (*Client, error) {
+	itr, err := ghinstallation.New(http.DefaultTransport, appID, installationID, privateKey)
+	if err != nil {
+		return nil, err
+	}
+	httpClient := &http.Client{Transport: itr}
+	httpClient.Timeout = ClientTimeout
+
+	cl := go_github.NewClient(httpClient)
 	return &Client{
 		client: cl,
 		search: cl.Search,
