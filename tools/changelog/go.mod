@@ -1,6 +1,7 @@
 module github.com/gravitational/shared-workflows/tools/changelog
 
 go 1.22.4
+toolchain go1.23.7
 
 require (
 	github.com/alecthomas/kingpin/v2 v2.4.0
@@ -19,7 +20,7 @@ require (
 	github.com/kr/text v0.2.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/xhit/go-str2duration/v2 v2.1.0 // indirect
-	golang.org/x/net v0.34.0 // indirect
+	golang.org/x/net v0.36.0 // indirect
 	golang.org/x/oauth2 v0.25.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
