@@ -5,13 +5,13 @@ on:
 
 jobs:
   csvlint:
-      name: csvlint
-      runs-on: ubuntu-latest
+    name: csvlint
+    runs-on: ubuntu-latest
 
-      permissions:
-        contents: read
+    permissions:
+      contents: read
 
-      steps:
+    steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -19,15 +19,17 @@ jobs:
 
       - name: Get changed files
         id: changed-files
-        uses: tj-actions/changed-files@20576b4b9ed46d41e2d45a2256e5e2316dde6834 # v43.0.1
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
         with:
-          files: |
-            **/*.csv
+          list-files: shell
+          filters: |
+            csv:
+              - **/*.csv
 
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '^1'
+          go-version: "^1"
 
       - name: Checkout csvlint
         uses: actions/checkout@v4
@@ -36,10 +38,10 @@ jobs:
           path: csvlint
 
       - name: csvlint
-        if: steps.changed-files.outputs.any_changed == 'true'
+        if: steps.changed-files.outputs.csv == 'true'
         run: |
           cd csvlint
-          for file in ${{ steps.changed-files.outputs.all_changed_files }}; do
+          for file in ${{ steps.changed-files.outputs.csv_files }}; do
             sanitized_file=$(printf '%q' "$file")
             echo "Validating ${sanitized_file}"
             go run cmd/csvlint/main.go ../${sanitized_file}
