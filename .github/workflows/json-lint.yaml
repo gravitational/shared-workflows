@@ -5,13 +5,13 @@ on:
 
 jobs:
   jsonlint:
-      name: jsonlint
-      runs-on: ubuntu-latest
+    name: jsonlint
+    runs-on: ubuntu-latest
 
-      permissions:
-        contents: read
+    permissions:
+      contents: read
 
-      steps:
+    steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -19,15 +19,17 @@ jobs:
 
       - name: Get changed files
         id: changed-files
-        uses: tj-actions/changed-files@20576b4b9ed46d41e2d45a2256e5e2316dde6834 # v43.0.1
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
         with:
-          files: |
-            **/*.json
+          list-files: shell
+          filters: |
+            json:
+              - **/*.json
 
       - name: jsonlint
-        if: steps.changed-files.outputs.any_changed == 'true'
+        if: steps.changed-files.outputs.json == 'true'
         run: |
-          for file in ${{ steps.changed-files.outputs.all_changed_files }}; do
+          for file in ${{ steps.changed-files.outputs.json_files }}; do
             sanitized_file=$(printf '%q' "$file")
             echo "Validating ${sanitized_file}"
             jq empty ${sanitized_file}
