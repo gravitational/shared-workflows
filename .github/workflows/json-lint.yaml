@@ -24,7 +24,7 @@ jobs:
           list-files: shell
           filters: |
             json:
-              - **/*.json
+              - '**/*.json'
 
       - name: jsonlint
         if: steps.changed-files.outputs.json == 'true'
