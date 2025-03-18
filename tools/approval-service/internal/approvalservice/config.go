@@ -11,10 +11,21 @@ type Config struct {
 
 	// Teleport is the configuration for the Teleport client.
 	Teleport TeleportConfig `json:"teleport,omitempty"`
+
+	// GitHubApp is the configuration for client authentication as a GitHub App.
+	GitHubApp GitHubAppConfig `json:"github_app,omitempty"`
 }
 
 // TeleportConfig is the configuration for the Teleport client.
 type TeleportConfig struct {
-	ProxyAddrs   []string `json:"proxy_addrs"`
-	IdentityFile string   `json:"identity_file"`
+	ProxyAddrs    []string `json:"proxy_addrs"`
+	IdentityFile  string   `json:"identity_file"`
+	User          string   `json:"user"`
+	RoleToRequest string   `json:"role_to_request"`
+}
+
+type GitHubAppConfig struct {
+	AppID          int64  `json:"app_id"`
+	InstallationID int64  `json:"installation_id"`
+	PrivateKeyPath string `json:"private_key_path"`
 }

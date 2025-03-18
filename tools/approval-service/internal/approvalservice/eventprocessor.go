@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strconv"
 
 	"github.com/google/uuid"
 	"github.com/gravitational/shared-workflows/libs/github"
@@ -13,73 +14,96 @@ import (
 )
 
 type processor struct {
-	teleportClient *teleportClient.Client
-	githubClient   *github.Client
+	// TeleportUser is the user that the approval service will use to request access.
+	TeleportUser string
+	// TeleportRole is the role that the approval service will request access to.
+	TeleportRole string
+
+	teleportClient teleClient
+	githubClient   ghClient
+	log            *slog.Logger
 }
 
 func (p *processor) Setup() error {
 	// Setup Teleport API client
+	// TODO: Get environment IDs from string names
 	return nil
 }
 
 func (p *processor) ProcessDeploymentReviewEvent(e githubevents.DeploymentReviewEvent, valid bool) error {
-	// 1. Create a new role:
-	// 	* Set TTL to value in RFD
-	// 	* Encode event information in role for recordkeeping
-	slog.Default().Info("Processing deployment review", "event", e)
-	p.teleportClient.CreateRole(context.Background(), &types.RoleV6{})
+	// Create access request
+	// The name of an access request must be a UUID
+	name := uuid.New().String()
+	p.log.Info("Creating access request", "access_request_name", name)
+	req, err := types.NewAccessRequest(name, p.TeleportUser, p.TeleportRole)
+	if err != nil {
+		return fmt.Errorf("generating access request: %w", err)
+	}
 
-	// 2. Request access to the role. Include the same info as the role,
-	//    for reviewer visibility.
-	req, err := p.createAccessRequest(context.Background(), createAccessRequestOpts{
-		User:        "bot-approval-service",
-		Description: fmt.Sprintf("Requesting access to the %s environment", e.Environment),
-		Roles:       []string{"gha-build-prod"},
+	req.SetRequestReason("Deployment review for environment " + e.Environment)
+	req.SetStaticLabels(map[string]string{
+		"workflow_run_id": strconv.Itoa(int(e.WorkflowID)),
+		"organization":    e.Organization,
+		"repository":      e.Repository,
 	})
+	created, err := p.teleportClient.CreateAccessRequestV2(context.TODO(), req)
+	if err != nil {
+		return fmt.Errorf("creating access request %q: %w", name, err)
+	}
 
 	if err != nil {
-		return fmt.Errorf("creating access request: %w", err)
+		return fmt.Errorf("creating access request %q: %w", name, err)
 	}
-	slog.Default().Info("Created access request", "request_id", req.GetName())
-
-	// 3. Wait for the request to be approved or denied.
-	// This may block for a long time (minutes, hours, days).
-	// Timeout if it takes too long.
+	p.log.Info("Created access request", "access_request_name", created.GetName())
 	return nil
 }
 
-type createAccessRequestOpts struct {
-	// User is the user requesting access.
-	User string
-	// Description is the description of the access request.
-	Description string
-	// Roles are the roles the user is requesting.
-	Roles []string
-}
+func (p *processor) HandleReview(ctx context.Context, req types.AccessRequest) error {
+	p.log.Info("Handling review", "access_request_name", req.GetName())
 
-// CreateAccessRequest creates an access request for the approval service.
-func (p *processor) createAccessRequest(ctx context.Context, opts createAccessRequestOpts) (types.AccessRequest, error) {
-	slog.Default().Info("Creating access request", "user", opts.User, "roles", opts.Roles)
-	req, err := types.NewAccessRequest(uuid.New().String(), opts.User, opts.Roles...)
-	if err != nil {
-		return nil, fmt.Errorf("generating access request: %w", err)
+	runIDLabel := req.GetStaticLabels()["workflow_run_id"]
+	if runIDLabel == "" {
+		return fmt.Errorf("missing workflow run ID in access request %s", req.GetName())
 	}
 
-	req.SetRequestReason(opts.Description)
-	created, err := p.teleportClient.CreateAccessRequestV2(ctx, req)
-	if err != nil {
-		slog.Error("creating access request", "error", err)
-		return nil, fmt.Errorf("creating access request: %w", err)
+	orgLabel := req.GetStaticLabels()["organization"]
+	if orgLabel == "" {
+		return fmt.Errorf("missing organization in access request %s", req.GetName())
 	}
-	return created, nil
-}
 
-func (p *processor) HandleApproval(ctx context.Context, event types.Event) error {
-	slog.Default().Info("Handling approval", "event", event)
+	repoLabel := req.GetStaticLabels()["repository"]
+	if repoLabel == "" {
+		return fmt.Errorf("missing repository in access request %s", req.GetName())
+	}
+
+	runID, err := strconv.Atoi(runIDLabel)
+	if err != nil {
+		return fmt.Errorf("parsing workflow run ID: %w", err)
+	}
+
+	state := github.PendingDeploymentApprovalStateApproved
+	if req.GetState() == types.RequestState_DENIED {
+		state = github.PendingDeploymentApprovalStateRejected
+	}
+
+	p.githubClient.UpdatePendingDeployment(ctx, github.PendingDeploymentInfo{
+		Org:     orgLabel,
+		Repo:    repoLabel,
+		RunID:   int64(runID),
+		State:   state,
+		EnvIDs:  []int64{},
+		Comment: "",
+	})
 	return nil
 }
 
-func (p *processor) HandleRejection(ctx context.Context, event types.Event) error {
-	slog.Default().Info("Handling rejection", "event", event)
-	return nil
+// Small interfaces to make testing easier
+type teleClient interface {
+	CreateAccessRequestV2(ctx context.Context, req types.AccessRequest) (types.AccessRequest, error)
 }
+type ghClient interface {
+	UpdatePendingDeployment(ctx context.Context, info github.PendingDeploymentInfo) ([]github.Deployment, error)
+}
+
+var _ teleClient = &teleportClient.Client{}
+var _ ghClient = &github.Client{}

@@ -3,6 +3,7 @@ package accessrequest
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/gravitational/teleport/api/client"
 	"github.com/gravitational/teleport/api/types"
@@ -12,12 +13,13 @@ import (
 type Plugin struct {
 	teleportClient *client.Client
 	reviewHandler  ReviewHandler
+
+	log *slog.Logger
 }
 
 // ReviewHandler is an interface for handling approval and rejection events.
 type ReviewHandler interface {
-	HandleApproval(ctx context.Context, event types.Event) error
-	HandleRejection(ctx context.Context, event types.Event) error
+	HandleReview(ctx context.Context, req types.AccessRequest) error
 }
 
 // NewPlugin creates a new Access Request plugin.
@@ -71,23 +73,23 @@ func (p *Plugin) handleEvent(ctx context.Context, event types.Event) error {
 	}
 
 	if _, ok := event.Resource.(*types.WatchStatusV1); ok {
-		fmt.Println("Successfully started listening for Access Requests...")
+		p.log.Info("Successfully started listening for Access Requests...")
 		return nil
 	}
 
 	r, ok := event.Resource.(types.AccessRequest)
 	if !ok {
-		fmt.Printf("Unknown (%T) event received, skipping.\n", event.Resource)
+		p.log.Warn("Unknown (%T) event received, skipping.\n", event.Resource)
 		return nil
 	}
 
 	switch r.GetState() {
 	case types.RequestState_PENDING:
-		fmt.Printf("Received a new access request: %s\n", r.GetName())
+		p.log.Info("Received a new access request", "access_request_name", r.GetName())
 	case types.RequestState_APPROVED:
-		return p.reviewHandler.HandleApproval(ctx, event)
+		return p.reviewHandler.HandleReview(ctx, r)
 	case types.RequestState_DENIED:
-		return p.reviewHandler.HandleRejection(ctx, event)
+		return p.reviewHandler.HandleReview(ctx, r)
 	}
 
 	return nil

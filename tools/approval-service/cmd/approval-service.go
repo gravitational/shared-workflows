@@ -32,7 +32,9 @@ var cfg = approvalservice.Config{
 		ProxyAddrs: []string{
 			"localhost:3080",
 		},
-		IdentityFile: os.Getenv("TELEPORT_IDENTITY_FILE"),
+		IdentityFile:  os.Getenv("TELEPORT_IDENTITY_FILE"),
+		User:          "bot-approval-service",
+		RoleToRequest: "gha-build-prod",
 	},
 }
 
