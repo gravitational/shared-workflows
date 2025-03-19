@@ -44,7 +44,7 @@ func TestEventProcessor(t *testing.T) {
 				assert.Equal(t, event.WorkflowID, info.RunID)
 				assert.Equal(t, event.Organization, info.Org)
 				assert.Equal(t, event.Repository, info.Repo)
-				assert.Equal(t, github.PendingDeploymentApprovalStateApproved, info.State)
+				assert.Equal(t, github.PendingDeploymentApprovalState_APPROVED, info.State)
 				return nil, nil
 			},
 		}

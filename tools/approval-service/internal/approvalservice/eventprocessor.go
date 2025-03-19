@@ -81,9 +81,9 @@ func (p *processor) HandleReview(ctx context.Context, req types.AccessRequest) e
 		return fmt.Errorf("parsing workflow run ID: %w", err)
 	}
 
-	state := github.PendingDeploymentApprovalStateApproved
+	state := github.PendingDeploymentApprovalState_APPROVED
 	if req.GetState() == types.RequestState_DENIED {
-		state = github.PendingDeploymentApprovalStateRejected
+		state = github.PendingDeploymentApprovalState_REJECTED
 	}
 
 	p.githubClient.UpdatePendingDeployment(ctx, github.PendingDeploymentInfo{
