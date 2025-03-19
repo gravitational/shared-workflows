@@ -2,7 +2,6 @@ package approvalservice
 
 import (
 	"context"
-	"log/slog"
 	"testing"
 
 	"github.com/gravitational/shared-workflows/libs/github"
@@ -15,6 +14,7 @@ import (
 func TestEventProcessor(t *testing.T) {
 	t.Run("Single event flow", func(t *testing.T) {
 		p := newTestProcessor(t)
+		require.NoError(t, p.Setup())
 
 		p.teleportClient = &fakeTeleportClient{
 			// Creating an access request will callback to the processor with an approved state
@@ -45,6 +45,7 @@ func TestEventProcessor(t *testing.T) {
 				assert.Equal(t, event.Organization, info.Org)
 				assert.Equal(t, event.Repository, info.Repo)
 				assert.Equal(t, github.PendingDeploymentApprovalState_APPROVED, info.State)
+				assert.Equal(t, int64(54321), info.EnvIDs[0])
 				return nil, nil
 			},
 		}
@@ -55,23 +56,47 @@ func TestEventProcessor(t *testing.T) {
 }
 
 func newTestProcessor(t *testing.T) *processor {
-	return &processor{
-		TeleportUser: "test-user",
-		TeleportRole: "test-role",
-		teleportClient: &fakeTeleportClient{
+	return newProcessor(
+		Config{
+			Teleport: TeleportConfig{
+				User:          "test-user",
+				RoleToRequest: "gha-build-prod",
+			},
+			GitHubEvents: githubevents.Config{
+				Validation: []githubevents.ValidationConfig{
+					{
+						Org:          "gravitational",
+						Repo:         "teleport",
+						Environments: []string{"build/prod"},
+					},
+				},
+			},
+		},
+		&fakeGitHubClient{
+			updatePendingDeploymentFunc: func(ctx context.Context, info github.PendingDeploymentInfo) ([]github.Deployment, error) {
+				t.Fatalf("updatePendingDeploymentFunc needs an implementation")
+				return nil, nil
+			},
+			getEnvironmentFunc: func(ctx context.Context, info github.GetEnvironmentInfo) (github.Environment, error) {
+				if info.Environment == "build/prod" {
+					return github.Environment{
+						ID:   54321,
+						Name: "build/prod",
+						Org:  "gravitational",
+						Repo: "teleport",
+					}, nil
+				}
+				t.Fatalf("got unexpected environment %q", info.Environment)
+				return github.Environment{}, nil
+			},
+		},
+		&fakeTeleportClient{
 			createAccessRequestV2Func: func(ctx context.Context, req types.AccessRequest) (types.AccessRequest, error) {
 				t.Fatalf("createAccessRqeuestV2Func needs an implementation")
 				return nil, nil
 			},
 		},
-		githubClient: &fakeGitHubClient{
-			updatePendingDeploymentFunc: func(ctx context.Context, info github.PendingDeploymentInfo) ([]github.Deployment, error) {
-				t.Fatalf("updatePendingDeploymentFunc needs an implementation")
-				return nil, nil
-			},
-		},
-		log: slog.Default(),
-	}
+	)
 }
 
 type fakeTeleportClient struct {
@@ -84,8 +109,13 @@ func (f *fakeTeleportClient) CreateAccessRequestV2(ctx context.Context, req type
 
 type fakeGitHubClient struct {
 	updatePendingDeploymentFunc func(ctx context.Context, info github.PendingDeploymentInfo) ([]github.Deployment, error)
+	getEnvironmentFunc          func(ctx context.Context, info github.GetEnvironmentInfo) (github.Environment, error)
 }
 
 func (f *fakeGitHubClient) UpdatePendingDeployment(ctx context.Context, info github.PendingDeploymentInfo) ([]github.Deployment, error) {
 	return f.updatePendingDeploymentFunc(ctx, info)
+}
+
+func (f *fakeGitHubClient) GetEnvironment(ctx context.Context, info github.GetEnvironmentInfo) (github.Environment, error) {
+	return f.getEnvironmentFunc(ctx, info)
 }

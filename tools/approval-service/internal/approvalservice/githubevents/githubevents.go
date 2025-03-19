@@ -5,40 +5,44 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"slices"
 	"time"
 
 	"github.com/google/go-github/v69/github"
 	"github.com/gravitational/shared-workflows/libs/github/webhook"
 )
 
-var logger = slog.Default()
-
 // Source is a webhook that listens for GitHub events and processes them.
 type Source struct {
-	processor         DeploymentReviewEventProcessor
-	addr              string
-	validEnvironments []string
-	validRepos        []string
-	validOrgs         []string
-	secretToken       string
+	processor   DeploymentReviewEventProcessor
+	addr        string
+	secretToken string
 
 	deployReviewChan chan *github.DeploymentReviewEvent
 	srv              *http.Server
+
+	validation map[string]struct{}
+
+	log *slog.Logger
 }
 
 // Config is the configuration for the GitHub event source.
 type Config struct {
 	// Address is the address to listen for GitHub webhooks.
 	Address string `json:"address,omitempty"`
-	// ValidRepos is a list of valid repositories.
-	ValidRepos []string `json:"valid_repos,omitempty"`
-	// ValidEnvironments is a list of valid environments.
-	ValidEnvironments []string `json:"valid_environments,omitempty"`
-	// ValidOrgs is a list of valid organizations.
-	ValidOrgs []string `json:"valid_orgs,omitempty"`
 	// Secret is the secret used to authenticate the webhook.
 	Secret string `json:"secret,omitempty"`
+	// Validation is a list of validation configurations that the event must match.
+	Validation []ValidationConfig `json:"validation,omitempty"`
+}
+
+// ValidationConfig is the configuration for validation checks.
+type ValidationConfig struct {
+	// Org is the organization that the event must be from.
+	Org string `json:"org,omitempty"`
+	// Repo is the repository that the event must be from.
+	Repo string `json:"repo,omitempty"`
+	// Environments is a list of environments that the event must be for.
+	Environments []string `json:"environments,omitempty"`
 }
 
 // DeploymentReviewEventProcessor is an interface for processing deployment review events.
@@ -68,14 +72,43 @@ type DeploymentReviewEvent struct {
 	// See RFD for more details
 }
 
-func NewSource(cfg Config, processor DeploymentReviewEventProcessor) *Source {
-	return &Source{
-		processor:         processor,
-		addr:              cfg.Address,
-		validRepos:        cfg.ValidRepos,
-		validEnvironments: cfg.ValidEnvironments,
-		secretToken:       cfg.Secret,
+// Opt is a functional option for the GitHub event source.
+type Opt func(*Source)
+
+// WithLogger sets the logger for the GitHub event source.
+func WithLogger(logger *slog.Logger) Opt {
+	return func(s *Source) {
+		s.log = logger
 	}
+}
+
+var defaultOpts = []Opt{
+	WithLogger(slog.Default()),
+}
+
+func NewSource(cfg Config, processor DeploymentReviewEventProcessor, opt ...Opt) *Source {
+	s := &Source{
+		processor:   processor,
+		addr:        cfg.Address,
+		secretToken: cfg.Secret,
+		validation:  map[string]struct{}{},
+	}
+
+	for _, o := range defaultOpts {
+		o(s)
+	}
+
+	for _, o := range opt {
+		o(s)
+	}
+
+	for _, v := range cfg.Validation {
+		for _, env := range v.Environments {
+			s.validation[envEntry(v.Org, v.Repo, env)] = struct{}{}
+		}
+	}
+
+	return s
 }
 
 // Setup GH client, webhook secret, etc.
@@ -97,7 +130,7 @@ func (ghes *Source) Setup() error {
 	mux.Handle("/webhook", webhook.NewHandler(
 		eventProcessor,
 		webhook.WithSecretToken(ghes.secretToken),
-		webhook.WithLogger(logger),
+		webhook.WithLogger(ghes.log),
 	))
 
 	ghes.srv = &http.Server{
@@ -114,7 +147,7 @@ func (ghes *Source) Run(ctx context.Context) error {
 
 	// Start the HTTP server
 	go func() {
-		logger.Info("Listening for GitHub Webhooks", "address", ghes.srv.Addr)
+		ghes.log.Info("Listening for GitHub Webhooks", "address", ghes.srv.Addr)
 		errc <- ghes.srv.ListenAndServe()
 		close(errc)
 	}()
@@ -122,7 +155,7 @@ func (ghes *Source) Run(ctx context.Context) error {
 	// Process incoming events
 	go func() {
 		defer close(ghes.deployReviewChan)
-		logger.Info("Starting GitHub event processor")
+		ghes.log.Info("Starting GitHub event processor")
 		for {
 			select {
 			case <-ctx.Done():
@@ -177,16 +210,12 @@ func (ghes *Source) processDeploymentReviewEvent(payload *github.DeploymentRevie
 
 // Performs approval checks that are GH-specific. This should only be used to deny requests,
 // never approve them.
-func (ghes *Source) performAutomatedChecks(payload *github.DeploymentReviewEvent) (pass bool, err error) {
-	if !slices.Contains(ghes.validOrgs, payload.GetOrganization().GetLogin()) {
-		return true, nil
-	}
+func (ghes *Source) performAutomatedChecks(payload *github.DeploymentReviewEvent) (deny bool, err error) {
+	org := payload.GetOrganization().GetLogin()
+	repo := payload.GetRepo().GetName()
+	env := payload.GetEnvironment()
 
-	if !slices.Contains(ghes.validEnvironments, payload.GetEnvironment()) {
-		return true, nil
-	}
-
-	if !slices.Contains(ghes.validRepos, payload.GetRepo().GetName()) {
+	if _, ok := ghes.validation[envEntry(org, repo, env)]; !ok {
 		return true, nil
 	}
 
@@ -203,4 +232,8 @@ func (e DeploymentReviewEvent) LogValue() slog.Value {
 		slog.String("repository", e.Repository),
 		slog.Int64("workflow_id", e.WorkflowID),
 	)
+}
+
+func envEntry(org, repo, env string) string {
+	return fmt.Sprintf("%s/%s/%s", org, repo, env)
 }
