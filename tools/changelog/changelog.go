@@ -44,6 +44,11 @@ const (
 * {{.Summary}} [#{{.Number}}]({{.URL}})
 {{ end -}}
 `
+	clTemplateNoLink = `
+{{- range . -}}
+* {{.Summary}}
+{{ end -}}
+`
 )
 
 var (
@@ -51,12 +56,14 @@ var (
 	// e.g. will match a line "changelog: this is a changelog" with subgroup "this is a changelog".
 	clPattern = regexp.MustCompile(`[Cc]hangelog: +(.*)`)
 
-	clParsedTmpl = template.Must(template.New("cl").Parse(clTemplate))
+	clParsedTmpl       = template.Must(template.New("cl").Parse(clTemplate))
+	clParsedTmplNoLink = template.Must(template.New("cl").Parse(clTemplateNoLink))
 )
 
 type changelogGenerator struct {
-	repo     string
-	ghclient *github.Client
+	repo           string
+	ghclient       *github.Client
+	excludePRLinks bool
 }
 
 // generateChangelog will pull a PRs from branch between two points in time and generate a changelog from them.
@@ -87,7 +94,11 @@ func (c *changelogGenerator) toChangelog(prs []github.ChangelogPR) (string, erro
 	}
 
 	var buff bytes.Buffer
-	if err := clParsedTmpl.Execute(&buff, clList); err != nil {
+	tmpl := clParsedTmpl
+	if c.excludePRLinks {
+		tmpl = clParsedTmplNoLink
+	}
+	if err := tmpl.Execute(&buff, clList); err != nil {
 		return "", trace.Wrap(err)
 	}
 

@@ -94,8 +94,9 @@ func main() {
 		repo:     "teleport",
 	}
 	entCLGen := &changelogGenerator{
-		ghclient: cl,
-		repo:     "teleport.e",
+		ghclient:       cl,
+		repo:           "teleport.e",
+		excludePRLinks: true,
 	}
 	ossCL, err := ossCLGen.generateChangelog(ctx, branch, timeLastRelease, github.SearchTimeNow)
 	if err != nil {
