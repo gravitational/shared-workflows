@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"time"
 
@@ -18,6 +19,7 @@ type Source struct {
 	secretToken string
 
 	deployReviewChan chan *github.DeploymentReviewEvent
+	listener         net.Listener
 	srv              *http.Server
 
 	validation map[string]struct{}
@@ -133,8 +135,13 @@ func (ghes *Source) Setup() error {
 		webhook.WithLogger(ghes.log),
 	))
 
+	ln, err := net.Listen("tcp", ghes.addr)
+	if err != nil {
+		return fmt.Errorf("error listening on address %q: %w", ghes.addr, err)
+	}
+	ghes.listener = ln
 	ghes.srv = &http.Server{
-		Addr:    ghes.addr,
+		Addr:    ln.Addr().String(),
 		Handler: mux,
 	}
 
@@ -148,7 +155,7 @@ func (ghes *Source) Run(ctx context.Context) error {
 	// Start the HTTP server
 	go func() {
 		ghes.log.Info("Listening for GitHub Webhooks", "address", ghes.srv.Addr)
-		errc <- ghes.srv.ListenAndServe()
+		errc <- ghes.srv.Serve(ghes.listener)
 		close(errc)
 	}()
 
@@ -222,6 +229,10 @@ func (ghes *Source) performAutomatedChecks(payload *github.DeploymentReviewEvent
 	// TODO: check user is part of one of valid orgs
 
 	return false, nil
+}
+
+func (ghes *Source) getAddr() string {
+	return ghes.listener.Addr().String()
 }
 
 func (e DeploymentReviewEvent) LogValue() slog.Value {

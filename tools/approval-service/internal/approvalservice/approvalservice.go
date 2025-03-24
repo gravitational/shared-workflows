@@ -113,6 +113,16 @@ func NewApprovalService(cfg Config, opts ...Opt) (*ApprovalService, error) {
 		accessPlugin,
 	}
 
+	if err := a.processor.Setup(); err != nil {
+		return nil, fmt.Errorf("setting up approval processor: %w", err)
+	}
+
+	for _, eventSource := range a.eventSources {
+		if err := eventSource.Setup(); err != nil {
+			return nil, fmt.Errorf("setting up event source: %w", err)
+		}
+	}
+
 	return a, nil
 }
 
@@ -134,16 +144,6 @@ func newWithOpts(opts ...Opt) (*ApprovalService, error) {
 
 // Run starts the approval service.
 func (s *ApprovalService) Run(ctx context.Context) error {
-	if err := s.processor.Setup(); err != nil {
-		return fmt.Errorf("setting up approval processor: %w", err)
-	}
-
-	for _, eventSource := range s.eventSources {
-		if err := eventSource.Setup(); err != nil {
-			return fmt.Errorf("setting up event source: %w", err)
-		}
-	}
-
 	eg, ctx := errgroup.WithContext(ctx)
 	for _, eventSource := range s.eventSources {
 		eg.Go(func() error {

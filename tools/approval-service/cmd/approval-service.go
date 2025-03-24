@@ -17,15 +17,12 @@ var logger = slog.Default()
 var cfg = approvalservice.Config{
 	GitHubEvents: githubevents.Config{
 		Address: "127.0.0.1:8080",
-		ValidRepos: []string{
-			"gravitational/teleport",
-		},
-		ValidEnvironments: []string{
-			"build/stage",
-			"publish/stage",
-		},
-		ValidOrgs: []string{
-			"gravitational",
+		Validation: []githubevents.ValidationConfig{
+			{
+				Org:          "gravitational",
+				Repo:         "teleport",
+				Environments: []string{"build/prod"},
+			},
 		},
 	},
 	Teleport: approvalservice.TeleportConfig{

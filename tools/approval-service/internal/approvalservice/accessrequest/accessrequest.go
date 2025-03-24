@@ -79,7 +79,7 @@ func (p *Plugin) handleEvent(ctx context.Context, event types.Event) error {
 
 	r, ok := event.Resource.(types.AccessRequest)
 	if !ok {
-		p.log.Warn("Unknown (%T) event received, skipping.\n", event.Resource)
+		p.log.Warn("Unknown event received, skipping.\n", "kind", event.Resource.GetKind(), "type", fmt.Sprintf("%T", event.Resource))
 		return nil
 	}
 

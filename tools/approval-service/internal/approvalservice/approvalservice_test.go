@@ -52,8 +52,6 @@ func TestApprovalService(t *testing.T) {
 				WorkflowID:   thirdWorkflowID,
 			},
 		})
-		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		defer cancel()
 		assert.NoError(t, <-processor.waitForWorkflowID(ctx, firstWorkflowID))
 		assert.NoError(t, <-processor.waitForWorkflowID(ctx, secondWorkflowID))
 		assert.NoError(t, <-processor.waitForWorkflowID(ctx, thirdWorkflowID))
@@ -68,6 +66,7 @@ func newTestApprovalService(t *testing.T) (app *ApprovalService, proc *fakeProce
 	}
 	ghEvents = &fakeGitHubEventSource{
 		processor: proc,
+		eventC:    make(chan githubevents.DeploymentReviewEvent),
 	}
 	app, err := newWithOpts()
 	require.NoError(t, err)
@@ -75,10 +74,6 @@ func newTestApprovalService(t *testing.T) (app *ApprovalService, proc *fakeProce
 		ghEvents,
 	}
 	app.processor = proc
-
-	for _, source := range app.eventSources {
-		require.NoError(t, source.Setup())
-	}
 
 	return app, proc, ghEvents
 }
@@ -95,7 +90,6 @@ func (f *fakeGitHubEventSource) emitEvents(events []githubevents.DeploymentRevie
 }
 
 func (f *fakeGitHubEventSource) Setup() error {
-	f.eventC = make(chan githubevents.DeploymentReviewEvent)
 	return nil
 }
 
