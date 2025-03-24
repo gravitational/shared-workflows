@@ -462,7 +462,7 @@ func (r *Assignments) checkInternalReleaseReviews(reviews []github.Review) error
 // checkInternalReviews checks whether review requirements are satisfied
 // for a PR authored by an internal employee
 func (r *Assignments) checkInternalReviews(e *env.Environment, changes env.Changes, reviews []github.Review, files []github.PullRequestFile) error {
-	setA, setB := getReviewerSets(e.Author, r.repoReviewers(e), r.c.CodeReviewersOmit)
+	setA, setB := getReviewerSets(e.Author, r.repoReviewers(e), map[string]bool{})
 
 	// If this PR touches docs, then approvals from docs reviewers also count.
 	// Add them to set B, as docs reviewers are not required so long as we get
