@@ -21,9 +21,10 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/gravitational/shared-workflows/bot/internal/env"
 	"github.com/gravitational/shared-workflows/bot/internal/github"
-	"github.com/stretchr/testify/require"
 )
 
 // TestIsInternal checks if docs and code reviewers show up as internal.
@@ -442,6 +443,36 @@ func TestGetCodeReviewerSets(t *testing.T) {
 			require.ElementsMatch(t, setB, test.setB)
 		})
 	}
+}
+
+// TestOmitReviewersCanApprove checks the scenario in which non-admin approver is on the `Config.CodeReviewersOmit` list.
+// In this case we won't be asking for their review (checked elsewhere), but we do want to honor their review is present (this test).
+func TestOmitReviewersCanApprove(t *testing.T) {
+	assignments := &Assignments{
+		c: &Config{
+			CoreReviewers: map[string]Reviewer{
+				"code-1": {Owner: true},
+				"code-2": {Owner: false},
+			},
+			Admins:         []string{},
+			CloudReviewers: map[string]Reviewer{},
+			CodeReviewersOmit: map[string]bool{
+				"code-1": true,
+				"code-2": true,
+			},
+		},
+	}
+
+	e := &env.Environment{
+		Repository: "",
+		Author:     "",
+	}
+
+	changes := env.Changes{ApproverCount: env.DefaultApproverCount}
+
+	err := assignments.checkInternalReviews(e, changes, nil, nil)
+
+	require.ErrorContains(t, err, "at least one approval required from each set [code-1] [code-2]")
 }
 
 // TestGetDocsReviewers checks internal docs review assignments.
