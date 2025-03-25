@@ -10,8 +10,9 @@ The following CI/CD tools are currently supported:
     * Supports automated denial for requests from outside the GitHub
       organization.
 
-## Deployment information
-TODO
+## Prerequisites
+
+These are steps that are done before 
 
 ### GitHub App
 
@@ -25,7 +26,42 @@ us to subscribe to `deployment_review` events which are not normally subscribabl
 
 **Subscribe to events**:
 
-* Deployment review: Deployment review requested, approved or rejected 
+* Deployment review: Deployment review requested, approved or rejected.
+
+### Teleport
+
+**Role**:
+
+Two roles must be created for the Pipeline Approval Service:
+
+* Environment Access Role
+  * The PAS will create an Access Request to this role to indicate access to a GitHub Environment.
+  * Needs no permissions.
+* Bot Role
+  * Required to create a bot.
+  * Needs no permissions.
+
+**Bot**:
+
+A bot needs to be created for the PAS.
+As stated above, a role needs to be created for the bot but it does not need permissions.
+Instead after the bot is created a default role is also created with it.
+This default role needs to be manually updated with the following permissions:
+
+```yaml
+allow:
+  access:
+    roles:
+    - <environment-access-role>
+  rules:
+  - resources:
+    - access_request
+    verbs:
+    - "*"
+```
+
+## Deployment information
+TODO
 
 ## Security
 TODO
