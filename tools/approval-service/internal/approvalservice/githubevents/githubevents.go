@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/go-github/v69/github"
 	"github.com/gravitational/shared-workflows/libs/github/webhook"
+	"github.com/gravitational/shared-workflows/tools/approval-service/internal/approvalservice/config"
 )
 
 // Source is a webhook that listens for GitHub events and processes them.
@@ -25,26 +26,6 @@ type Source struct {
 	validation map[string]struct{}
 
 	log *slog.Logger
-}
-
-// Config is the configuration for the GitHub event source.
-type Config struct {
-	// Address is the address to listen for GitHub webhooks.
-	Address string `json:"address,omitempty"`
-	// Secret is the secret used to authenticate the webhook.
-	Secret string `json:"secret,omitempty"`
-	// Validation is a list of validation configurations that the event must match.
-	Validation []ValidationConfig `json:"validation,omitempty"`
-}
-
-// ValidationConfig is the configuration for validation checks.
-type ValidationConfig struct {
-	// Org is the organization that the event must be from.
-	Org string `json:"org,omitempty"`
-	// Repo is the repository that the event must be from.
-	Repo string `json:"repo,omitempty"`
-	// Environments is a list of environments that the event must be for.
-	Environments []string `json:"environments,omitempty"`
 }
 
 // DeploymentReviewEventProcessor is an interface for processing deployment review events.
@@ -88,7 +69,7 @@ var defaultOpts = []Opt{
 	WithLogger(slog.Default()),
 }
 
-func NewSource(cfg Config, processor DeploymentReviewEventProcessor, opt ...Opt) *Source {
+func NewSource(cfg config.GitHubEvents, processor DeploymentReviewEventProcessor, opt ...Opt) *Source {
 	s := &Source{
 		processor:   processor,
 		addr:        cfg.Address,

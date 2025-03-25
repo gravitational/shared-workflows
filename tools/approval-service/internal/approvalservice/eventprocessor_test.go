@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/gravitational/shared-workflows/libs/github"
+	"github.com/gravitational/shared-workflows/tools/approval-service/internal/approvalservice/config"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/approvalservice/githubevents"
 	"github.com/gravitational/teleport/api/types"
 	"github.com/stretchr/testify/assert"
@@ -57,13 +58,13 @@ func TestEventProcessor(t *testing.T) {
 
 func newTestProcessor(t *testing.T) *processor {
 	return newProcessor(
-		Config{
-			Teleport: TeleportConfig{
+		config.Root{
+			Teleport: config.Teleport{
 				User:          "test-user",
 				RoleToRequest: "gha-build-prod",
 			},
-			GitHubEvents: githubevents.Config{
-				Validation: []githubevents.ValidationConfig{
+			GitHubEvents: config.GitHubEvents{
+				Validation: []config.Validation{
 					{
 						Org:          "gravitational",
 						Repo:         "teleport",

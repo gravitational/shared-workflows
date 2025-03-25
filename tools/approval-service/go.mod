@@ -8,6 +8,7 @@ require (
 )
 
 require (
+	github.com/alecthomas/kong v1.9.0 // indirect
 	github.com/beevik/etree v1.3.0 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/coreos/go-semver v0.3.1 // indirect

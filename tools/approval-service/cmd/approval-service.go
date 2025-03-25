@@ -2,37 +2,20 @@ package main
 
 import (
 	"context"
+	"io"
 	"log"
-	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 
+	"github.com/alecthomas/kong"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/approvalservice"
-	"github.com/gravitational/shared-workflows/tools/approval-service/internal/approvalservice/githubevents"
+	"github.com/gravitational/shared-workflows/tools/approval-service/internal/approvalservice/config"
+	"github.com/stretchr/testify/assert/yaml"
 )
 
-var logger = slog.Default()
-
-var cfg = approvalservice.Config{
-	GitHubEvents: githubevents.Config{
-		Address: "127.0.0.1:8080",
-		Validation: []githubevents.ValidationConfig{
-			{
-				Org:          "gravitational",
-				Repo:         "teleport",
-				Environments: []string{"build/prod"},
-			},
-		},
-	},
-	Teleport: approvalservice.TeleportConfig{
-		ProxyAddrs: []string{
-			"localhost:3080",
-		},
-		IdentityFile:  os.Getenv("TELEPORT_IDENTITY_FILE"),
-		User:          "bot-approval-service",
-		RoleToRequest: "gha-build-prod",
-	},
+type CLI struct {
+	Config string `type:"path"`
 }
 
 // Process:
@@ -52,6 +35,18 @@ var cfg = approvalservice.Config{
 // * Move approval processor, event, and event source to different packages
 
 func main() {
+	var cli CLI
+	kctx := kong.Parse(&cli)
+	err := kctx.Run()
+	kctx.FatalIfErrorf(err)
+}
+
+func (cli *CLI) Run() error {
+	cfg, err := parseConfig(cli.Config)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	svc, err := approvalservice.NewApprovalService(cfg)
 	if err != nil {
 		log.Fatal(err)
@@ -80,4 +75,29 @@ func main() {
 	case <-ctx.Done():
 		log.Println("Gracefully shutting down...")
 	}
+
+	return nil
+}
+
+func parseConfig(path string) (cfg config.Root, err error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return cfg, err
+	}
+	defer func() {
+		cerr := f.Close()
+		if err == nil {
+			err = cerr
+		}
+	}()
+
+	data, err := io.ReadAll(f)
+	if err != nil {
+		return cfg, err
+	}
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return cfg, err
+	}
+
+	return cfg, nil
 }

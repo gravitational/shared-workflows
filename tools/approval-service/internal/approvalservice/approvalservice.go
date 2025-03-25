@@ -10,6 +10,7 @@ import (
 
 	"github.com/gravitational/shared-workflows/libs/github"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/approvalservice/accessrequest"
+	"github.com/gravitational/shared-workflows/tools/approval-service/internal/approvalservice/config"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/approvalservice/githubevents"
 	teleportClient "github.com/gravitational/teleport/api/client"
 
@@ -74,7 +75,7 @@ var defaultOpts = []Opt{
 
 // NewApprovalService initializes a new approval service from config.
 // An error is returned if the service cannot be initialized e.g. if the Teleport client cannot connect.
-func NewApprovalService(cfg Config, opts ...Opt) (*ApprovalService, error) {
+func NewApprovalService(cfg config.Root, opts ...Opt) (*ApprovalService, error) {
 	a, err := newWithOpts(opts...)
 	if err != nil {
 		return nil, err
@@ -159,7 +160,7 @@ func (s *ApprovalService) Run(ctx context.Context) error {
 	return nil
 }
 
-func newTeleportClientFromConfig(ctx context.Context, cfg TeleportConfig) (*teleportClient.Client, error) {
+func newTeleportClientFromConfig(ctx context.Context, cfg config.Teleport) (*teleportClient.Client, error) {
 	slog.Default().Info("Initializing Teleport client")
 	client, err := teleportClient.New(ctx, teleportClient.Config{
 		Addrs: cfg.ProxyAddrs,
@@ -174,7 +175,7 @@ func newTeleportClientFromConfig(ctx context.Context, cfg TeleportConfig) (*tele
 	return client, nil
 }
 
-func newGitHubClientFromConfig(cfg GitHubAppConfig) (client *github.Client, err error) {
+func newGitHubClientFromConfig(cfg config.GitHubApp) (client *github.Client, err error) {
 	f, err := os.Open(cfg.PrivateKeyPath)
 	if err != nil {
 		return nil, fmt.Errorf("opening private key: %w", err)

@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gravitational/shared-workflows/libs/github"
+	"github.com/gravitational/shared-workflows/tools/approval-service/internal/approvalservice/config"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/approvalservice/githubevents"
 	teleportClient "github.com/gravitational/teleport/api/client"
 	"github.com/gravitational/teleport/api/types"
@@ -28,7 +29,7 @@ type processor struct {
 	// If this is not the case, it will need to be protected by a mutex.
 	envNameToID map[string]int64
 	// validation is used to populate envNameToID during setup.
-	validation []githubevents.ValidationConfig
+	validation []config.Validation
 }
 
 // Small interfaces around the Teleport and GitHub clients to keep implementation details separate.
@@ -43,7 +44,7 @@ type ghClient interface {
 var _ teleClient = &teleportClient.Client{}
 var _ ghClient = &github.Client{}
 
-func newProcessor(cfg Config, ghClient ghClient, teleClient teleClient) *processor {
+func newProcessor(cfg config.Root, ghClient ghClient, teleClient teleClient) *processor {
 	return &processor{
 		TeleportUser: cfg.Teleport.User,
 		TeleportRole: cfg.Teleport.RoleToRequest,

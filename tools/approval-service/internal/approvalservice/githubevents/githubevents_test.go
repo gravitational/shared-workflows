@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gravitational/shared-workflows/tools/approval-service/internal/approvalservice/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -17,7 +18,7 @@ func TestGitHubEvents(t *testing.T) {
 	t.Run("Webhook", func(t *testing.T) {
 		// Testing webhook by sending POST requests to a fake server
 		webhook := NewSource(
-			Config{
+			config.GitHubEvents{
 				Address: "localhost:0",
 			},
 			&fakeProcessor{},
