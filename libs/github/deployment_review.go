@@ -11,8 +11,8 @@ import (
 type PendingDeploymentApprovalState string
 
 const (
-	PendingDeploymentApprovalState_APPROVED PendingDeploymentApprovalState = "approved"
-	PendingDeploymentApprovalState_REJECTED PendingDeploymentApprovalState = "rejected"
+	PendingDeploymentApprovalStateApproved PendingDeploymentApprovalState = "approved"
+	PendingDeploymentApprovalStateRejected PendingDeploymentApprovalState = "rejected"
 )
 
 type Deployment struct {

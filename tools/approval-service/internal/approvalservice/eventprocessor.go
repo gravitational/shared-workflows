@@ -137,7 +137,6 @@ func (p *processor) HandleReview(ctx context.Context, req types.AccessRequest) e
 		return fmt.Errorf("missing environment in access request %s", req.GetName())
 	}
 
-	fmt.Printf("is map: %+v", p.envNameToID)
 	envID, ok := p.envNameToID[envEntry(orgLabel, repoLabel, env)]
 	if !ok {
 		return fmt.Errorf("encountered unkown environment %q, this indicates a problem during setup", envEntry(orgLabel, repoLabel, env))
@@ -148,9 +147,12 @@ func (p *processor) HandleReview(ctx context.Context, req types.AccessRequest) e
 		return fmt.Errorf("parsing workflow run ID: %w", err)
 	}
 
-	state := github.PendingDeploymentApprovalState_APPROVED
-	if req.GetState() == types.RequestState_DENIED {
-		state = github.PendingDeploymentApprovalState_REJECTED
+	var state github.PendingDeploymentApprovalState
+	switch req.GetState() {
+	case types.RequestState_APPROVED:
+		state = github.PendingDeploymentApprovalStateApproved
+	default:
+		state = github.PendingDeploymentApprovalStateRejected
 	}
 
 	p.githubClient.UpdatePendingDeployment(ctx, github.PendingDeploymentInfo{
@@ -159,7 +161,7 @@ func (p *processor) HandleReview(ctx context.Context, req types.AccessRequest) e
 		RunID:   int64(runID),
 		State:   state,
 		EnvIDs:  []int64{envID},
-		Comment: "Approved by pipeline approval service",
+		Comment: "Approved by pipeline approval service - " + req.GetName(),
 	})
 	return nil
 }

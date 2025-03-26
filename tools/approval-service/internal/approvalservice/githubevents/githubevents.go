@@ -110,11 +110,13 @@ func (ghes *Source) Setup() error {
 			return fmt.Errorf("unknown event type: %T", event)
 		}
 	})
-	mux.Handle("/webhook", webhook.NewHandler(
-		eventProcessor,
-		webhook.WithSecretToken(ghes.secretToken),
-		webhook.WithLogger(ghes.log),
-	))
+
+	handler, err := webhook.NewHandler(eventProcessor, webhook.WithSecretToken(ghes.secretToken), webhook.WithLogger(ghes.log))
+	if err != nil {
+		return fmt.Errorf("error creating webhook handler: %w", err)
+	}
+
+	mux.Handle("/webhook", handler)
 
 	ln, err := net.Listen("tcp", ghes.addr)
 	if err != nil {

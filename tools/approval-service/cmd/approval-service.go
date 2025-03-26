@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log"
 	"os"
@@ -11,11 +12,11 @@ import (
 	"github.com/alecthomas/kong"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/approvalservice"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/approvalservice/config"
-	"github.com/stretchr/testify/assert/yaml"
+	"gopkg.in/yaml.v2"
 )
 
 type CLI struct {
-	Config string `type:"path"`
+	ConfigFilePath string `name:"config" short:"c" type:"existingfile" env:"PAS_CONFIG_FILE" default:"/etc/approval-service/config.yaml" help:"Path to the configuration file."`
 }
 
 // Process:
@@ -42,7 +43,7 @@ func main() {
 }
 
 func (cli *CLI) Run() error {
-	cfg, err := parseConfig(cli.Config)
+	cfg, err := parseConfig(cli.ConfigFilePath)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -52,30 +53,18 @@ func (cli *CLI) Run() error {
 		log.Fatal(err)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Kill, os.Interrupt, syscall.SIGTERM)
+
 	errc := make(chan error)
-
 	go func() {
+		defer close(errc)
+		defer cancel()
 		errc <- svc.Run(ctx)
-		close(errc)
 	}()
 
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
-
-	go func() {
-		<-sigs
-		log.Println("Caught signal, shutting down...")
-		cancel()
-	}()
-
-	select {
-	case err := <-errc:
+	if err := <-errc; err != nil && !errors.Is(err, context.Canceled) {
 		log.Fatal(err)
-	case <-ctx.Done():
-		log.Println("Gracefully shutting down...")
 	}
-
 	return nil
 }
 

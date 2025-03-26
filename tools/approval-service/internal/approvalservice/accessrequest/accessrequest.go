@@ -40,7 +40,7 @@ func (p *Plugin) Run(ctx context.Context) error {
 	watch, err := p.teleportClient.NewWatcher(ctx, types.Watch{
 		Kinds: []types.WatchKind{
 			// AccessRequest is the resource we are interested in.
-			types.WatchKind{Kind: types.KindAccessRequest},
+			{Kind: types.KindAccessRequest},
 		},
 	})
 
@@ -49,7 +49,7 @@ func (p *Plugin) Run(ctx context.Context) error {
 	}
 	defer watch.Close()
 
-	fmt.Println("Starting the watcher job")
+	p.log.Info("Starting the watcher job")
 
 	for {
 		select {
@@ -61,7 +61,7 @@ func (p *Plugin) Run(ctx context.Context) error {
 			if err := watch.Error(); err != nil {
 				return fmt.Errorf("watcher error: %w", err)
 			}
-			fmt.Println("The watcher job is finished")
+			p.log.Info("The watcher job is finished")
 			return nil
 		}
 	}
@@ -79,7 +79,7 @@ func (p *Plugin) handleEvent(ctx context.Context, event types.Event) error {
 
 	r, ok := event.Resource.(types.AccessRequest)
 	if !ok {
-		p.log.Warn("Unknown event received, skipping.\n", "kind", event.Resource.GetKind(), "type", fmt.Sprintf("%T", event.Resource))
+		p.log.Warn("Unknown event received, skipping.", "kind", event.Resource.GetKind(), "type", fmt.Sprintf("%T", event.Resource))
 		return nil
 	}
 
@@ -90,6 +90,8 @@ func (p *Plugin) handleEvent(ctx context.Context, event types.Event) error {
 		return p.reviewHandler.HandleReview(ctx, r)
 	case types.RequestState_DENIED:
 		return p.reviewHandler.HandleReview(ctx, r)
+	default:
+		p.log.Warn("Unknown access request state, skipping", "access_request_name", r.GetName(), "state", r.GetState())
 	}
 
 	return nil

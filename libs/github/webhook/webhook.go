@@ -1,6 +1,7 @@
 package webhook
 
 import (
+	"fmt"
 	"log/slog"
 	"net/http"
 
@@ -30,9 +31,10 @@ type EventHandlerFunc func(event interface{}) error
 
 // Handler is an implementation of [http.Handler] that handles GitHub webhook events.
 type Handler struct {
-	eventHandler EventHandlerFunc
-	secretToken  []byte
-	log          *slog.Logger
+	eventHandler        EventHandlerFunc
+	secretTokenDisabled bool
+	secretToken         []byte
+	log                 *slog.Logger
 }
 
 var _ http.Handler = &Handler{}
@@ -47,6 +49,16 @@ type Opt func(*Handler) error
 func WithSecretToken(secretToken string) Opt {
 	return func(p *Handler) error {
 		p.secretToken = []byte(secretToken)
+		return nil
+	}
+}
+
+// DisableSecretToken disables the secret token for the webhook.
+// The webhook will not verify the signature of the request.
+// This is useful for testing or when the webhook is not configured with a secret.
+func DisableSecretToken() Opt {
+	return func(p *Handler) error {
+		p.secretTokenDisabled = true
 		return nil
 	}
 }
@@ -73,18 +85,19 @@ var defaultOpts = []Opt{
 //		webhook.WithLogger(logger),
 //		... // Other options
 //	))
-func NewHandler(eventHandler EventHandlerFunc, opts ...Opt) *Handler {
+func NewHandler(eventHandler EventHandlerFunc, opts ...Opt) (*Handler, error) {
 	h := Handler{
 		eventHandler: eventHandler,
 	}
-	for _, opt := range defaultOpts {
+	for _, opt := range append(defaultOpts, opts...) {
 		opt(&h)
 	}
 
-	for _, opt := range opts {
-		opt(&h)
+	if !h.secretTokenDisabled && len(h.secretToken) == 0 {
+		return nil, fmt.Errorf("secret token is required")
 	}
-	return &h
+
+	return &h, nil
 }
 
 // Headers is a list of special headers that are sent with a webhook request.

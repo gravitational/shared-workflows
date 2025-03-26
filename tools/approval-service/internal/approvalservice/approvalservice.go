@@ -2,6 +2,7 @@ package approvalservice
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -128,19 +129,14 @@ func NewApprovalService(cfg config.Root, opts ...Opt) (*ApprovalService, error) 
 }
 
 func newWithOpts(opts ...Opt) (*ApprovalService, error) {
-	a := &ApprovalService{}
-	for _, opt := range defaultOpts {
-		if err := opt(a); err != nil {
-			return nil, fmt.Errorf("error applying default option: %w", err)
-		}
-	}
-
-	for _, opt := range opts {
-		if err := opt(a); err != nil {
+	s := &ApprovalService{}
+	for _, opt := range append(defaultOpts, opts...) {
+		if err := opt(s); err != nil {
 			return nil, fmt.Errorf("error applying option: %w", err)
 		}
 	}
-	return a, nil
+
+	return s, nil
 }
 
 // Run starts the approval service.
@@ -181,10 +177,7 @@ func newGitHubClientFromConfig(cfg config.GitHubApp) (client *github.Client, err
 		return nil, fmt.Errorf("opening private key: %w", err)
 	}
 	defer func() {
-		closeErr := f.Close()
-		if closeErr != nil && err == nil { // Only propagate error closing if NO other error occurred
-			err = fmt.Errorf("closing private key: %w", closeErr)
-		}
+		err = errors.Join(err, f.Close())
 	}()
 	pKey, err := io.ReadAll(f)
 	if err != nil {
