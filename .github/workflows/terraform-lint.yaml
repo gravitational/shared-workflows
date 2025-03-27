@@ -2,6 +2,10 @@ name: Lint (Terraform)
 
 on:
   workflow_call:
+    inputs:
+      tflint_config_path:
+        required: false
+        type: string
 
 # TODO: Add job for `terraform validate`
 jobs:
@@ -38,6 +42,10 @@ jobs:
           path: ~/.tflint.d/plugins
           key: tflint-${{ hashFiles('.tflint.hcl') }}
 
+      - name: Set config path
+        if: inputs.tflint_config_path != ''
+        run: echo "TFLINT_CONFIG_FILE=${{ inputs.tflint_config_path }}" >> $GITHUB_ENV
+
       - name: Setup TFLint
         uses: terraform-linters/setup-tflint@19a52fbac37dacb22a09518e4ef6ee234f2d4987 # v4.0.0
 
@@ -48,4 +56,4 @@ jobs:
         run: tflint --init
 
       - name: Run TFLint
-        run: tflint -f compact
+        run: tflint -f compact --recursive
