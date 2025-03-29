@@ -27,6 +27,8 @@ import (
 	"github.com/gravitational/shared-workflows/libs/github"
 )
 
+var errGithubOutputNotAvailable = errors.New("GITHUB_OUTPUT is not available")
+
 func postPreviewURL(ctx context.Context, commentBody string) error {
 	const prRefNameSuffix = "/merge"
 	refName := os.Getenv("GITHUB_REF_NAME")
@@ -68,4 +70,25 @@ func postPreviewURL(ctx context.Context, commentBody string) error {
 	}
 
 	return gh.UpdateComment(ctx, currentPR, comment.GetID(), commentBody)
+}
+
+func setGithubOutputs(kv map[string]string) error {
+	githubOutput := os.Getenv(github.OutputEnv)
+	if githubOutput == "" {
+		return errGithubOutputNotAvailable
+	}
+
+	file, err := os.OpenFile(githubOutput, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return fmt.Errorf("failed to open file %s: %w", githubOutput, err)
+	}
+	defer file.Close()
+
+	for key, value := range kv {
+		if _, err := fmt.Fprintf(file, "%s=%s\n", key, value); err != nil {
+			return fmt.Errorf("failed to write to file %s: %w", githubOutput, err)
+		}
+	}
+
+	return nil
 }
