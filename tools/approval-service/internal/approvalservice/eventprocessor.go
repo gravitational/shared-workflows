@@ -37,8 +37,8 @@ type teleClient interface {
 	CreateAccessRequestV2(ctx context.Context, req types.AccessRequest) (types.AccessRequest, error)
 }
 type ghClient interface {
-	UpdatePendingDeployment(ctx context.Context, info github.PendingDeploymentInfo) ([]github.Deployment, error)
-	GetEnvironment(ctx context.Context, info github.GetEnvironmentInfo) (github.Environment, error)
+	UpdatePendingDeployment(ctx context.Context, org, repo string, runID int64, state github.PendingDeploymentApprovalState, opts *github.PendingDeploymentOpts) ([]github.Deployment, error)
+	GetEnvironment(ctx context.Context, org, repo, environment string) (github.Environment, error)
 }
 
 var _ teleClient = &teleportClient.Client{}
@@ -57,18 +57,14 @@ func newProcessor(cfg config.Root, ghClient ghClient, teleClient teleClient) *pr
 	}
 }
 
-func (p *processor) Setup() error {
+func (p *processor) Setup(ctx context.Context) error {
 	if len(p.validation) == 0 {
 		return fmt.Errorf("no environments configured")
 	}
 	// Get environment IDs for each environment we support
 	for _, v := range p.validation {
 		for _, env := range v.Environments {
-			env, err := p.githubClient.GetEnvironment(context.TODO(), github.GetEnvironmentInfo{
-				Org:         v.Org,
-				Repo:        v.Repo,
-				Environment: env,
-			})
+			env, err := p.githubClient.GetEnvironment(ctx, v.Org, v.Repo, env)
 			if err != nil {
 				return fmt.Errorf("getting environment %q: %w", env, err)
 			}
@@ -155,14 +151,12 @@ func (p *processor) HandleReview(ctx context.Context, req types.AccessRequest) e
 		state = github.PendingDeploymentApprovalStateRejected
 	}
 
-	p.githubClient.UpdatePendingDeployment(ctx, github.PendingDeploymentInfo{
-		Org:     orgLabel,
-		Repo:    repoLabel,
-		RunID:   int64(runID),
-		State:   state,
-		EnvIDs:  []int64{envID},
-		Comment: "Approved by pipeline approval service - " + req.GetName(),
-	})
+	p.githubClient.UpdatePendingDeployment(ctx, orgLabel, repoLabel, int64(runID), state,
+		&github.PendingDeploymentOpts{
+			EnvIDs:  []int64{envID},
+			Comment: fmt.Sprintf("Access by pipeline approval service. Access Request ID: %s", req.GetName()),
+		},
+	)
 	return nil
 }
 

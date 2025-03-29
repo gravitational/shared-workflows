@@ -15,7 +15,9 @@ import (
 func TestEventProcessor(t *testing.T) {
 	t.Run("Single event flow", func(t *testing.T) {
 		p := newTestProcessor(t)
-		require.NoError(t, p.Setup())
+		ctx, cancel := context.WithCancel(context.Background())
+		t.Cleanup(cancel)
+		require.NoError(t, p.Setup(ctx))
 
 		p.teleportClient = &fakeTeleportClient{
 			// Creating an access request will callback to the processor with an approved state
@@ -23,7 +25,7 @@ func TestEventProcessor(t *testing.T) {
 				if err := req.SetState(types.RequestState_APPROVED); err != nil {
 					return req, err
 				}
-				err := p.HandleReview(context.TODO(), req)
+				err := p.HandleReview(ctx, req)
 				if err != nil {
 					return req, err
 				}
@@ -41,12 +43,11 @@ func TestEventProcessor(t *testing.T) {
 		}
 
 		p.githubClient = &fakeGitHubClient{
-			updatePendingDeploymentFunc: func(ctx context.Context, info github.PendingDeploymentInfo) ([]github.Deployment, error) {
-				assert.Equal(t, event.WorkflowID, info.RunID)
-				assert.Equal(t, event.Organization, info.Org)
-				assert.Equal(t, event.Repository, info.Repo)
-				assert.Equal(t, github.PendingDeploymentApprovalStateApproved, info.State)
-				assert.Equal(t, int64(54321), info.EnvIDs[0])
+			updatePendingDeploymentFunc: func(ctx context.Context, org, repo string, runID int64, state github.PendingDeploymentApprovalState, opts *github.PendingDeploymentOpts) ([]github.Deployment, error) {
+				assert.Equal(t, event.WorkflowID, runID)
+				assert.Equal(t, event.Organization, org)
+				assert.Equal(t, event.Repository, repo)
+				assert.Equal(t, github.PendingDeploymentApprovalStateApproved, state)
 				return nil, nil
 			},
 		}
@@ -74,12 +75,12 @@ func newTestProcessor(t *testing.T) *processor {
 			},
 		},
 		&fakeGitHubClient{
-			updatePendingDeploymentFunc: func(ctx context.Context, info github.PendingDeploymentInfo) ([]github.Deployment, error) {
+			updatePendingDeploymentFunc: func(ctx context.Context, org, repo string, runID int64, state github.PendingDeploymentApprovalState, opts *github.PendingDeploymentOpts) ([]github.Deployment, error) {
 				t.Fatalf("updatePendingDeploymentFunc needs an implementation")
 				return nil, nil
 			},
-			getEnvironmentFunc: func(ctx context.Context, info github.GetEnvironmentInfo) (github.Environment, error) {
-				if info.Environment == "build/prod" {
+			getEnvironmentFunc: func(ctx context.Context, org, repo, environment string) (github.Environment, error) {
+				if org == "gravitational" && repo == "teleport" && environment == "build/prod" {
 					return github.Environment{
 						ID:   54321,
 						Name: "build/prod",
@@ -87,7 +88,7 @@ func newTestProcessor(t *testing.T) *processor {
 						Repo: "teleport",
 					}, nil
 				}
-				t.Fatalf("got unexpected environment %q", info.Environment)
+				t.Fatalf("got unexpected environment %q", environment)
 				return github.Environment{}, nil
 			},
 		},
@@ -109,14 +110,14 @@ func (f *fakeTeleportClient) CreateAccessRequestV2(ctx context.Context, req type
 }
 
 type fakeGitHubClient struct {
-	updatePendingDeploymentFunc func(ctx context.Context, info github.PendingDeploymentInfo) ([]github.Deployment, error)
-	getEnvironmentFunc          func(ctx context.Context, info github.GetEnvironmentInfo) (github.Environment, error)
+	updatePendingDeploymentFunc func(ctx context.Context, org, repo string, runID int64, state github.PendingDeploymentApprovalState, opts *github.PendingDeploymentOpts) ([]github.Deployment, error)
+	getEnvironmentFunc          func(ctx context.Context, org, repo, environment string) (github.Environment, error)
 }
 
-func (f *fakeGitHubClient) UpdatePendingDeployment(ctx context.Context, info github.PendingDeploymentInfo) ([]github.Deployment, error) {
-	return f.updatePendingDeploymentFunc(ctx, info)
+func (f *fakeGitHubClient) UpdatePendingDeployment(ctx context.Context, org, repo string, runID int64, state github.PendingDeploymentApprovalState, opts *github.PendingDeploymentOpts) ([]github.Deployment, error) {
+	return f.updatePendingDeploymentFunc(ctx, org, repo, runID, state, opts)
 }
 
-func (f *fakeGitHubClient) GetEnvironment(ctx context.Context, info github.GetEnvironmentInfo) (github.Environment, error) {
-	return f.getEnvironmentFunc(ctx, info)
+func (f *fakeGitHubClient) GetEnvironment(ctx context.Context, org, repo, environment string) (github.Environment, error) {
+	return f.getEnvironmentFunc(ctx, org, repo, environment)
 }

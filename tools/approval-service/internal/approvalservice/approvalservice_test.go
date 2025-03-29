@@ -20,6 +20,7 @@ func TestApprovalService(t *testing.T) {
 	t.Cleanup(cancel)
 
 	eg, ctx := errgroup.WithContext(ctx)
+	require.NoError(t, testApprovalService.Setup(ctx))
 	eg.Go(func() error {
 		return testApprovalService.Run(ctx)
 	})
@@ -89,7 +90,7 @@ func (f *fakeGitHubEventSource) emitEvents(events []githubevents.DeploymentRevie
 	}
 }
 
-func (f *fakeGitHubEventSource) Setup() error {
+func (f *fakeGitHubEventSource) Setup(ctx context.Context) error {
 	return nil
 }
 
@@ -112,7 +113,7 @@ type fakeProcessor struct {
 
 var _ EventProcessor = &fakeProcessor{}
 
-func (f *fakeProcessor) Setup() error {
+func (f *fakeProcessor) Setup(ctx context.Context) error {
 	return nil
 }
 

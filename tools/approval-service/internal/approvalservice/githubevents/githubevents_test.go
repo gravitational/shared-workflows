@@ -4,6 +4,7 @@ import (
 	"context"
 	"io/fs"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -26,7 +27,7 @@ func TestGitHubEvents(t *testing.T) {
 
 		ctx, cancel := context.WithCancel(context.Background())
 		t.Cleanup(cancel)
-		require.NoError(t, webhook.Setup())
+		require.NoError(t, webhook.Setup(ctx))
 		errc := make(chan error)
 		go func() {
 			errc <- webhook.Run(ctx)
@@ -46,7 +47,9 @@ func TestGitHubEvents(t *testing.T) {
 			require.NoError(t, err)
 			defer payloadFile.Close()
 
-			req, err := http.NewRequest("POST", "http://"+webhook.getAddr()+"/webhook", payloadFile)
+			testURL, err := url.JoinPath("http://", webhook.getAddr(), "/webhook")
+			require.NoError(t, err)
+			req, err := http.NewRequest("POST", testURL, payloadFile)
 			assert.NoError(t, err)
 			req.Header.Set("Content-Type", "application/json")
 			req.Header.Set("X-GitHub-Event", "deployment_review")

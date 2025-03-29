@@ -164,6 +164,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+// LogValue satisfies the [slog.LogValuer] interface.
+// It presents a structured view of the headers for logging.
 func (h *Headers) LogValue() slog.Value {
 	return slog.GroupValue(
 		slog.String("github_hook_id", h.GithubHookID),

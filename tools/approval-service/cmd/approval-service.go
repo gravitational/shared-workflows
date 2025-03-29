@@ -55,6 +55,10 @@ func (cli *CLI) Run() error {
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Kill, os.Interrupt, syscall.SIGTERM)
 
+	if err := svc.Setup(ctx); err != nil {
+		log.Fatal(err)
+	}
+
 	errc := make(chan error)
 	go func() {
 		defer close(errc)

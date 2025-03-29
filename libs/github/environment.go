@@ -15,17 +15,16 @@ type Environment struct {
 	Repo string
 }
 
-func (c *Client) GetEnvironment(ctx context.Context, info GetEnvironmentInfo) (Environment, error) {
-	env := Environment{}
-	obj, _, err := c.client.Repositories.GetEnvironment(ctx, info.Org, info.Repo, info.Environment)
+func (c *Client) GetEnvironment(ctx context.Context, org, repo string, environment string) (Environment, error) {
+	obj, _, err := c.client.Repositories.GetEnvironment(ctx, org, repo, environment)
 	if err != nil {
-		return env, err
+		return Environment{}, err
 	}
 
-	env.ID = obj.GetID()
-	env.Name = obj.GetName()
-	env.Org = info.Org
-	env.Repo = info.Repo
-
-	return env, nil
+	return Environment{
+		ID:   obj.GetID(),
+		Name: obj.GetName(),
+		Org:  org,
+		Repo: repo,
+	}, nil
 }

@@ -3,7 +3,6 @@ package github
 import (
 	"context"
 	"fmt"
-	"log/slog"
 
 	"github.com/google/go-github/v69/github"
 )
@@ -28,24 +27,19 @@ type Deployment struct {
 	NodeID        string
 }
 
-type PendingDeploymentInfo struct {
-	Org     string
-	Repo    string
-	RunID   int64
+type PendingDeploymentOpts struct {
 	EnvIDs  []int64
-	State   PendingDeploymentApprovalState
 	Comment string
 }
 
-func (c *Client) UpdatePendingDeployment(ctx context.Context, info PendingDeploymentInfo) ([]Deployment, error) {
-	objs, _, err := c.client.Actions.PendingDeployments(ctx, info.Org, info.Repo, info.RunID, &github.PendingDeploymentsRequest{
-		State:          string(info.State),
-		EnvironmentIDs: info.EnvIDs,
-		Comment:        info.Comment,
+func (c *Client) UpdatePendingDeployment(ctx context.Context, org, repo string, runID int64, state PendingDeploymentApprovalState, opts *PendingDeploymentOpts) ([]Deployment, error) {
+	objs, _, err := c.client.Actions.PendingDeployments(ctx, org, repo, runID, &github.PendingDeploymentsRequest{
+		State:          string(state),
+		EnvironmentIDs: opts.EnvIDs,
+		Comment:        opts.Comment,
 	})
 
 	if err != nil {
-		slog.Default().Error("failed to update pending deployments", "pendingDeployment", info)
 		return nil, fmt.Errorf("failed to update pending deployments: %w", err)
 	}
 
@@ -66,14 +60,4 @@ func (c *Client) UpdatePendingDeployment(ctx context.Context, info PendingDeploy
 	}
 
 	return deploys, nil
-}
-
-func (i *PendingDeploymentInfo) LogValue() slog.Value {
-	return slog.GroupValue(
-		slog.String("org", i.Org),
-		slog.String("repo", i.Repo),
-		slog.Int64("run_id", i.RunID),
-		slog.String("state", string(i.State)),
-		slog.Any("env_ids", i.EnvIDs),
-	)
 }

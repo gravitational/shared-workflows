@@ -2,6 +2,7 @@ package githubevents
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -56,47 +57,43 @@ type DeploymentReviewEvent struct {
 }
 
 // Opt is a functional option for the GitHub event source.
-type Opt func(*Source)
+type SourceOpt func(*Source)
 
 // WithLogger sets the logger for the GitHub event source.
-func WithLogger(logger *slog.Logger) Opt {
+func WithLogger(logger *slog.Logger) SourceOpt {
 	return func(s *Source) {
 		s.log = logger
 	}
 }
 
-var defaultOpts = []Opt{
+var defaultOpts = []SourceOpt{
 	WithLogger(slog.Default()),
 }
 
-func NewSource(cfg config.GitHubEvents, processor DeploymentReviewEventProcessor, opt ...Opt) *Source {
-	s := &Source{
+func NewSource(cfg config.GitHubEvents, processor DeploymentReviewEventProcessor, opt ...SourceOpt) *Source {
+	ghes := &Source{
 		processor:   processor,
 		addr:        cfg.Address,
 		secretToken: cfg.Secret,
 		validation:  map[string]struct{}{},
 	}
 
-	for _, o := range defaultOpts {
-		o(s)
-	}
-
-	for _, o := range opt {
-		o(s)
+	for _, o := range append(defaultOpts, opt...) {
+		o(ghes)
 	}
 
 	for _, v := range cfg.Validation {
 		for _, env := range v.Environments {
-			s.validation[envEntry(v.Org, v.Repo, env)] = struct{}{}
+			ghes.validation[envEntry(v.Org, v.Repo, env)] = struct{}{}
 		}
 	}
 
-	return s
+	return ghes
 }
 
 // Setup GH client, webhook secret, etc.
 // https://github.com/go-playground/webhooks may help here
-func (ghes *Source) Setup() error {
+func (ghes *Source) Setup(ctx context.Context) error {
 	deployReviewChan := make(chan *github.DeploymentReviewEvent)
 	ghes.deployReviewChan = deployReviewChan
 
@@ -118,13 +115,13 @@ func (ghes *Source) Setup() error {
 
 	mux.Handle("/webhook", handler)
 
-	ln, err := net.Listen("tcp", ghes.addr)
+	listener, err := net.Listen("tcp", ghes.addr)
 	if err != nil {
 		return fmt.Errorf("error listening on address %q: %w", ghes.addr, err)
 	}
-	ghes.listener = ln
+	ghes.listener = listener
 	ghes.srv = &http.Server{
-		Addr:    ln.Addr().String(),
+		Addr:    listener.Addr().String(),
 		Handler: mux,
 	}
 
@@ -133,46 +130,47 @@ func (ghes *Source) Setup() error {
 
 // Take incoming events and respond to them
 func (ghes *Source) Run(ctx context.Context) error {
-	errc := make(chan error)
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	errC := make(chan error)
 
 	// Start the HTTP server
 	go func() {
 		ghes.log.Info("Listening for GitHub Webhooks", "address", ghes.srv.Addr)
-		errc <- ghes.srv.Serve(ghes.listener)
-		close(errc)
+		errC <- ghes.srv.Serve(ghes.listener)
+		close(errC)
 	}()
 
 	// Process incoming events
 	go func() {
-		defer close(ghes.deployReviewChan)
 		ghes.log.Info("Starting GitHub event processor")
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case deployReview := <-ghes.deployReviewChan:
-				// Process the event
-				go ghes.processDeploymentReviewEvent(deployReview)
-			}
+		for deployReview := range ghes.deployReviewChan {
+			go ghes.processDeploymentReviewEvent(deployReview)
 		}
 	}()
 
-	var err error
-	// This will block until an error occurs or the context is done
-	select {
-	case err = <-errc:
-		ghes.srv.Shutdown(context.Background()) // Ignore error - we're already handling one
-	case <-ctx.Done():
+	// Handle shutdown from context cancellation
+	shutdownErrC := make(chan error)
+	go func() {
+		<-ctx.Done()
+		close(ghes.deployReviewChan)
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		err = ghes.srv.Shutdown(ctx)
-		<-errc // flush the error channel to avoid a goroutine leak
-	}
+		shutdownErrC <- ghes.srv.Shutdown(ctx)
+		close(shutdownErrC)
+	}()
 
-	if err != nil {
-		return fmt.Errorf("error encountered while running GitHub event source: %w", err)
+	// This will block until an error occurs or the context is done
+	select {
+	case err := <-errC:
+		cancel()
+		return errors.Join(err, <-shutdownErrC)
+	case <-ctx.Done():
+		if err := <-shutdownErrC; err != nil {
+			return fmt.Errorf("error shutting down server: %w", err)
+		}
+		return ctx.Err()
 	}
-	return nil
 }
 
 // Process a deployment review event.

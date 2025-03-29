@@ -30,7 +30,7 @@ func NewPlugin(client *client.Client, handler ReviewHandler) (*Plugin, error) {
 	}, nil
 }
 
-func (p *Plugin) Setup() error {
+func (p *Plugin) Setup(ctx context.Context) error {
 	return nil
 }
 

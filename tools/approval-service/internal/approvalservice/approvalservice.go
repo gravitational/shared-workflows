@@ -32,7 +32,7 @@ type ApprovalService struct {
 
 type EventSource interface {
 	// This should do thinks like setup API clients and webhooks.
-	Setup() error
+	Setup(ctx context.Context) error
 
 	// Handle actual requests. This should not block.
 	Run(ctx context.Context) error
@@ -43,7 +43,7 @@ type EventSource interface {
 type EventProcessor interface {
 	// This should do things like setup API clients, as well as anything
 	// needed to approve/deny events.
-	Setup() error
+	Setup(ctx context.Context) error
 
 	githubevents.DeploymentReviewEventProcessor
 	accessrequest.ReviewHandler
@@ -115,16 +115,6 @@ func NewApprovalService(cfg config.Root, opts ...Opt) (*ApprovalService, error) 
 		accessPlugin,
 	}
 
-	if err := a.processor.Setup(); err != nil {
-		return nil, fmt.Errorf("setting up approval processor: %w", err)
-	}
-
-	for _, eventSource := range a.eventSources {
-		if err := eventSource.Setup(); err != nil {
-			return nil, fmt.Errorf("setting up event source: %w", err)
-		}
-	}
-
 	return a, nil
 }
 
@@ -139,10 +129,23 @@ func newWithOpts(opts ...Opt) (*ApprovalService, error) {
 	return s, nil
 }
 
+func (a *ApprovalService) Setup(ctx context.Context) error {
+	if err := a.processor.Setup(ctx); err != nil {
+		return fmt.Errorf("setting up approval processor: %w", err)
+	}
+
+	for _, eventSource := range a.eventSources {
+		if err := eventSource.Setup(ctx); err != nil {
+			return fmt.Errorf("setting up event source: %w", err)
+		}
+	}
+	return nil
+}
+
 // Run starts the approval service.
-func (s *ApprovalService) Run(ctx context.Context) error {
+func (a *ApprovalService) Run(ctx context.Context) error {
 	eg, ctx := errgroup.WithContext(ctx)
-	for _, eventSource := range s.eventSources {
+	for _, eventSource := range a.eventSources {
 		eg.Go(func() error {
 			return eventSource.Run(ctx)
 		})
