@@ -10,6 +10,10 @@ on:
         required: false
         type: string
         default: warning
+      tflint_force:
+        required: false
+        type: string
+        default: false
 
 # TODO: Add job for `terraform validate`
 jobs:
@@ -60,4 +64,4 @@ jobs:
         run: tflint --init
 
       - name: Run TFLint
-        run: tflint -f compact --recursive --minimum-failure-severity=${{ inputs.tflint_minimum_failure_severity }}
+        run: tflint -f compact --recursive --minimum-failure-severity=${{ inputs.tflint_minimum_failure_severity }} --force=${{ inputs.tflint_force }}
