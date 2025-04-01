@@ -280,6 +280,7 @@ func skipFileForSizeCheck(name string) bool {
 		strings.HasSuffix(name, ".snap") ||
 		strings.Contains(name, "webassets/") ||
 		strings.Contains(name, "vendor/") ||
+		strings.Contains(name, "integrations/operator/crdgen/testdata/") ||
 		isCRDRegex.MatchString(name)
 }
 
