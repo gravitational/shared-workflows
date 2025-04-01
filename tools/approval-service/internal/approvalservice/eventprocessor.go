@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/gravitational/shared-workflows/libs/github"
@@ -75,7 +76,7 @@ func (p *processor) Setup(ctx context.Context) error {
 	return nil
 }
 
-func (p *processor) ProcessDeploymentReviewEvent(e githubevents.DeploymentReviewEvent, valid bool) error {
+func (p *processor) ProcessDeploymentReviewEvent(ctx context.Context, e githubevents.DeploymentReviewEvent, valid bool) error {
 	if !valid {
 		// TODO: Create a rejected access request if the event is invalid (e.g. incorrect org, env, user, etc.)
 		//       This should be useful for audit purposes.
@@ -98,7 +99,11 @@ func (p *processor) ProcessDeploymentReviewEvent(e githubevents.DeploymentReview
 		"repository":      e.Repository,
 		"environment":     e.Environment,
 	})
-	created, err := p.teleportClient.CreateAccessRequestV2(context.TODO(), req)
+
+	// Using timeout of 30 sec, this might need some tuning later.
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	created, err := p.teleportClient.CreateAccessRequestV2(ctx, req)
 	if err != nil {
 		return fmt.Errorf("creating access request %q: %w", name, err)
 	}

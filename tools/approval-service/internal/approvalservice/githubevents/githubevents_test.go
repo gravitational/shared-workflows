@@ -69,6 +69,6 @@ func TestGitHubEvents(t *testing.T) {
 type fakeProcessor struct {
 }
 
-func (f *fakeProcessor) ProcessDeploymentReviewEvent(event DeploymentReviewEvent, valid bool) error {
+func (f *fakeProcessor) ProcessDeploymentReviewEvent(ctx context.Context, event DeploymentReviewEvent, valid bool) error {
 	return nil
 }

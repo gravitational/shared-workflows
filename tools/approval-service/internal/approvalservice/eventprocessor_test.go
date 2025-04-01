@@ -52,7 +52,7 @@ func TestEventProcessor(t *testing.T) {
 			},
 		}
 
-		err := p.ProcessDeploymentReviewEvent(event, true)
+		err := p.ProcessDeploymentReviewEvent(ctx, event, true)
 		require.NoError(t, err)
 	})
 }
