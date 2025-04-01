@@ -66,9 +66,53 @@ func TestGitHubEvents(t *testing.T) {
 	})
 }
 
+func BenchmarkGitHubEvents(b *testing.B) {
+	// Benchmarking the webhook handler
+	webhook := NewSource(
+		config.GitHubEvents{
+			Address: "localhost:0",
+		},
+		&fakeProcessor{},
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	require.NoError(b, webhook.Setup(ctx))
+	errc := make(chan error)
+	go func() {
+		errc <- webhook.Run(ctx)
+	}()
+
+	cl := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	payloadFile, err := os.Open("testdata/deployment_review.json")
+	require.NoError(b, err)
+	defer payloadFile.Close()
+
+	testURL, err := url.JoinPath("http://", webhook.getAddr(), "/webhook")
+	require.NoError(b, err)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		req, err := http.NewRequest("POST", testURL, payloadFile)
+		assert.NoError(b, err)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-GitHub-Event", "deployment_review")
+
+		resp, err := cl.Do(req)
+		assert.NoError(b, err)
+		resp.Body.Close()
+		assert.Equal(b, http.StatusOK, resp.StatusCode)
+	}
+	cancel()
+	require.NoError(b, <-errc)
+}
+
 type fakeProcessor struct {
 }
 
-func (f *fakeProcessor) ProcessDeploymentReviewEvent(event DeploymentReviewEvent, valid bool) error {
+func (f *fakeProcessor) ProcessDeploymentReviewEvent(ctx context.Context, event DeploymentReviewEvent, valid bool) error {
 	return nil
 }

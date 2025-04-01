@@ -101,7 +101,7 @@ func (f *fakeGitHubEventSource) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		case e := <-f.eventC:
-			go f.processor.ProcessDeploymentReviewEvent(e, true)
+			go f.processor.ProcessDeploymentReviewEvent(ctx, e, true)
 		}
 	}
 }
@@ -117,7 +117,7 @@ func (f *fakeProcessor) Setup(ctx context.Context) error {
 	return nil
 }
 
-func (f *fakeProcessor) ProcessDeploymentReviewEvent(e githubevents.DeploymentReviewEvent, valid bool) error {
+func (f *fakeProcessor) ProcessDeploymentReviewEvent(ctx context.Context, e githubevents.DeploymentReviewEvent, valid bool) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.workflowIDs[e.WorkflowID] = struct{}{}

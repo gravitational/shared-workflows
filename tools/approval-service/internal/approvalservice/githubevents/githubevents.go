@@ -34,7 +34,7 @@ type DeploymentReviewEventProcessor interface {
 	// ProcessDeploymentReviewEvent processes a deployment review event.
 	// Automated checks are done before this is called.
 	// If the automated checks fail, valid will be false.
-	ProcessDeploymentReviewEvent(event DeploymentReviewEvent, valid bool) error
+	ProcessDeploymentReviewEvent(ctx context.Context, event DeploymentReviewEvent, valid bool) error
 }
 
 // DeploymentReviewEvent is an event that is sent when a deployment review is requested.
@@ -145,7 +145,7 @@ func (ghes *Source) Run(ctx context.Context) error {
 	go func() {
 		ghes.log.Info("Starting GitHub event processor")
 		for deployReview := range ghes.deployReviewChan {
-			go ghes.processDeploymentReviewEvent(deployReview)
+			go ghes.processDeploymentReviewEvent(ctx, deployReview)
 		}
 	}()
 
@@ -175,7 +175,7 @@ func (ghes *Source) Run(ctx context.Context) error {
 
 // Process a deployment review event.
 // This is where most of the business logic will go.
-func (ghes *Source) processDeploymentReviewEvent(payload *github.DeploymentReviewEvent) error {
+func (ghes *Source) processDeploymentReviewEvent(ctx context.Context, payload *github.DeploymentReviewEvent) error {
 	// Do GitHub-specific checks. Don't approve based off ot this - just deny
 	// if one fails.
 	automatedDenial, err := ghes.performAutomatedChecks(payload)
@@ -193,7 +193,7 @@ func (ghes *Source) processDeploymentReviewEvent(payload *github.DeploymentRevie
 	slog.Default().Info("automated checks", "valid", !automatedDenial, "event", event)
 
 	// Process the event
-	return ghes.processor.ProcessDeploymentReviewEvent(event, !automatedDenial)
+	return ghes.processor.ProcessDeploymentReviewEvent(ctx, event, !automatedDenial)
 }
 
 // Performs approval checks that are GH-specific. This should only be used to deny requests,
