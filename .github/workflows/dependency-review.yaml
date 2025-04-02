@@ -75,6 +75,7 @@ jobs:
             BSD-2-Clause-FreeBSD,
             BSD-2-Clause,
             BSD-3-Clause AND BSD-3-Clause-Clear,
+            BSD-3-Clause AND LicenseRef-scancode-protobuf,
             BSD-3-Clause,
             CC-BY-3.0,
             CC-BY-4.0,
