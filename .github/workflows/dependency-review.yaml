@@ -57,8 +57,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Create summary file
+        run: echo "DEP_REVIEW_SUMMARY_FILE=${RUNNER_TEMP}/dep_review.md" >> "${GITHUB_ENV}"
+
       - name: 'Dependency Review'
         uses: actions/dependency-review-action@72eb03d02c7872a771aacd928f3123ac62ad6d3a # v4.3.3
+        env:
+          GITHUB_STEP_SUMMARY: "${{ env.DEP_REVIEW_SUMMARY_FILE }}"
         with:
           fail-on-severity: ${{ inputs.fail-on-severity }}
           # NOTE: List shouldn't end with comma
@@ -105,3 +110,21 @@ jobs:
           comment-summary-in-pr: never
           base-ref: ${{ inputs.base-ref || github.event.pull_request.base.sha || github.event.repository.default_branch }}
           head-ref: ${{ inputs.head-ref || github.event.pull_request.head.sha || github.ref }}
+
+      - name: Write the output
+        run: |
+          if [[ ! -f "${DEP_REVIEW_SUMMARY_FILE}" ]]; then
+            echo "No summary file found"
+            exit
+          fi
+
+          # Write to step summary when the size is small enough
+          # Output will be empty when the file is above than the threshold (1M), which matches GH's limit
+          DU_OUTPUT="$(du --apparent-size --bytes --threshold="$(( 1024 * 1024 ))" "${DEP_REVIEW_SUMMARY_FILE}")"
+          if [[ -z "${DU_OUTPUT}" ]]; then
+            cat "${DEP_REVIEW_SUMMARY_FILE}" >> "${GITHUB_STEP_SUMMARY}"
+          else
+            echo "::warning Dependency review output too large for GH step summary. See logs for details." | tee -a "${GITHUB_STEP_SUMMARY}"
+          done
+
+          cat "${DEP_REVIEW_SUMMARY_FILE}"
