@@ -25,7 +25,7 @@ jobs:
           list-files: shell
           filters: |
             csv:
-              - '**/*.csv'
+              - added|modified: '**/*.csv'
 
       - name: Setup Go
         uses: actions/setup-go@v5
