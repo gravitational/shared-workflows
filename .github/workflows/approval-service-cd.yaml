@@ -1,0 +1,25 @@
+---
+name: Approval service CD
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - tools/approval-service
+    tags:
+      - "tools/approval-service/v[0-9]+.[0-9]+.[0-9]+**"
+  pull_request:
+    paths:
+      - tools/approval-service/workflows/cd.yaml
+      - .github/workflows/approval-service-cd.yaml
+      - .github/workflows/reusable-cd.yaml
+
+jobs:
+  release:
+    uses: ./.github/workflows/reusable-cd.yaml
+    permissions:
+      contents: write
+      packages: write
+    with:
+      tool-directory: ./tools/approval-service
