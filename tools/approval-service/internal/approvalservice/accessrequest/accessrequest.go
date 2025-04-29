@@ -23,15 +23,37 @@ type ReviewHandler interface {
 }
 
 // NewPlugin creates a new Access Request plugin.
-func NewPlugin(client *client.Client, handler ReviewHandler) (*Plugin, error) {
-	return &Plugin{
-		teleportClient: client,
-		reviewHandler:  handler,
-	}, nil
+func NewPlugin(client *client.Client, handler ReviewHandler, opts ...Opt) (*Plugin, error) {
+	var p Plugin
+	for _, opt := range append(defaultOpts, opts...) {
+		if err := opt(&p); err != nil {
+			return nil, fmt.Errorf("applying option: %w", err)
+		}
+	}
+	p.teleportClient = client
+	p.reviewHandler = handler
+	return &p, nil
 }
 
 func (p *Plugin) Setup(ctx context.Context) error {
 	return nil
+}
+
+type Opt func(*Plugin) error
+
+// WithLogger sets the logger for the plugin.
+func WithLogger(logger *slog.Logger) Opt {
+	return func(p *Plugin) error {
+		if logger == nil {
+			return fmt.Errorf("logger cannot be nil")
+		}
+		p.log = logger
+		return nil
+	}
+}
+
+var defaultOpts = []Opt{
+	WithLogger(slog.Default()),
 }
 
 // Run starts the plugin and listens for events.
@@ -55,7 +77,7 @@ func (p *Plugin) Run(ctx context.Context) error {
 		select {
 		case e := <-watch.Events():
 			if err := p.handleEvent(ctx, e); err != nil {
-				return fmt.Errorf("handling event: %w", err)
+				p.log.Error("Error handling event", "error", err)
 			}
 		case <-watch.Done():
 			if err := watch.Error(); err != nil {

@@ -1,6 +1,9 @@
 package github
 
-import "context"
+import (
+	"context"
+	"net/url"
+)
 
 type GetEnvironmentInfo struct {
 	Org         string
@@ -16,7 +19,7 @@ type Environment struct {
 }
 
 func (c *Client) GetEnvironment(ctx context.Context, org, repo string, environment string) (Environment, error) {
-	obj, _, err := c.client.Repositories.GetEnvironment(ctx, org, repo, environment)
+	obj, _, err := c.client.Repositories.GetEnvironment(ctx, org, repo, url.PathEscape(environment))
 	if err != nil {
 		return Environment{}, err
 	}

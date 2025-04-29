@@ -7,6 +7,11 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
+	"path"
+	"slices"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/go-github/v69/github"
@@ -16,15 +21,19 @@ import (
 
 // Source is a webhook that listens for GitHub events and processes them.
 type Source struct {
-	processor   DeploymentReviewEventProcessor
-	addr        string
-	secretToken string
+	processor          DeploymentReviewEventProcessor
+	addr               string
+	secretToken        string
+	disableSecretToken bool
 
-	deployReviewChan chan *github.DeploymentReviewEvent
+	deployReviewChan chan *github.DeploymentProtectionRuleEvent
 	listener         net.Listener
 	srv              *http.Server
 
-	validation map[string]struct{}
+	// used for extra validation of event source
+	org          string
+	repo         string
+	environments []string
 
 	log *slog.Logger
 }
@@ -48,12 +57,6 @@ type DeploymentReviewEvent struct {
 	Organization string
 	Repository   string
 	WorkflowID   int64
-	// Other fields TODO. Potential fields:
-	// * Source
-	// * Commit/tag/source control identifier
-	// * "Parameters" map. In the case of GHA, this would be
-	//   any input provided to a workflow dispatch event
-	// See RFD for more details
 }
 
 // Opt is a functional option for the GitHub event source.
@@ -66,26 +69,30 @@ func WithLogger(logger *slog.Logger) SourceOpt {
 	}
 }
 
+// DisableSecretToken disables the secret token for the webhook.
+// Mainly used for unit testing and local development.
+func DisableSecretToken() SourceOpt {
+	return func(s *Source) {
+		s.disableSecretToken = true
+	}
+}
+
 var defaultOpts = []SourceOpt{
 	WithLogger(slog.Default()),
 }
 
-func NewSource(cfg config.GitHubEvents, processor DeploymentReviewEventProcessor, opt ...SourceOpt) *Source {
+func NewSource(cfg config.GitHubSource, processor DeploymentReviewEventProcessor, opt ...SourceOpt) *Source {
 	ghes := &Source{
-		processor:   processor,
-		addr:        cfg.Address,
-		secretToken: cfg.Secret,
-		validation:  map[string]struct{}{},
+		processor:    processor,
+		addr:         cfg.WebhookAddr,
+		secretToken:  cfg.Secret,
+		org:          cfg.Org,
+		repo:         cfg.Repo,
+		environments: cfg.Environments,
 	}
 
 	for _, o := range append(defaultOpts, opt...) {
 		o(ghes)
-	}
-
-	for _, v := range cfg.Validation {
-		for _, env := range v.Environments {
-			ghes.validation[envEntry(v.Org, v.Repo, env)] = struct{}{}
-		}
 	}
 
 	return ghes
@@ -94,26 +101,38 @@ func NewSource(cfg config.GitHubEvents, processor DeploymentReviewEventProcessor
 // Setup GH client, webhook secret, etc.
 // https://github.com/go-playground/webhooks may help here
 func (ghes *Source) Setup(ctx context.Context) error {
-	deployReviewChan := make(chan *github.DeploymentReviewEvent)
+	deployReviewChan := make(chan *github.DeploymentProtectionRuleEvent)
 	ghes.deployReviewChan = deployReviewChan
 
 	mux := http.NewServeMux()
 	eventProcessor := webhook.EventHandlerFunc(func(event any) error {
 		switch event := event.(type) {
-		case *github.DeploymentReviewEvent:
+		case *github.DeploymentProtectionRuleEvent:
 			deployReviewChan <- event
-			return nil
 		default:
-			return fmt.Errorf("unknown event type: %T", event)
+			ghes.log.Debug("unknown event type", "type", fmt.Sprintf("%T", event))
 		}
+		return nil
 	})
 
-	handler, err := webhook.NewHandler(eventProcessor, webhook.WithSecretToken(ghes.secretToken), webhook.WithLogger(ghes.log))
+	opts := []webhook.Opt{
+		webhook.WithSecretToken(ghes.secretToken),
+		webhook.WithLogger(ghes.log),
+	}
+	if ghes.disableSecretToken {
+		opts = append(opts, webhook.DisableSecretToken())
+	}
+	handler, err := webhook.NewHandler(eventProcessor, opts...)
 	if err != nil {
 		return fmt.Errorf("error creating webhook handler: %w", err)
 	}
 
-	mux.Handle("/webhook", handler)
+	mux.Handle("GET /", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("OK"))
+	}))
+	mux.Handle("POST /", handler)
 
 	listener, err := net.Listen("tcp", ghes.addr)
 	if err != nil {
@@ -145,7 +164,11 @@ func (ghes *Source) Run(ctx context.Context) error {
 	go func() {
 		ghes.log.Info("Starting GitHub event processor")
 		for deployReview := range ghes.deployReviewChan {
-			go ghes.processDeploymentReviewEvent(ctx, deployReview)
+			go func() {
+				if err := ghes.processDeploymentReviewEvent(ctx, deployReview); err != nil {
+					ghes.log.Error("Error processing deployment review event", "error", err)
+				}
+			}()
 		}
 	}()
 
@@ -175,7 +198,7 @@ func (ghes *Source) Run(ctx context.Context) error {
 
 // Process a deployment review event.
 // This is where most of the business logic will go.
-func (ghes *Source) processDeploymentReviewEvent(ctx context.Context, payload *github.DeploymentReviewEvent) error {
+func (ghes *Source) processDeploymentReviewEvent(ctx context.Context, payload *github.DeploymentProtectionRuleEvent) error {
 	// Do GitHub-specific checks. Don't approve based off ot this - just deny
 	// if one fails.
 	automatedDenial, err := ghes.performAutomatedChecks(payload)
@@ -183,12 +206,17 @@ func (ghes *Source) processDeploymentReviewEvent(ctx context.Context, payload *g
 		return fmt.Errorf("error performing automated checks: %w", err)
 	}
 
+	workflowID, err := extractWorkflowIDFromURL(payload.GetDeploymentCallbackURL())
+	if err != nil {
+		return fmt.Errorf("error extracting workflow ID from callback URL: %w", err)
+	}
+
 	event := DeploymentReviewEvent{
-		Requester:    payload.GetRequester().GetLogin(),
+		Requester:    payload.GetDeployment().GetCreator().GetLogin(),
 		Environment:  payload.GetEnvironment(),
 		Organization: payload.GetOrganization().GetLogin(),
 		Repository:   payload.GetRepo().GetName(),
-		WorkflowID:   payload.GetWorkflowRun().GetWorkflowID(),
+		WorkflowID:   workflowID,
 	}
 	slog.Default().Info("automated checks", "valid", !automatedDenial, "event", event)
 
@@ -198,18 +226,45 @@ func (ghes *Source) processDeploymentReviewEvent(ctx context.Context, payload *g
 
 // Performs approval checks that are GH-specific. This should only be used to deny requests,
 // never approve them.
-func (ghes *Source) performAutomatedChecks(payload *github.DeploymentReviewEvent) (deny bool, err error) {
+func (ghes *Source) performAutomatedChecks(payload *github.DeploymentProtectionRuleEvent) (deny bool, err error) {
 	org := payload.GetOrganization().GetLogin()
 	repo := payload.GetRepo().GetName()
 	env := payload.GetEnvironment()
 
-	if _, ok := ghes.validation[envEntry(org, repo, env)]; !ok {
-		return true, nil
+	if org != ghes.org {
+		return true, fmt.Errorf("organization %q does not match expected organization %q", org, ghes.org)
+	}
+	if repo != ghes.repo {
+		return true, fmt.Errorf("repository %q does not match expected repository %q", repo, ghes.repo)
+	}
+	if !slices.Contains(ghes.environments, env) {
+		return true, fmt.Errorf("environment %q does not match expected environments %q", env, ghes.environments)
 	}
 
 	// TODO: check user is part of one of valid orgs
 
 	return false, nil
+}
+
+// extractWorkflowIDFromURL extracts the workflow ID from the callback URL.
+// The URL is in the format:
+// https://api.github.com/repos/<org>/<repo>/actions/runs/<workflow_id>/deployment_protection_rule
+func extractWorkflowIDFromURL(urlToParse string) (int64, error) {
+	callbackURL, err := url.Parse(urlToParse)
+	if err != nil {
+		return 0, fmt.Errorf("error parsing callback URL: %w", err)
+	}
+	p := path.Clean(callbackURL.Path)
+	parts := strings.Split(p, "/")
+	if len(parts) != 8 {
+		return 0, fmt.Errorf("invalid callback URL: %q", urlToParse)
+	}
+
+	i, err := strconv.Atoi(parts[6])
+	if err != nil {
+		return 0, fmt.Errorf("error converting workflow ID to int: %w", err)
+	}
+	return int64(i), nil
 }
 
 func (ghes *Source) getAddr() string {
@@ -224,8 +279,4 @@ func (e DeploymentReviewEvent) LogValue() slog.Value {
 		slog.String("repository", e.Repository),
 		slog.Int64("workflow_id", e.WorkflowID),
 	)
-}
-
-func envEntry(org, repo, env string) string {
-	return fmt.Sprintf("%s/%s/%s", org, repo, env)
 }

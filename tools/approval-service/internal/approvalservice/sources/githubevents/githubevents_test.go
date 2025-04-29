@@ -19,10 +19,13 @@ func TestGitHubEvents(t *testing.T) {
 	t.Run("Webhook", func(t *testing.T) {
 		// Testing webhook by sending POST requests to a fake server
 		webhook := NewSource(
-			config.GitHubEvents{
-				Address: "localhost:0",
+			config.GitHubSource{
+				WebhookAddr: "localhost:0",
+				Org:         "gravitational",
+				Repo:        "test-workflow",
 			},
 			&fakeProcessor{},
+			DisableSecretToken(),
 		)
 
 		ctx, cancel := context.WithCancel(context.Background())
@@ -52,7 +55,7 @@ func TestGitHubEvents(t *testing.T) {
 			req, err := http.NewRequest("POST", testURL, payloadFile)
 			assert.NoError(t, err)
 			req.Header.Set("Content-Type", "application/json")
-			req.Header.Set("X-GitHub-Event", "deployment_review")
+			req.Header.Set("X-GitHub-Event", "deployment_protection_rule")
 
 			resp, err := cl.Do(req)
 			assert.NoError(t, err)
@@ -62,52 +65,15 @@ func TestGitHubEvents(t *testing.T) {
 		})
 
 		cancel()
-		require.NoError(t, <-errc)
+		require.ErrorIs(t, <-errc, context.Canceled)
 	})
 }
 
-func BenchmarkGitHubEvents(b *testing.B) {
-	// Benchmarking the webhook handler
-	webhook := NewSource(
-		config.GitHubEvents{
-			Address: "localhost:0",
-		},
-		&fakeProcessor{},
-	)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	require.NoError(b, webhook.Setup(ctx))
-	errc := make(chan error)
-	go func() {
-		errc <- webhook.Run(ctx)
-	}()
-
-	cl := &http.Client{
-		Timeout: 10 * time.Second,
-	}
-
-	payloadFile, err := os.Open("testdata/deployment_review.json")
-	require.NoError(b, err)
-	defer payloadFile.Close()
-
-	testURL, err := url.JoinPath("http://", webhook.getAddr(), "/webhook")
-	require.NoError(b, err)
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		req, err := http.NewRequest("POST", testURL, payloadFile)
-		assert.NoError(b, err)
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("X-GitHub-Event", "deployment_review")
-
-		resp, err := cl.Do(req)
-		assert.NoError(b, err)
-		resp.Body.Close()
-		assert.Equal(b, http.StatusOK, resp.StatusCode)
-	}
-	cancel()
-	require.NoError(b, <-errc)
+func TestExtractWorkflowID(t *testing.T) {
+	testURL := "https://api.github.com/repos/gravitational/test-approval-service/actions/runs/14700414133/deployment_protection_rule"
+	id, err := extractWorkflowIDFromURL(testURL)
+	require.NoError(t, err)
+	assert.Equal(t, int64(14700414133), id)
 }
 
 type fakeProcessor struct {

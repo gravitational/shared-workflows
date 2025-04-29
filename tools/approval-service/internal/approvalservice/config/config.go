@@ -2,33 +2,42 @@ package config
 
 // Root is the root configuration for the approval service.
 type Root struct {
-	// GitHubWebhook is the configuration for the GitHub webhook.
-	GitHubEvents GitHubEvents `yaml:"github_events,omitempty"`
+	// ApprovalService is the configuration for the Pipeline Approval Service
+	ApprovalService ApprovalService `yaml:"approval_service,omitempty"`
 
+	// GitHubApp is the configuration for the GitHub App.
+	EventSources EventSources `yaml:"event_sources,omitempty"`
+}
+
+// ApprovalService contains configuration related to the approval service.
+type ApprovalService struct {
 	// Teleport is the configuration for the Teleport client.
 	Teleport Teleport `yaml:"teleport,omitempty"`
-
-	// GitHubApp is the configuration for client authentication as a GitHub App.
-	GitHubApp GitHubApp `yaml:"github_app,omitempty"`
 }
 
-type GitHubEvents struct {
-	// Address is the address to listen for GitHub webhooks.
-	Address string `yaml:"address,omitempty"`
-	// Secret is the secret used to authenticate the webhook.
-	Secret string `yaml:"secret,omitempty"`
-	// Validation is a list of validation configurations that the event must match.
-	Validation []Validation `yaml:"validation,omitempty"`
+type EventSources struct {
+	// GitHub is the configuration for the GitHub App and webhook.
+	// This is used to listen for events from GitHub and to respond to approvals.
+	GitHub []GitHubSource `yaml:"github,omitempty"`
 }
 
-// Validation is the configuration for validation checks.
-type Validation struct {
+// GitHubEvents represents the per-repo configuration for webhook events and API authentication.
+type GitHubSource struct {
+	// GitHubWebhookAddr should be the full URL to listen to webhooks events from.
+	// For example: 127.0.0.1:8080/webhook
+	WebhookAddr string `yaml:"webhook_addr,omitempty"`
 	// Org is the organization that the event must be from.
 	Org string `yaml:"org,omitempty"`
 	// Repo is the repository that the event must be from.
 	Repo string `yaml:"repo,omitempty"`
 	// Environments is a list of environments that the event must be for.
 	Environments []string `yaml:"environments,omitempty"`
+
+	// The following are credentials for authentication.
+	Secret         string `yaml:"secret,omitempty"`
+	AppID          int64  `yaml:"app_id"`
+	InstallationID int64  `yaml:"installation_id"`
+	PrivateKeyPath string `yaml:"private_key_path"`
 }
 
 type Teleport struct {
@@ -36,10 +45,4 @@ type Teleport struct {
 	IdentityFile  string   `yaml:"identity_file"`
 	User          string   `yaml:"user"`
 	RoleToRequest string   `yaml:"role_to_request"`
-}
-
-type GitHubApp struct {
-	AppID          int64  `yaml:"app_id"`
-	InstallationID int64  `yaml:"installation_id"`
-	PrivateKeyPath string `yaml:"private_key_path"`
 }

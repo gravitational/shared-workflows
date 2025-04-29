@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"fmt"
+	"io"
 
 	"github.com/google/go-github/v69/github"
 )
@@ -14,50 +15,22 @@ const (
 	PendingDeploymentApprovalStateRejected PendingDeploymentApprovalState = "rejected"
 )
 
-type Deployment struct {
-	URL           string
-	ID            int64
-	SHA           string
-	Ref           string
-	Task          string
-	Environment   string
-	Description   string
-	StatusesURL   string
-	RepositoryURL string
-	NodeID        string
-}
-
-type PendingDeploymentOpts struct {
-	EnvIDs  []int64
-	Comment string
-}
-
-func (c *Client) UpdatePendingDeployment(ctx context.Context, org, repo string, runID int64, state PendingDeploymentApprovalState, opts *PendingDeploymentOpts) ([]Deployment, error) {
-	objs, _, err := c.client.Actions.PendingDeployments(ctx, org, repo, runID, &github.PendingDeploymentsRequest{
-		State:          string(state),
-		EnvironmentIDs: opts.EnvIDs,
-		Comment:        opts.Comment,
+// ReviewDeploymentProtectionRule reviews a deployment protection rule.
+// This is used by GitHub Apps that are configured for environment protection rules.
+func (c *Client) ReviewDeploymentProtectionRule(ctx context.Context, org, repo string, runID int64, state PendingDeploymentApprovalState, envName, comment string) error {
+	resp, err := c.client.Actions.ReviewCustomDeploymentProtectionRule(ctx, org, repo, runID, &github.ReviewCustomDeploymentProtectionRuleRequest{
+		State:           string(state),
+		EnvironmentName: envName,
+		Comment:         comment,
 	})
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to update pending deployments: %w", err)
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("reading response body: %w", err)
+		}
+		return fmt.Errorf("unexpected response %q: %w", body, err)
 	}
 
-	var deploys []Deployment
-	for _, obj := range objs {
-		deploys = append(deploys, Deployment{
-			URL:           obj.GetURL(),
-			ID:            obj.GetID(),
-			SHA:           obj.GetSHA(),
-			Ref:           obj.GetRef(),
-			Task:          obj.GetTask(),
-			Environment:   obj.GetEnvironment(),
-			Description:   obj.GetDescription(),
-			StatusesURL:   obj.GetStatusesURL(),
-			RepositoryURL: obj.GetRepositoryURL(),
-			NodeID:        obj.GetNodeID(),
-		})
-	}
-
-	return deploys, nil
+	return nil
 }
