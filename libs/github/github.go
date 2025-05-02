@@ -72,3 +72,19 @@ func errorFromBody(body io.ReadCloser) error {
 
 	return fmt.Errorf("unexpected response %q", data)
 }
+
+// NewForApp returns a new GitHub Client with authentication for a GitHub App.
+func NewForApp(appID int64, installationID int64, privateKey []byte) (*Client, error) {
+	itr, err := ghinstallation.New(http.DefaultTransport, appID, installationID, privateKey)
+	if err != nil {
+		return nil, err
+	}
+	httpClient := &http.Client{Transport: itr}
+	httpClient.Timeout = ClientTimeout
+
+	cl := go_github.NewClient(httpClient)
+	return &Client{
+		client: cl,
+		search: cl.Search,
+	}, nil
+}
