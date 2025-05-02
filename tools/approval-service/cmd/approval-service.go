@@ -19,22 +19,6 @@ type CLI struct {
 	ConfigFilePath string `name:"config" short:"c" type:"existingfile" env:"PAS_CONFIG_FILE" default:"/etc/approval-service/config.yaml" help:"Path to the configuration file."`
 }
 
-// Process:
-// 1. Take in events from CI/CD systems
-// 2. Extract common information
-// 3. Process information according to business rules/logic
-// 4. Callback to the event source, have it handle
-
-// One of the design goals of this is to support multiple "sources" of deployment events,
-// such as github or another CI/CD service.
-
-// Skeleton TODO:
-// * add ctx where needed
-// * err handling
-// * pass some form of "config" struct to setup funcs, which will be populated by CLI or config file
-// * maybe add some "hook" for registering CLI options?
-// * Move approval processor, event, and event source to different packages
-
 func main() {
 	var cli CLI
 	kctx := kong.Parse(&cli)

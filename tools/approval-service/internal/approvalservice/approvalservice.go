@@ -179,10 +179,6 @@ func (a *ApprovalService) Run(ctx context.Context) error {
 		})
 	}
 
-	eg.Go(func() error {
-		return a.runHealthEndpoint(ctx)
-	})
-
 	slog.Default().Info("Approval service started")
 	// Block until an event source has a fatal error
 	if err := eg.Wait(); err != nil {
