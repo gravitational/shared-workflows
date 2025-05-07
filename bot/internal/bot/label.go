@@ -174,7 +174,7 @@ var prefixes = map[string]map[string][]string{
 		"tools/jobs":                   {"salescenter-job"},
 		"tools/prehog":                 {"prehog"},
 		"tools/salescenter":            {"salescenter"},
-		"tools/tcctl":                  {"tcctl"},
+		"tools/tc":                     {"tc"},
 		"tools/tenantoperator":         {"tenant-operator"},
 		"tools/tenantsync":             {"tenant-operator"},
 		"rfd/":                         {"rfd"},
