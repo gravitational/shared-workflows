@@ -1,1 +1,4 @@
 * @gravitational/dev-eng-leads
+
+# owners for dependency updates in /web packages
+**/package.json @avatus @gzdunek @ravicious
