@@ -2,7 +2,6 @@ package eventprocessor
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -43,13 +42,13 @@ func (p *Processor) ProcessDeploymentReviewEvent(ctx context.Context, e githubev
 	return nil
 }
 
-func (p *Processor) processDeploymentReviewEvent(ctx context.Context, e githubevents.DeploymentReviewEvent) (err error) {
+func (p *Processor) processDeploymentReviewEvent(ctx context.Context, e githubevents.DeploymentReviewEvent) error {
 	// Attempt to lease the GitHub workflow for the event.
 	// This is used to prevent multiple processes from handling the same event at the same time which would result in
 	// multiple Access Requests being created for the same event.
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	leaseCancel, err := p.coordinator.LeaseGitHubWorkflow(ctx, e.Organization, e.Repository, e.WorkflowID)
+	err := p.coordinator.LeaseGitHubWorkflow(ctx, e.Organization, e.Repository, e.WorkflowID)
 	if err != nil {
 		if err == coordination.ErrInternalRateLimitExceeded {
 			p.log.Debug("internal rate limit exceeded for GitHub workflow lease", "workflowID", e.WorkflowID)
@@ -57,9 +56,6 @@ func (p *Processor) processDeploymentReviewEvent(ctx context.Context, e githubev
 		}
 		return fmt.Errorf("leasing GitHub workflow: %w", err)
 	}
-	defer func() {
-		err = errors.Join(err, leaseCancel())
-	}()
 
 	p.log.Info("processing GitHub deployment review event", "event", e)
 

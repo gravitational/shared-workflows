@@ -9,17 +9,21 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jrhouston/k8slock"
+	"github.com/google/uuid"
 	"golang.org/x/time/rate"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/leaderelection"
+	"k8s.io/client-go/tools/leaderelection/resourcelock"
 )
 
 var ErrInternalRateLimitExceeded = errors.New("internal rate limit exceeded")
 
 // Coordinator handles coordination of work between different components and services.
 type Coordinator struct {
-	leaser leaser
+	holderIdentity string
+	leaser         leaser
 
 	accessRequestLeaseDur time.Duration
 
@@ -28,16 +32,13 @@ type Coordinator struct {
 	rl               map[string]*rate.Limiter
 	mu               sync.Mutex
 
+	kubeInitFunc func() (kubernetes.Interface, string, error)
+
 	log *slog.Logger
 }
 
-type contextLocker interface {
-	LockContext(context.Context) error
-	UnlockContext(context.Context) error
-}
-
 type leaser interface {
-	AcquireLeaser(id string, duration time.Duration) (contextLocker, error)
+	AcquireLease(ctx context.Context, id string, duration time.Duration) error
 }
 
 type Opt func(*Coordinator) error
@@ -72,10 +73,50 @@ func AccessRequestLeaseDuration(d time.Duration) Opt {
 	}
 }
 
+func withKubeInitFunc(f func() (kubernetes.Interface, string, error)) Opt {
+	return func(c *Coordinator) error {
+		if f == nil {
+			return fmt.Errorf("kube init func cannot be nil")
+		}
+		c.kubeInitFunc = f
+
+		return nil
+	}
+}
+
+func withHolderIdentity(id string) Opt {
+	return func(c *Coordinator) error {
+		if id == "" {
+			return fmt.Errorf("holder identity cannot be empty")
+		}
+		c.holderIdentity = id
+		return nil
+	}
+}
+
 var defaultOpts = []Opt{
 	WithLogger(slog.Default()),
 	AccessRequestLeaseDuration(10 * time.Second),
-	GitHubWorkflowLeaseDuration(1 * time.Minute),
+	GitHubWorkflowLeaseDuration(10 * time.Second),
+	withKubeInitFunc(func() (kubernetes.Interface, string, error) {
+		config, err := rest.InClusterConfig()
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to get in-cluster config: %w", err)
+		}
+
+		ns, ok := os.LookupEnv("POD_NAMESPACE")
+		if !ok {
+			return nil, "", fmt.Errorf("POD_NAMESPACE environment variable not set, use downwardAPI to set it")
+		}
+
+		clientset, err := kubernetes.NewForConfig(config)
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to create kubernetes clientset: %w", err)
+		}
+
+		return clientset, ns, nil
+	}),
+	withHolderIdentity(uuid.NewString()),
 }
 
 func NewCoordinator(opts ...Opt) (*Coordinator, error) {
@@ -89,7 +130,7 @@ func NewCoordinator(opts ...Opt) (*Coordinator, error) {
 
 	c.log.Info("Initializing coordinator")
 
-	config, err := rest.InClusterConfig()
+	clientset, ns, err := c.kubeInitFunc()
 	switch {
 	case errors.Is(err, rest.ErrNotInCluster):
 		// TODO: Use a stub implementation for testing
@@ -98,18 +139,11 @@ func NewCoordinator(opts ...Opt) (*Coordinator, error) {
 		return nil, fmt.Errorf("failed to get in-cluster config: %w", err)
 	}
 
-	ns, ok := os.LookupEnv("POD_NAMESPACE")
-	if !ok {
-		return nil, fmt.Errorf("POD_NAMESPACE environment variable not set, use downwardAPI to set it")
-	}
-
-	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create clientset: %w", err)
-	}
 	c.leaser = &kubeleaser{
-		namespace: ns,
-		client:    clientset,
+		namespace:      ns,
+		client:         clientset,
+		log:            c.log,
+		holderIdentity: c.holderIdentity,
 	}
 
 	c.rl = make(map[string]*rate.Limiter)
@@ -126,38 +160,17 @@ type CancelFunc func() error
 // Rate limiting is applied to the workflow ID to prevent excessive lease acquisition attempts per service.
 // The rate limit is set to 1 request per workflow lease duration.
 // If the rate limit is exceeded, an error is returned.
-func (c *Coordinator) LeaseGitHubWorkflow(ctx context.Context, org, repo string, runID int64) (CancelFunc, error) {
+func (c *Coordinator) LeaseGitHubWorkflow(ctx context.Context, org, repo string, runID int64) error {
 	rl := c.getWorkflowRL(fmt.Sprintf("%s-%s-%d", org, repo, runID))
 	if !rl.Allow() {
-		return nil, ErrInternalRateLimitExceeded
+		return ErrInternalRateLimitExceeded
 	}
 
-	locker, err := c.leaser.AcquireLeaser(fmt.Sprintf("%s-%s-%d", org, repo, runID), c.workflowLeaseDur)
-	if err != nil {
-		return nil, fmt.Errorf("initializing locker: %w", err)
-	}
-
-	if err := locker.LockContext(ctx); err != nil {
-		return nil, err
-	}
-
-	return func() error {
-		return locker.UnlockContext(ctx)
-	}, nil
+	return c.leaser.AcquireLease(ctx, fmt.Sprintf("%s-%s-%d", org, repo, runID), c.workflowLeaseDur)
 }
 
-func (c *Coordinator) LeaseAccessRequest(ctx context.Context, id string) (CancelFunc, error) {
-	locker, err := c.leaser.AcquireLeaser("request-"+id, c.accessRequestLeaseDur)
-	if err != nil {
-		return nil, fmt.Errorf("initializing locker: %w", err)
-	}
-	if err := locker.LockContext(ctx); err != nil {
-		return nil, err
-	}
-
-	return func() error {
-		return locker.UnlockContext(ctx)
-	}, nil
+func (c *Coordinator) LeaseAccessRequest(ctx context.Context, id string) error {
+	return c.leaser.AcquireLease(ctx, "request-"+id, c.accessRequestLeaseDur)
 }
 
 func (c *Coordinator) getWorkflowRL(id string) *rate.Limiter {
@@ -174,15 +187,56 @@ func (c *Coordinator) getWorkflowRL(id string) *rate.Limiter {
 }
 
 type kubeleaser struct {
-	namespace string
-	client    *kubernetes.Clientset
+	namespace      string
+	client         kubernetes.Interface
+	holderIdentity string
+
+	log *slog.Logger
 }
 
-func (k *kubeleaser) AcquireLeaser(id string, duration time.Duration) (contextLocker, error) {
-	return k8slock.NewLocker(id,
-		k8slock.Clientset(k.client),
-		k8slock.Namespace(k.namespace),
-		k8slock.TTL(duration),
-		k8slock.RetryWaitDuration(1*time.Second),
-	)
+func (k *kubeleaser) AcquireLease(ctx context.Context, leaseName string, duration time.Duration) error {
+	acq := make(chan bool)
+
+	lock := &resourcelock.LeaseLock{
+		LeaseMeta: metav1.ObjectMeta{Name: leaseName, Namespace: k.namespace},
+		Client:    k.client.CoordinationV1(),
+		LockConfig: resourcelock.ResourceLockConfig{
+			Identity: k.holderIdentity,
+		},
+	}
+
+	lec, err := leaderelection.NewLeaderElector(leaderelection.LeaderElectionConfig{
+		Lock:            lock,
+		LeaseDuration:   duration,
+		RenewDeadline:   duration / 2,
+		RetryPeriod:     time.Second * 2,
+		ReleaseOnCancel: true,
+		Callbacks: leaderelection.LeaderCallbacks{
+			OnStartedLeading: func(ctx context.Context) {
+				k.log.Info("Acquired lease", "lease", leaseName)
+				select {
+				case acq <- true:
+				default:
+				}
+			},
+			OnStoppedLeading: func() {
+				k.log.Info("Lost lease", "lease", leaseName)
+			},
+		},
+	})
+	if err != nil {
+		return err
+	}
+
+	go func() {
+		lec.Run(ctx)
+	}()
+
+	select {
+	case <-acq:
+		return nil
+	case <-ctx.Done():
+		k.log.Error("Context canceled while waiting for lease acquisition", "lease", leaseName)
+		return ctx.Err()
+	}
 }

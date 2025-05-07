@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/approvalservice/config"
-	"github.com/gravitational/shared-workflows/tools/approval-service/internal/approvalservice/coordination"
 	"github.com/gravitational/teleport/api/types"
 )
 
@@ -35,8 +34,8 @@ type Processor struct {
 }
 
 type Coordinator interface {
-	LeaseAccessRequest(ctx context.Context, id string) (coordination.CancelFunc, error)
-	LeaseGitHubWorkflow(ctx context.Context, org, repo string, workflowID int64) (coordination.CancelFunc, error)
+	LeaseAccessRequest(ctx context.Context, id string) error
+	LeaseGitHubWorkflow(ctx context.Context, org, repo string, workflowID int64) error
 }
 
 // SourceProcessors contains the a subset of processors that are used to handle events from different sources.
@@ -85,21 +84,15 @@ func (p *Processor) Setup(ctx context.Context) error {
 }
 
 // HandleReview will handle updates to the state of a Teleport Access Request.
-func (p *Processor) HandleReview(ctx context.Context, req types.AccessRequest) (err error) {
+func (p *Processor) HandleReview(ctx context.Context, req types.AccessRequest) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	leaseCancel, err := p.coordinator.LeaseAccessRequest(ctx, req.GetName())
-	if err != nil {
+	if err := p.coordinator.LeaseAccessRequest(ctx, req.GetName()); err != nil {
 		return err
 	}
-	defer func() {
-		err = errors.Join(err, leaseCancel())
-	}()
 
 	// Currently only GitHub is supported.
 	// If another source is added, will need to be updated to serialize the processor type to delegate to.
-	err = p.handleGitHubReview(ctx, req)
-
-	return err
+	return p.handleGitHubReview(ctx, req)
 }
