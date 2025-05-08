@@ -7,13 +7,9 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	"net/url"
-	"path"
-	"strconv"
-	"strings"
 	"time"
 
-	"github.com/google/go-github/v69/github"
+	"github.com/google/go-github/v71/github"
 	"github.com/gravitational/shared-workflows/libs/github/webhook"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/approvalservice/config"
 )
@@ -194,7 +190,7 @@ func (ghes *Source) Run(ctx context.Context) error {
 // Process a deployment review event.
 // This is where most of the business logic will go.
 func (ghes *Source) processDeploymentReviewEvent(ctx context.Context, payload *github.DeploymentProtectionRuleEvent) error {
-	workflowID, err := extractWorkflowIDFromURL(payload.GetDeploymentCallbackURL())
+	workflowID, err := payload.GetRunID()
 	if err != nil {
 		return fmt.Errorf("error extracting workflow ID from callback URL: %w", err)
 	}
@@ -206,31 +202,10 @@ func (ghes *Source) processDeploymentReviewEvent(ctx context.Context, payload *g
 		Repository:   payload.GetRepo().GetName(),
 		WorkflowID:   workflowID,
 	}
-	slog.Default().Info("received event", "event", event)
+	ghes.log.Info("received event", "event", event)
 
 	// Process the event
 	return ghes.processor.ProcessDeploymentReviewEvent(ctx, event)
-}
-
-// extractWorkflowIDFromURL extracts the workflow ID from the callback URL.
-// The URL is in the format:
-// https://api.github.com/repos/<org>/<repo>/actions/runs/<workflow_id>/deployment_protection_rule
-func extractWorkflowIDFromURL(urlToParse string) (int64, error) {
-	callbackURL, err := url.Parse(urlToParse)
-	if err != nil {
-		return 0, fmt.Errorf("error parsing callback URL: %w", err)
-	}
-	p := path.Clean(callbackURL.Path)
-	parts := strings.Split(p, "/")
-	if len(parts) != 8 {
-		return 0, fmt.Errorf("invalid callback URL: %q", urlToParse)
-	}
-
-	i, err := strconv.Atoi(parts[6])
-	if err != nil {
-		return 0, fmt.Errorf("error converting workflow ID to int: %w", err)
-	}
-	return int64(i), nil
 }
 
 func (e DeploymentReviewEvent) LogValue() slog.Value {
