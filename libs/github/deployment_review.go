@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/google/go-github/v69/github"
+	"github.com/google/go-github/v71/github"
 )
 
 type PendingDeploymentApprovalState string

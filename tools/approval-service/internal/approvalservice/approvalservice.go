@@ -8,7 +8,7 @@ import (
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/approvalservice/config"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/approvalservice/sources/accessrequest"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/approvalservice/sources/githubevents"
-	teleportClient "github.com/gravitational/teleport/api/client"
+	teleportclient "github.com/gravitational/teleport/api/client"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -74,11 +74,6 @@ func NewApprovalService(cfg config.Root, opts ...Opt) (*ApprovalService, error) 
 		return nil, err
 	}
 
-	if len(cfg.EventSources.GitHub) == 0 {
-		// Only github event sources are supported for now.
-		return nil, fmt.Errorf("no event sources configured, refusing to start")
-	}
-
 	a.log.Info("Initializing approval service")
 	// Teleport client is common to event source and processor
 	tele, err := newTeleportClientFromConfig(a.ctx, cfg.ApprovalService.Teleport)
@@ -141,12 +136,12 @@ func (a *ApprovalService) Run(ctx context.Context) error {
 	return nil
 }
 
-func newTeleportClientFromConfig(ctx context.Context, cfg config.Teleport) (*teleportClient.Client, error) {
+func newTeleportClientFromConfig(ctx context.Context, cfg config.Teleport) (*teleportclient.Client, error) {
 	slog.Default().Info("Initializing Teleport client")
-	client, err := teleportClient.New(ctx, teleportClient.Config{
+	client, err := teleportclient.New(ctx, teleportclient.Config{
 		Addrs: cfg.ProxyAddrs,
-		Credentials: []teleportClient.Credentials{
-			teleportClient.LoadIdentityFile(cfg.IdentityFile),
+		Credentials: []teleportclient.Credentials{
+			teleportclient.LoadIdentityFile(cfg.IdentityFile),
 		},
 	})
 	if err != nil {

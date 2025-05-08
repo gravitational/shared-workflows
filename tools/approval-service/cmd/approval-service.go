@@ -3,8 +3,7 @@ package main
 import (
 	"context"
 	"errors"
-	"io"
-	"log"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -29,18 +28,18 @@ func main() {
 func (cli *CLI) Run() error {
 	cfg, err := parseConfig(cli.ConfigFilePath)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	svc, err := approvalservice.NewApprovalService(cfg)
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("initializing approval service: %w", err)
 	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Kill, os.Interrupt, syscall.SIGTERM)
 
 	if err := svc.Setup(ctx); err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("setting up approval service: %w", err)
 	}
 
 	errc := make(chan error)
@@ -51,29 +50,22 @@ func (cli *CLI) Run() error {
 	}()
 
 	if err := <-errc; err != nil && !errors.Is(err, context.Canceled) {
-		log.Fatal(err)
+		return fmt.Errorf("stopping approval service: %w", err)
 	}
 	return nil
 }
 
 func parseConfig(path string) (cfg config.Root, err error) {
-	f, err := os.Open(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
-		return cfg, err
-	}
-	defer func() {
-		cerr := f.Close()
-		if err == nil {
-			err = cerr
-		}
-	}()
-
-	data, err := io.ReadAll(f)
-	if err != nil {
-		return cfg, err
+		return cfg, fmt.Errorf("reading config file %q: %w", path, err)
 	}
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return cfg, err
+	}
+
+	if err := cfg.Validate(); err != nil {
+		return cfg, fmt.Errorf("validating config: %w", err)
 	}
 
 	return cfg, nil

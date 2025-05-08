@@ -32,7 +32,6 @@ This can be done by navigating to `Settings > Environments > <Environment to con
 
 A checkbox will be present with the name of the App. Ensure this is checked and click on the `Save Protection Rules` button.
 
-
 ## Provisioning
 
 This should be done after prerequisites are completed.

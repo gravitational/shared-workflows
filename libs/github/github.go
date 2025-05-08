@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/bradleyfalzon/ghinstallation/v2"
-	go_github "github.com/google/go-github/v69/github"
+	go_github "github.com/google/go-github/v71/github"
 	"golang.org/x/oauth2"
 )
 

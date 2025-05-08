@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/google/go-github/v69/github"
+	"github.com/google/go-github/v71/github"
 )
 
 // EventHandlerFunc is a function that handles a webhook event.
