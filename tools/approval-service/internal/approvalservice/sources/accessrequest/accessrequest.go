@@ -2,16 +2,17 @@ package accessrequest
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
-	"github.com/gravitational/teleport/api/client"
+	teleportclient "github.com/gravitational/teleport/api/client"
 	"github.com/gravitational/teleport/api/types"
 )
 
 // Plugin is an Access Request plugin that listens for events from Teleport.
 type Plugin struct {
-	teleportClient *client.Client
+	teleportClient *teleportclient.Client
 	reviewHandler  ReviewHandler
 
 	log *slog.Logger
@@ -23,7 +24,7 @@ type ReviewHandler interface {
 }
 
 // NewPlugin creates a new Access Request plugin.
-func NewPlugin(client *client.Client, handler ReviewHandler, opts ...Opt) (*Plugin, error) {
+func NewPlugin(client *teleportclient.Client, handler ReviewHandler, opts ...Opt) (*Plugin, error) {
 	var p Plugin
 	for _, opt := range append(defaultOpts, opts...) {
 		if err := opt(&p); err != nil {
@@ -58,7 +59,7 @@ var defaultOpts = []Opt{
 
 // Run starts the plugin and listens for events.
 // It will block until the context is cancelled.
-func (p *Plugin) Run(ctx context.Context) error {
+func (p *Plugin) Run(ctx context.Context) (err error) {
 	watch, err := p.teleportClient.NewWatcher(ctx, types.Watch{
 		Kinds: []types.WatchKind{
 			// AccessRequest is the resource we are interested in.
@@ -69,7 +70,9 @@ func (p *Plugin) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer watch.Close()
+	defer func() {
+		err = errors.Join(err, watch.Close())
+	}()
 
 	p.log.Info("Starting the watcher job")
 

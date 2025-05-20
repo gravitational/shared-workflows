@@ -17,7 +17,7 @@ import (
 // To recover from this, the reconciler will periodically check the state of the deployment protection rules and the state of the access requests.
 // If it detects a mismatch, it will fire an event to update the state of the access request.
 type Reconciler struct {
-	deployReviewEventProcessor githubevents.DeploymentReviewEventProcessor
+	deployReviewEventProcessor githubevents.GitHubEventProcessor
 	reviewHandler              accessrequest.ReviewHandler
 }
 

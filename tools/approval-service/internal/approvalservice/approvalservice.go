@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/approvalservice/config"
+	"github.com/gravitational/shared-workflows/tools/approval-service/internal/approvalservice/sources"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/approvalservice/sources/accessrequest"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/approvalservice/sources/githubevents"
 	teleportclient "github.com/gravitational/teleport/api/client"
@@ -37,7 +39,7 @@ type EventSource interface {
 // This will be passed to the event sources to handle certain actions provided by the event source.
 type EventProcessor interface {
 	Setup(ctx context.Context) error
-	githubevents.DeploymentReviewEventProcessor
+	githubevents.GitHubEventProcessor
 	accessrequest.ReviewHandler
 }
 
@@ -82,6 +84,13 @@ func NewApprovalService(cfg config.Root, opts ...Opt) (*ApprovalService, error) 
 	}
 
 	a.eventSources = []EventSource{}
+
+	// Initialize server that listens for webhook events
+	srv, err := a.newServer(a.ctx, cfg, a.processor)
+	if err != nil {
+		return nil, fmt.Errorf("creating server: %w", err)
+	}
+	a.eventSources = append(a.eventSources, srv)
 
 	// Initialize AccessRequest plugin that sources events from Teleport
 	a.log.Info("Initializing access request plugin")
@@ -149,4 +158,29 @@ func newTeleportClientFromConfig(ctx context.Context, cfg config.Teleport) (*tel
 	}
 
 	return client, nil
+}
+
+func (a *ApprovalService) newServer(ctx context.Context, cfg config.Root, processor EventProcessor) (*sources.Server, error) {
+	opts := []sources.ServerOpt{
+		sources.WithLogger(a.log),
+		sources.WithAddress(cfg.ApprovalService.Address),
+		sources.WithHandler("/health", a.healthcheckHandler()),
+	}
+
+	for _, gh := range cfg.EventSources.GitHub {
+		gitHubSource, err := githubevents.NewSource(gh, processor)
+		if err != nil {
+			return nil, fmt.Errorf("creating github source: %w", err)
+		}
+		opts = append(opts, sources.WithHandler(gh.Path, gitHubSource.Handler()))
+	}
+
+	return sources.NewServer(opts...)
+}
+
+// This is a simple healthcheck handler that checks if the server is healthy.
+func (a *ApprovalService) healthcheckHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
 }

@@ -1,6 +1,7 @@
 package webhook
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -8,16 +9,33 @@ import (
 	"github.com/google/go-github/v71/github"
 )
 
+// Handler is an implementation of [http.Handler] that handles GitHub webhook events.
+type Handler struct {
+	eventHandler              EventHandler
+	payloadValidationDisabled bool
+	secretToken               []byte
+	log                       *slog.Logger
+}
+
+// EventHandler is an interface that handles GitHub webhook events.
+type EventHandler interface {
+	// HandleEvent handles a GitHub webhook event.
+	// The event is passed as an interface{} and should be type asserted to the appropriate type.
+	HandleEvent(ctx context.Context, event any) error
+}
+
 // EventHandlerFunc is a function that handles a webhook event.
 // The function should return an error if the event could not be handled.
 // If the error is not nil, the webhook will respond with a 500 Internal Server Error.
 //
 // It is important that this is non-blocking and does not perform any long-running operations.
+// The context passed to this function is tied to the request and will be cancelled when the request is done.
 // GitHub will close the connection if the webhook does not respond within 10 seconds.
+// When that connection is closed, the context will be cancelled.
 //
 // Example usage:
 //
-//	func(event interface{}) error {
+//	func(ctx context.Context, event interface{}) error {
 //		switch event := event.(type) {
 //			case *github.CommitCommentEvent:
 //				go processCommitCommentEvent(event)
@@ -28,14 +46,10 @@ import (
 //		}
 //		return nil
 //	}
-type EventHandlerFunc func(event interface{}) error
+type EventHandlerFunc func(ctx context.Context, event any) error
 
-// Handler is an implementation of [http.Handler] that handles GitHub webhook events.
-type Handler struct {
-	eventHandler        EventHandlerFunc
-	secretTokenDisabled bool
-	secretToken         []byte
-	log                 *slog.Logger
+func (e EventHandlerFunc) HandleEvent(ctx context.Context, event any) error {
+	return e(ctx, event)
 }
 
 var _ http.Handler = &Handler{}
@@ -54,12 +68,14 @@ func WithSecretToken(secretToken string) Opt {
 	}
 }
 
-// DisableSecretToken disables the secret token for the webhook.
-// The webhook will not verify the signature of the request.
-// This is useful for testing or when the webhook is not configured with a secret.
-func DisableSecretToken() Opt {
+// WithoutPayloadValidation disables the signature validation for the webhook.
+// By default, signature validation is enabled and a secret token is required.
+//
+// This should not be used in production.
+// The main use case for this is to allow testing the webhook without a secret token.
+func WithoutPayloadValidation() Opt {
 	return func(p *Handler) error {
-		p.secretTokenDisabled = true
+		p.payloadValidationDisabled = true
 		return nil
 	}
 }
@@ -86,7 +102,7 @@ var defaultOpts = []Opt{
 //		webhook.WithLogger(logger),
 //		... // Other options
 //	))
-func NewHandler(eventHandler EventHandlerFunc, opts ...Opt) (*Handler, error) {
+func NewHandler(eventHandler EventHandler, opts ...Opt) (*Handler, error) {
 	h := Handler{
 		eventHandler: eventHandler,
 	}
@@ -94,7 +110,7 @@ func NewHandler(eventHandler EventHandlerFunc, opts ...Opt) (*Handler, error) {
 		opt(&h)
 	}
 
-	if !h.secretTokenDisabled && len(h.secretToken) == 0 {
+	if !h.payloadValidationDisabled && len(h.secretToken) == 0 {
 		return nil, fmt.Errorf("secret token is required")
 	}
 
@@ -155,7 +171,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.eventHandler(event); err != nil {
+	if err := h.eventHandler.HandleEvent(r.Context(), event); err != nil {
 		h.log.Error("failed to handle webhook event", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return

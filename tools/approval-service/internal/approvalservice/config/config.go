@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // Root is the root configuration for the approval service.
@@ -18,6 +19,8 @@ type Root struct {
 type ApprovalService struct {
 	// Teleport is the configuration for the Teleport client.
 	Teleport Teleport `yaml:"teleport,omitempty"`
+	// Address is the address the approval service will listen for events on
+	Address string `yaml:"address,omitempty"`
 }
 
 type EventSources struct {
@@ -28,9 +31,7 @@ type EventSources struct {
 
 // GitHubEvents represents the per-repo configuration for webhook events and API authentication.
 type GitHubSource struct {
-	// GitHubWebhookAddr should be the full URL to listen to webhooks events from.
-	// For example: 127.0.0.1:8080/webhook
-	WebhookAddr string `yaml:"webhook_addr,omitempty"`
+	Path string `yaml:"path,omitempty"`
 	// Org is the organization that the event must be from.
 	Org string `yaml:"org,omitempty"`
 	// Repo is the repository that the event must be from.
@@ -101,8 +102,8 @@ func (c *EventSources) Validate() error {
 
 func (c *GitHubSource) Validate() error {
 	missing := []string{}
-	if c.WebhookAddr == "" {
-		missing = append(missing, "webhook_addr")
+	if c.Path == "" {
+		missing = append(missing, "path")
 	}
 	if c.Org == "" {
 		missing = append(missing, "org")
@@ -115,7 +116,7 @@ func (c *GitHubSource) Validate() error {
 	}
 
 	if len(missing) > 0 {
-		return fmt.Errorf("missing required fields: %s", missing)
+		return fmt.Errorf("missing required fields: %s", strings.Join(missing, ", "))
 	}
 	return nil
 }
@@ -143,7 +144,7 @@ func (c *GitHubAppAuthentication) Validate() error {
 	}
 
 	if len(missing) > 0 {
-		return fmt.Errorf("missing required fields: %s", missing)
+		return fmt.Errorf("missing required fields: %s", strings.Join(missing, ", "))
 	}
 	return nil
 }
@@ -164,7 +165,7 @@ func (c *Teleport) Validate() error {
 	}
 
 	if len(missing) > 0 {
-		return fmt.Errorf("missing required fields: %s", missing)
+		return fmt.Errorf("missing required fields: %s", strings.Join(missing, ", "))
 	}
 	return nil
 }
