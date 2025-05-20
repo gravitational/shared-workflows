@@ -5,9 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net"
 	"net/http"
-	"time"
 
 	"github.com/google/go-github/v71/github"
 	"github.com/gravitational/shared-workflows/libs/github/webhook"
@@ -15,57 +13,66 @@ import (
 )
 
 // Source is a webhook that listens for GitHub events and processes them.
+// This implements the [http.Handler] interface and can be used as a standard HTTP handler.
 type Source struct {
-	processor          DeploymentReviewEventProcessor
-	addr               string
-	secretToken        string
-	disableSecretToken bool
-
-	deployReviewChan chan *github.DeploymentProtectionRuleEvent
-	listener         net.Listener
-	srv              *http.Server
-
-	// used for extra validation of event source
-	org          string
-	repo         string
-	environments []string
+	handler                   http.Handler
+	processor                 GitHubEventProcessor
+	payloadValidationDisabled bool
 
 	log *slog.Logger
 }
 
-// DeploymentReviewEventProcessor is an interface for processing deployment review events.
-type DeploymentReviewEventProcessor interface {
+// GitHubEventProcessor is an interface for processing deployment review events.
+type GitHubEventProcessor interface {
 	// ProcessDeploymentReviewEvent processes a deployment review event.
-	// Automated checks are done before this is called.
-	// If the automated checks fail, valid will be false.
 	ProcessDeploymentReviewEvent(ctx context.Context, event DeploymentReviewEvent) error
+
+	// ProcessWorkflowDispatchEvent processes a workflow dispatch event.
+	ProcessWorkflowDispatchEvent(ctx context.Context, event WorkflowDispatchEvent) error
 }
 
 // DeploymentReviewEvent is an event that is sent when a deployment review is requested.
 // This contains information needed to process a request
 type DeploymentReviewEvent struct {
-	Requester    string
-	Environment  string
+	// WorkflowID is the ID of the workflow that is being reviewed.
+	WorkflowID int64
+	// Environment is the environment that is being reviewed.
+	Environment string
+
+	// Requester is the user that requested the deployment review.
+	Requester string
+	// Organization is the organization that owns the repository.
 	Organization string
-	Repository   string
-	WorkflowID   int64
+	// Repository is the repository that owns the deployment review.
+	Repository string
+}
+
+// WorkflowDispatchEvent is an event that is sent when a workflow is dispatched.
+// This primarily contains the inputs for the workflow dispatch.
+type WorkflowDispatchEvent struct {
+	// Inputs are the inputs for the workflow dispatch.
+	// Despite workflow inputs supporting multiple types, this is always given an unstructured map of string to string.
+	Inputs map[string]string
+
+	// Requester is the user that requested the workflow dispatch.
+	Requester string
+	// Organization is the organization that owns the repository.
+	Organization string
+	// Repository is the repository that owns the workflow dispatch.
+	Repository string
 }
 
 // Opt is a functional option for the GitHub event source.
-type SourceOpt func(*Source)
+type SourceOpt func(*Source) error
 
 // WithLogger sets the logger for the GitHub event source.
 func WithLogger(logger *slog.Logger) SourceOpt {
-	return func(s *Source) {
+	return func(s *Source) error {
+		if logger == nil {
+			return errors.New("logger cannot be nil")
+		}
 		s.log = logger
-	}
-}
-
-// DisableSecretToken disables the secret token for the webhook.
-// Mainly used for unit testing and local development.
-func DisableSecretToken() SourceOpt {
-	return func(s *Source) {
-		s.disableSecretToken = true
+		return nil
 	}
 }
 
@@ -73,117 +80,55 @@ var defaultOpts = []SourceOpt{
 	WithLogger(slog.Default()),
 }
 
-func NewSource(cfg config.GitHubSource, processor DeploymentReviewEventProcessor, opt ...SourceOpt) *Source {
-	ghes := &Source{
-		processor:    processor,
-		addr:         cfg.WebhookAddr,
-		secretToken:  cfg.Secret,
-		org:          cfg.Org,
-		repo:         cfg.Repo,
-		environments: cfg.Environments,
-	}
+// NewSource creates a new GitHub event source.
+func NewSource(cfg config.GitHubSource, processor GitHubEventProcessor, opt ...SourceOpt) (*Source, error) {
+	var ghes Source
 
 	for _, o := range append(defaultOpts, opt...) {
-		o(ghes)
+		if err := o(&ghes); err != nil {
+			return nil, err
+		}
 	}
 
-	return ghes
+	if processor == nil {
+		return nil, errors.New("processor cannot be nil")
+	}
+	ghes.processor = processor
+
+	opts := []webhook.Opt{
+		webhook.WithLogger(ghes.log),
+	}
+	if ghes.payloadValidationDisabled {
+		opts = append(opts, webhook.WithoutPayloadValidation())
+	} else {
+		opts = append(opts, webhook.WithSecretToken(cfg.Secret))
+	}
+
+	wh, err := webhook.NewHandler(ghes.eventHandler(), opts...)
+	if err != nil {
+		return nil, fmt.Errorf("error creating webhook handler: %w", err)
+	}
+	ghes.handler = wh
+
+	return &ghes, nil
 }
 
-// Setup GH client, webhook secret, etc.
-func (ghes *Source) Setup(ctx context.Context) error {
-	deployReviewChan := make(chan *github.DeploymentProtectionRuleEvent)
-	ghes.deployReviewChan = deployReviewChan
+// Handler returns the HTTP handler for the GitHub event source.
+func (ghes *Source) Handler() http.Handler {
+	return ghes.handler
+}
 
-	mux := http.NewServeMux()
-	eventProcessor := webhook.EventHandlerFunc(func(event any) error {
+func (ghes *Source) eventHandler() webhook.EventHandlerFunc {
+	return func(ctx context.Context, event any) error {
 		switch event := event.(type) {
 		case *github.DeploymentProtectionRuleEvent:
-			deployReviewChan <- event
+			return ghes.processDeploymentReviewEvent(ctx, event)
+		case *github.WorkflowDispatchEvent:
+			return errors.New("not implemented")
 		default:
 			ghes.log.Debug("unknown event type", "type", fmt.Sprintf("%T", event))
 		}
 		return nil
-	})
-
-	opts := []webhook.Opt{
-		webhook.WithSecretToken(ghes.secretToken),
-		webhook.WithLogger(ghes.log),
-	}
-	if ghes.disableSecretToken {
-		opts = append(opts, webhook.DisableSecretToken())
-	}
-	handler, err := webhook.NewHandler(eventProcessor, opts...)
-	if err != nil {
-		return fmt.Errorf("error creating webhook handler: %w", err)
-	}
-
-	mux.Handle("GET /", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/plain")
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
-	}))
-	mux.Handle("POST /", handler)
-
-	listener, err := net.Listen("tcp", ghes.addr)
-	if err != nil {
-		return fmt.Errorf("error listening on address %q: %w", ghes.addr, err)
-	}
-	ghes.listener = listener
-	ghes.srv = &http.Server{
-		Addr:    listener.Addr().String(),
-		Handler: mux,
-	}
-
-	return nil
-}
-
-// Take incoming events and respond to them
-func (ghes *Source) Run(ctx context.Context) error {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	errC := make(chan error)
-
-	// Start the HTTP server
-	go func() {
-		ghes.log.Info("Listening for GitHub Webhooks", "address", ghes.srv.Addr)
-		errC <- ghes.srv.Serve(ghes.listener)
-		close(errC)
-	}()
-
-	// Process incoming events
-	go func() {
-		ghes.log.Info("Starting GitHub event processor")
-		for deployReview := range ghes.deployReviewChan {
-			go func() {
-				if err := ghes.processDeploymentReviewEvent(ctx, deployReview); err != nil {
-					ghes.log.Error("Error processing deployment review event", "error", err)
-				}
-			}()
-		}
-	}()
-
-	// Handle shutdown from context cancellation
-	shutdownErrC := make(chan error)
-	go func() {
-		<-ctx.Done()
-		close(ghes.deployReviewChan)
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		shutdownErrC <- ghes.srv.Shutdown(ctx)
-		close(shutdownErrC)
-	}()
-
-	// This will block until an error occurs or the context is done
-	select {
-	case err := <-errC:
-		cancel()
-		return errors.Join(err, <-shutdownErrC)
-	case <-ctx.Done():
-		if err := <-shutdownErrC; err != nil {
-			return fmt.Errorf("error shutting down server: %w", err)
-		}
-		return ctx.Err()
 	}
 }
 
@@ -198,7 +143,7 @@ func (ghes *Source) processDeploymentReviewEvent(ctx context.Context, payload *g
 	event := DeploymentReviewEvent{
 		Requester:    payload.GetDeployment().GetCreator().GetLogin(),
 		Environment:  payload.GetEnvironment(),
-		Organization: payload.GetOrganization().GetLogin(),
+		Organization: payload.GetRepo().GetOwner().GetLogin(),
 		Repository:   payload.GetRepo().GetName(),
 		WorkflowID:   workflowID,
 	}
@@ -208,6 +153,7 @@ func (ghes *Source) processDeploymentReviewEvent(ctx context.Context, payload *g
 	return ghes.processor.ProcessDeploymentReviewEvent(ctx, event)
 }
 
+// LogValue represents the DeploymentReviewEvent in a structured log format.
 func (e DeploymentReviewEvent) LogValue() slog.Value {
 	return slog.GroupValue(
 		slog.String("requester", e.Requester),
