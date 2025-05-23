@@ -54,15 +54,6 @@ func WithLogger(logger *slog.Logger) Opt {
 	}
 }
 
-// WithContext sets the context for the approval service.
-// This is primarily used for Teleport client Dialing.
-func WithContext(ctx context.Context) Opt {
-	return func(s *ApprovalService) error {
-		s.ctx = ctx
-		return nil
-	}
-}
-
 // NewApprovalService initializes a new approval service from config.
 // An error is returned if the service cannot be initialized e.g. if the Teleport client cannot connect.
 func NewApprovalService(ctx context.Context, cfg config.Root, opts ...Opt) (*ApprovalService, error) {
