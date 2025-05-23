@@ -37,12 +37,12 @@ type EventHandler interface {
 //
 // Example usage:
 //
-//	func(ctx context.Context, any interface{}) error {
-//		switch event := any.(type) {
+//	func(ctx context.Context, event any) error {
+//		switch e := event.(type) {
 //		case *github.CommitCommentEvent:
-//			go processCommitCommentEvent(event)
+//			go processCommitCommentEvent(e)
 //		case *github.CreateEvent:
-//			go processCreateEvent(event)
+//			go processCreateEvent(e)
 //		default:
 //			return fmt.Errorf("unsupported event type: %T", event)
 //		}
