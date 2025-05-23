@@ -17,6 +17,8 @@ type Handler struct {
 	log                       *slog.Logger
 }
 
+var _ http.Handler = &Handler{}
+
 // EventHandler is an interface that handles GitHub webhook events.
 type EventHandler interface {
 	// HandleEvent handles a GitHub webhook event.
@@ -35,14 +37,14 @@ type EventHandler interface {
 //
 // Example usage:
 //
-//	func(ctx context.Context, event interface{}) error {
-//		switch event := event.(type) {
-//			case *github.CommitCommentEvent:
-//				go processCommitCommentEvent(event)
-//			case *github.CreateEvent:
-//				go processCreateEvent(event)
-//			default:
-//				return fmt.Errorf("unsupported event type: %T", event)
+//	func(ctx context.Context, any interface{}) error {
+//		switch event := any.(type) {
+//		case *github.CommitCommentEvent:
+//			go processCommitCommentEvent(event)
+//		case *github.CreateEvent:
+//			go processCreateEvent(event)
+//		default:
+//			return fmt.Errorf("unsupported event type: %T", event)
 //		}
 //		return nil
 //	}
@@ -51,8 +53,6 @@ type EventHandlerFunc func(ctx context.Context, event any) error
 func (e EventHandlerFunc) HandleEvent(ctx context.Context, event any) error {
 	return e(ctx, event)
 }
-
-var _ http.Handler = &Handler{}
 
 type Opt func(*Handler) error
 
@@ -141,13 +141,14 @@ type Headers struct {
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	// Parse headers for debugging and audit purposes.
-	var head Headers
-	head.GithubHookID = r.Header.Get("X-GitHub-Hook-ID")
-	head.GithubEvent = r.Header.Get("X-GitHub-Event")
-	head.GithubDelivery = r.Header.Get("X-GitHub-Delivery")
-	head.GitHubHookInstallationTargetType = r.Header.Get("X-GitHub-Hook-Installation-Target-Type")
-	head.GitHubHookInstallationTargetID = r.Header.Get("X-GitHub-Hook-Installation-Target-ID")
-	head.HubSignature256 = r.Header.Get("X-Hub-Signature-256")
+	head := Headers{
+		GithubHookID:                     r.Header.Get("X-GitHub-Hook-ID"),
+		GithubEvent:                      r.Header.Get("X-GitHub-Event"),
+		GithubDelivery:                   r.Header.Get("X-GitHub-Delivery"),
+		GitHubHookInstallationTargetType: r.Header.Get("X-GitHub-Hook-Installation-Target-Type"),
+		GitHubHookInstallationTargetID:   r.Header.Get("X-GitHub-Hook-Installation-Target-ID"),
+		HubSignature256:                  r.Header.Get("X-Hub-Signature-256"),
+	}
 
 	// Signature is present but no secret token is set.
 	// This indicates an issues with the webhook configuration.
