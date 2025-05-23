@@ -24,6 +24,8 @@ func (c *Client) ReviewDeploymentProtectionRule(ctx context.Context, org, repo s
 		Comment:         comment,
 	})
 
+	// Sometimes the error can be eaten by the underlying client library.
+	// This is a workaround to get the error from the response body.
 	if err != nil {
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
