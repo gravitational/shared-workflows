@@ -14,10 +14,9 @@ func (c *Client) GeWorkflowRunInfo(ctx context.Context, org, repo string, runID 
 		return WorkflowRunInfo{}, err
 	}
 
-	var info WorkflowRunInfo
-	info.WorkflowID = workflow.GetID()
-	info.Name = workflow.GetName()
-	info.HTMLURL = workflow.GetHTMLURL()
-
-	return info, nil
+	return WorkflowRunInfo{
+		WorkflowID: workflow.GetID(),
+		Name:       workflow.GetName(),
+		HTMLURL:    workflow.GetHTMLURL(),
+	}, nil
 }
