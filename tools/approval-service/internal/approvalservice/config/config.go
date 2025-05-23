@@ -11,7 +11,7 @@ type Root struct {
 	// ApprovalService is the configuration for the Pipeline Approval Service
 	ApprovalService ApprovalService `yaml:"approval_service,omitempty"`
 
-	// GitHubApp is the configuration for the GitHub App.
+	// EventSources is the configuration for the event sources.
 	EventSources EventSources `yaml:"event_sources,omitempty"`
 }
 
@@ -29,7 +29,7 @@ type EventSources struct {
 	GitHub []GitHubSource `yaml:"github,omitempty"`
 }
 
-// GitHubEvents represents the per-repo configuration for webhook events and API authentication.
+// GitHubSource represents the per-repo configuration for webhook events and API authentication.
 type GitHubSource struct {
 	Path string `yaml:"path,omitempty"`
 	// Org is the organization that the event must be from.
