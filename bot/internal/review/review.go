@@ -408,11 +408,23 @@ func (r *Assignments) CheckExternal(author string, reviews []github.Review) erro
 	return trace.BadParameter("at least two approvals required from %v", reviewers)
 }
 
+// TODO(r0mant): Remove after 18.0.0 release.
+const branchV18 = "branch/v18"
+
 // CheckInternal will verify if required reviewers have approved. Checks if
 // docs and if each set of code reviews have approved. Admin approvals bypass
 // all checks.
 func (r *Assignments) CheckInternal(e *env.Environment, reviews []github.Review, changes env.Changes, files []github.PullRequestFile) error {
 	log.Printf("Check: Found internal author %v.", e.Author)
+
+	// Temporarily require admin approval to branch/v18 backports.
+	// TODO(r0mant): Remove after 18.0.0 release.
+	if e.UnsafeBase == branchV18 {
+		log.Println("Check: Detected v18 backport, requiring admin approval")
+		if !check(r.GetAdminCheckers(e.Author), reviews) {
+			return trace.BadParameter("v18 backports require admin approval to merge")
+		}
+	}
 
 	// Skip checks if admins have approved.
 	if check(r.GetAdminCheckers(e.Author), reviews) {

@@ -1179,6 +1179,92 @@ func TestCheckInternal(t *testing.T) {
 	}
 }
 
+// TestCheckInternalV18 ensures that admin approval is required for v18 backports.
+// TODO(r0mant): Remove after 18.0.0 release.
+func TestCheckInternalV18(t *testing.T) {
+	r := &Assignments{
+		c: &Config{
+			CoreReviewers: map[string]Reviewer{
+				"1": {Owner: true},
+				"2": {Owner: true},
+				"3": {Owner: true},
+				"4": {Owner: false},
+				"5": {Owner: false},
+			},
+			Admins: []string{
+				"1",
+				"2",
+			},
+		},
+	}
+	tests := []struct {
+		desc       string
+		author     string
+		repository string
+		branch     string
+		reviews    []github.Review
+		result     bool
+	}{
+		// PR to branch/v18, no admin approvals, should fail
+		{
+			desc:       "v18-not-admin-failure",
+			repository: "teleport",
+			author:     "5",
+			branch:     branchV18,
+			reviews: []github.Review{
+				{Author: "3", State: Approved}, // not admin
+				{Author: "4", State: Approved}, // not admin
+			},
+			result: false,
+		},
+		// PR to branch/v18, one admin approval, should succeed
+		{
+			desc:       "v18-admin-success",
+			repository: "teleport",
+			author:     "5",
+			branch:     branchV18,
+			reviews: []github.Review{
+				{Author: "1", State: Approved}, // admin
+				{Author: "4", State: Approved}, // not admin
+			},
+			result: true,
+		},
+		// PR to some other branch, no admin approvals, should succeed
+		{
+			desc:       "not-v18-not-admin-success",
+			repository: "teleport",
+			author:     "5",
+			branch:     "main",
+			reviews: []github.Review{
+				{Author: "3", State: Approved}, // not admin
+				{Author: "4", State: Approved}, // not admin
+			},
+			result: true,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			e := &env.Environment{
+				Repository: test.repository,
+				Author:     test.author,
+				UnsafeBase: test.branch,
+			}
+
+			changes := env.Changes{
+				Code:          true,
+				ApproverCount: env.DefaultApproverCount,
+			}
+
+			err := r.CheckInternal(e, test.reviews, changes, nil)
+			if test.result {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+			}
+		})
+	}
+}
+
 // TestFromString tests if configuration is correctly read in from a string.
 func TestFromString(t *testing.T) {
 	e := &env.Environment{Repository: env.TeleportRepo}
