@@ -103,6 +103,7 @@ When a workflow is started, GitHub will send upwards of 100 Deployment Review Ev
 
 The service has some reconcile logic that serves as a redundancy for the potential failure of the Deployment Review Event.
 
+```mermaid
 sequenceDiagram
     participant GH as GitHub
     box Approval Service
@@ -128,3 +129,4 @@ sequenceDiagram
         end
         deactivate Reconciler
     end
+```
