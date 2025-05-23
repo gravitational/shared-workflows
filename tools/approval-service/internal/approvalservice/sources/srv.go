@@ -3,6 +3,7 @@ package sources
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
@@ -79,15 +80,13 @@ func WithLogger(logger *slog.Logger) ServerOpt {
 	}
 }
 
-var defaultOpts = []ServerOpt{
-	WithLogger(slog.Default()),
-}
-
 func NewServer(opt ...ServerOpt) (*Server, error) {
-	var s Server
-	for _, o := range append(defaultOpts, opt...) {
-		if err := o(&s); err != nil {
-			return nil, err
+	s := &Server{
+		log: slog.Default(),
+	}
+	for _, o := range opt {
+		if err := o(s); err != nil {
+			return nil, fmt.Errorf("applying option: %w", err)
 		}
 	}
 
@@ -95,7 +94,7 @@ func NewServer(opt ...ServerOpt) (*Server, error) {
 		return nil, errors.New("address or listener must be set")
 	}
 
-	return &s, nil
+	return s, nil
 }
 
 // Setup sets up the server.

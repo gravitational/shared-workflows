@@ -23,23 +23,7 @@ type ReviewHandler interface {
 	HandleReview(ctx context.Context, req types.AccessRequest) error
 }
 
-// NewPlugin creates a new Access Request plugin.
-func NewPlugin(client *teleportclient.Client, handler ReviewHandler, opts ...Opt) (*Plugin, error) {
-	var p Plugin
-	for _, opt := range append(defaultOpts, opts...) {
-		if err := opt(&p); err != nil {
-			return nil, fmt.Errorf("applying option: %w", err)
-		}
-	}
-	p.teleportClient = client
-	p.reviewHandler = handler
-	return &p, nil
-}
-
-func (p *Plugin) Setup(ctx context.Context) error {
-	return nil
-}
-
+// Opt is an option for the Access Request plugin.
 type Opt func(*Plugin) error
 
 // WithLogger sets the logger for the plugin.
@@ -53,8 +37,31 @@ func WithLogger(logger *slog.Logger) Opt {
 	}
 }
 
-var defaultOpts = []Opt{
-	WithLogger(slog.Default()),
+// NewPlugin creates a new Access Request plugin.
+func NewPlugin(client *teleportclient.Client, handler ReviewHandler, opts ...Opt) (*Plugin, error) {
+	if client == nil {
+		return nil, fmt.Errorf("teleport client cannot be nil")
+	}
+	if handler == nil {
+		return nil, fmt.Errorf("review handler cannot be nil")
+	}
+
+	p := &Plugin{
+		teleportClient: client,
+		reviewHandler:  handler,
+		log:            slog.Default(),
+	}
+
+	for _, o := range opts {
+		if err := o(p); err != nil {
+			return nil, fmt.Errorf("applying option: %w", err)
+		}
+	}
+	return p, nil
+}
+
+func (p *Plugin) Setup(ctx context.Context) error {
+	return nil
 }
 
 // Run starts the plugin and listens for events.

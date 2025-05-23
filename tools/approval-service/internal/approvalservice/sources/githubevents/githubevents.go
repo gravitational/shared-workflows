@@ -76,24 +76,22 @@ func WithLogger(logger *slog.Logger) SourceOpt {
 	}
 }
 
-var defaultOpts = []SourceOpt{
-	WithLogger(slog.Default()),
-}
-
 // NewSource creates a new GitHub event source.
 func NewSource(cfg config.GitHubSource, processor GitHubEventProcessor, opt ...SourceOpt) (*Source, error) {
-	var ghes Source
-
-	for _, o := range append(defaultOpts, opt...) {
-		if err := o(&ghes); err != nil {
-			return nil, err
-		}
-	}
-
 	if processor == nil {
 		return nil, errors.New("processor cannot be nil")
 	}
-	ghes.processor = processor
+
+	ghes := &Source{
+		log:       slog.Default(),
+		processor: processor,
+	}
+
+	for _, o := range opt {
+		if err := o(ghes); err != nil {
+			return nil, fmt.Errorf("applying option: %w", err)
+		}
+	}
 
 	opts := []webhook.Opt{
 		webhook.WithLogger(ghes.log),
@@ -110,7 +108,7 @@ func NewSource(cfg config.GitHubSource, processor GitHubEventProcessor, opt ...S
 	}
 	ghes.handler = wh
 
-	return &ghes, nil
+	return ghes, nil
 }
 
 // Handler returns the HTTP handler for the GitHub event source.

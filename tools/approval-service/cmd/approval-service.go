@@ -31,7 +31,7 @@ func (cli *CLI) Run() error {
 		return err
 	}
 
-	svc, err := approvalservice.NewApprovalService(cfg)
+	svc, err := approvalservice.NewApprovalService(context.Background(), cfg)
 	if err != nil {
 		return fmt.Errorf("initializing approval service: %w", err)
 	}

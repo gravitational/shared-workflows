@@ -63,27 +63,27 @@ func WithContext(ctx context.Context) Opt {
 	}
 }
 
-var defaultOpts = []Opt{
-	WithLogger(slog.Default()),
-	WithContext(context.Background()),
-}
-
 // NewApprovalService initializes a new approval service from config.
 // An error is returned if the service cannot be initialized e.g. if the Teleport client cannot connect.
-func NewApprovalService(cfg config.Root, opts ...Opt) (*ApprovalService, error) {
-	a, err := newWithOpts(opts...)
-	if err != nil {
-		return nil, err
+func NewApprovalService(ctx context.Context, cfg config.Root, opts ...Opt) (*ApprovalService, error) {
+	a := &ApprovalService{
+		log:          slog.Default(),
+		eventSources: []EventSource{},
 	}
 
+	// Apply options to the approval service.
+	for _, o := range opts {
+		if err := o(a); err != nil {
+			return nil, fmt.Errorf("applying option: %w", err)
+		}
+	}
 	a.log.Info("Initializing approval service")
+
 	// Teleport client is common to event source and processor
 	tele, err := newTeleportClientFromConfig(a.ctx, cfg.ApprovalService.Teleport)
 	if err != nil {
 		return nil, err
 	}
-
-	a.eventSources = []EventSource{}
 
 	// Initialize server that listens for webhook events
 	srv, err := a.newServer(a.ctx, cfg, a.processor)
@@ -101,17 +101,6 @@ func NewApprovalService(cfg config.Root, opts ...Opt) (*ApprovalService, error) 
 	a.eventSources = append(a.eventSources, accessPlugin)
 
 	return a, nil
-}
-
-func newWithOpts(opts ...Opt) (*ApprovalService, error) {
-	s := &ApprovalService{}
-	for _, opt := range append(defaultOpts, opts...) {
-		if err := opt(s); err != nil {
-			return nil, fmt.Errorf("error applying option: %w", err)
-		}
-	}
-
-	return s, nil
 }
 
 func (a *ApprovalService) Setup(ctx context.Context) error {
