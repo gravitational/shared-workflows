@@ -37,19 +37,13 @@ func (cli *CLI) Run() error {
 	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Kill, os.Interrupt, syscall.SIGTERM)
+	defer cancel()
 
 	if err := svc.Setup(ctx); err != nil {
 		return fmt.Errorf("setting up approval service: %w", err)
 	}
 
-	errc := make(chan error)
-	go func() {
-		defer close(errc)
-		defer cancel()
-		errc <- svc.Run(ctx)
-	}()
-
-	if err := <-errc; err != nil && !errors.Is(err, context.Canceled) {
+	if err := svc.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
 		return fmt.Errorf("stopping approval service: %w", err)
 	}
 	return nil
