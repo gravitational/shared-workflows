@@ -15,6 +15,8 @@ type Plugin struct {
 	teleportClient *teleportclient.Client
 	reviewHandler  ReviewHandler
 
+	requesterFilter string
+
 	log *slog.Logger
 }
 
@@ -33,6 +35,16 @@ func WithLogger(logger *slog.Logger) Opt {
 			return fmt.Errorf("logger cannot be nil")
 		}
 		p.log = logger
+		return nil
+	}
+}
+
+func WithRequesterFilter(requester string) Opt {
+	return func(p *Plugin) error {
+		if requester == "" {
+			return fmt.Errorf("requester filter cannot be empty")
+		}
+		p.requesterFilter = requester
 		return nil
 	}
 }
@@ -70,7 +82,10 @@ func (p *Plugin) Run(ctx context.Context) (err error) {
 	watch, err := p.teleportClient.NewWatcher(ctx, types.Watch{
 		Kinds: []types.WatchKind{
 			// AccessRequest is the resource we are interested in.
-			{Kind: types.KindAccessRequest},
+			{
+				Kind:   types.KindAccessRequest,
+				Filter: p.buildAccessRequestFilter(),
+			},
 		},
 	})
 
@@ -97,6 +112,15 @@ func (p *Plugin) Run(ctx context.Context) (err error) {
 			return nil
 		}
 	}
+}
+
+func (p *Plugin) buildAccessRequestFilter() map[string]string {
+	m := map[string]string{}
+	if p.requesterFilter != "" {
+		m["requester"] = p.requesterFilter
+	}
+
+	return m
 }
 
 func (p *Plugin) handleEvent(ctx context.Context, event types.Event) error {
