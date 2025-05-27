@@ -122,7 +122,7 @@ func (ghes *Source) eventHandler() webhook.EventHandlerFunc {
 		case *github.DeploymentProtectionRuleEvent:
 			return ghes.processDeploymentReviewEvent(ctx, event)
 		case *github.WorkflowDispatchEvent:
-			return errors.New("not implemented")
+			return errors.New("workflow_dispatch not implemented")
 		default:
 			ghes.log.Debug("unknown event type", "type", fmt.Sprintf("%T", event))
 		}

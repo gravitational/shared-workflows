@@ -1,7 +1,9 @@
 package githubevents
 
 import (
+	"bytes"
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -106,4 +108,76 @@ func (f *fakeGitHubEventProcessor) ProcessDeploymentReviewEvent(ctx context.Cont
 
 func (f *fakeGitHubEventProcessor) ProcessWorkflowDispatchEvent(ctx context.Context, event WorkflowDispatchEvent) error {
 	return f.ProcessWorkflowDispatchEventFunc(ctx, event)
+}
+
+// FuzzHeaders checks the handling of arbitrary headers in the GitHub webhook handler.
+// Since this is a public endpoint, it should gracefully handle unexpected headers without panicking.
+// It reads a sample event from a file and then fuzzes the handler with random headers.
+func FuzzHeaders(f *testing.F) {
+	eventFile, err := os.Open("testdata/deployment_review_event.json")
+	require.NoError(f, err)
+	event, err := io.ReadAll(eventFile)
+	require.NoError(f, err)
+	require.NoError(f, eventFile.Close())
+
+	src, err := NewSource(
+		config.GitHubSource{
+			Secret: "test-secret",
+		},
+		&fakeGitHubEventProcessor{
+			ProcessDeploymentReviewEventFunc: func(ctx context.Context, event DeploymentReviewEvent) error {
+				// This should not be called during fuzzing
+				f.Fatal("unexpected call to ProcessDeploymentReviewEvent")
+				return nil
+			},
+		},
+	)
+	require.NoError(f, err)
+
+	f.Add("sha256=fakehash", "application/json", "deployment_review")
+	f.Fuzz(func(t *testing.T, hash, contentType, eventType string) {
+		buff := bytes.NewBuffer(event)
+		req := httptest.NewRequest("POST", "/webhook", buff)
+		req.Header.Set("Content-Type", contentType)
+		req.Header.Set("X-GitHub-Event", eventType)
+		req.Header.Set("X-Hub-Signature-256", hash)
+		w := httptest.NewRecorder()
+
+		src.Handler().ServeHTTP(w, req)
+		assert.Equal(t, http.StatusBadRequest, w.Result().StatusCode)
+	})
+}
+
+// FuzzDeploymentReview is a fuzz test for the Deployment Review event handler.
+// It reads a sample event from a file and then fuzzes the handler with random data.
+// This is useful to ensure that the handler can handle unexpected or malformed input gracefully. (e.g. no panics)
+func FuzzDeploymentReview(f *testing.F) {
+	eventFile, err := os.Open("testdata/deployment_review_event.json")
+	require.NoError(f, err)
+	event, err := io.ReadAll(eventFile)
+	require.NoError(f, err)
+	require.NoError(f, eventFile.Close())
+
+	src, err := NewSource(
+		config.GitHubSource{},
+		&fakeGitHubEventProcessor{
+			ProcessDeploymentReviewEventFunc: func(ctx context.Context, event DeploymentReviewEvent) error {
+				// noop
+				return nil
+			},
+		},
+		withoutValidation(),
+	)
+	require.NoError(f, err)
+
+	f.Add(event)
+	f.Fuzz(func(t *testing.T, data []byte) {
+		buff := bytes.NewBuffer(data)
+		req := httptest.NewRequest("POST", "/webhook", buff)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-GitHub-Event", "deployment_review")
+		w := httptest.NewRecorder()
+
+		src.Handler().ServeHTTP(w, req)
+	})
 }
