@@ -85,7 +85,12 @@ func NewApprovalService(ctx context.Context, cfg config.Root, opts ...Opt) (*App
 
 	// Initialize AccessRequest plugin that sources events from Teleport
 	a.log.Info("Initializing access request plugin")
-	accessPlugin, err := accessrequest.NewPlugin(tele, nil)
+	accessPlugin, err := accessrequest.NewPlugin(
+		tele,
+		nil, // TODO: Implemented in next PR
+		accessrequest.WithRequesterFilter(cfg.ApprovalService.Teleport.User),
+		accessrequest.WithLogger(a.log),
+	)
 	if err != nil {
 		return nil, err
 	}
