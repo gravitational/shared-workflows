@@ -21,8 +21,6 @@ import (
 )
 
 type ApprovalService struct {
-	cfg config.Root
-
 	// eventSources is a list of event sources that the approval service listens to.
 	// This will be things like GitHub webhook events, Teleport access request updates, etc.
 	eventSources []EventSource
@@ -31,7 +29,6 @@ type ApprovalService struct {
 	processor EventProcessor
 
 	log *slog.Logger
-	ctx context.Context
 }
 
 type EventSource interface {
@@ -78,72 +75,34 @@ func NewApprovalService(ctx context.Context, cfg config.Root, opts ...Opt) (*App
 	a.log.Info("Initializing approval service")
 
 	// Teleport client is common to event source and processor
-	tele, err := newTeleportClientFromConfig(a.ctx, cfg.ApprovalService.Teleport)
+	tele, err := newTeleportClientFromConfig(ctx, cfg.ApprovalService.Teleport)
 	if err != nil {
 		return nil, err
 	}
 
-	// Initialize AccessRequest plugin that sources events from Teleport
-	a.log.Info("Initializing access request plugin")
-	accessPlugin, err := accessrequest.NewPlugin(
-		tele,
-		nil, // TODO: Implemented in next PR
-		accessrequest.WithRequesterFilter(cfg.ApprovalService.Teleport.User),
-		accessrequest.WithLogger(a.log),
-	)
-	a.eventSources = append(a.eventSources, accessPlugin)
-
-	// Initialize coordinator for distributed coordination
-	a.log.Info("Initializing coordinator")
-	coord, err := coordination.NewCoordinator(
-		coordination.WithLogger(a.log),
-		coordination.GitHubWorkflowLeaseDuration(1*time.Minute),
-	)
+	processor, err := a.newProcessor(ctx, cfg, tele, nil)
 	if err != nil {
-		return nil, fmt.Errorf("creating coordinator: %w", err)
-	}
-
-	sp := &eventprocessor.SourceProcessors{
-		GitHub: []*eventprocessor.GitHubSourceProcessor{},
-	}
-
-	// Initialize event processor
-	a.log.Info("Initializing event processor")
-	processor, err := eventprocessor.New(
-		ctx,
-		cfg.ApprovalService.Teleport,
-		sp,
-		coord,
-		eventprocessor.WithLogger(a.log),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("initializing event processor: %w", err)
+		return nil, fmt.Errorf("creating event processor: %w", err)
 	}
 	a.processor = processor
 
+	// Initialize AccessRequest plugin that sources events from Teleport
+	a.log.Info("Initializing access request plugin")
+	accessPlugin, err := accessrequest.NewPlugin(tele, processor,
+		accessrequest.WithLogger(a.log),
+		accessrequest.WithRequesterFilter(cfg.ApprovalService.Teleport.User),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("creating access request plugin: %w", err)
+	}
+	a.eventSources = append(a.eventSources, accessPlugin)
+
 	// Initialize server that listens for webhook events
-	srv, err := a.newServer(a.ctx, cfg, processor)
+	srv, err := a.newServer(cfg, processor)
 	if err != nil {
 		return nil, fmt.Errorf("creating server: %w", err)
 	}
 	a.eventSources = append(a.eventSources, srv)
-
-	// Initialize GitHub event sources
-	a.log.Info("Initializing GitHub event sources")
-	for _, gh := range cfg.EventSources.GitHub {
-		a.log.Info("Initializing GitHub event source", "org", gh.Org, "repo", gh.Repo)
-
-		ghProcessor, err := githubprocessor.New(a.ctx, gh, tele, githubprocessor.WithLogger(a.log))
-		if err != nil {
-			return nil, fmt.Errorf("creating GitHub processor: %w", err)
-		}
-		sp.GitHub = append(sp.GitHub, &eventprocessor.GitHubSourceProcessor{
-			Org:                    gh.Org,
-			Repo:                   gh.Repo,
-			TeleportRole:           cfg.ApprovalService.Teleport.RoleToRequest,
-			AccessRequestProcessor: ghProcessor,
-		})
-	}
 
 	return a, nil
 }
@@ -194,7 +153,7 @@ func newTeleportClientFromConfig(ctx context.Context, cfg config.Teleport) (*tel
 	return client, nil
 }
 
-func (a *ApprovalService) newServer(ctx context.Context, cfg config.Root, processor EventProcessor) (*sources.Server, error) {
+func (a *ApprovalService) newServer(cfg config.Root, processor EventProcessor) (*sources.Server, error) {
 	opts := []sources.ServerOpt{
 		sources.WithLogger(a.log),
 		sources.WithAddress(cfg.ApprovalService.Address),
@@ -212,11 +171,8 @@ func (a *ApprovalService) newServer(ctx context.Context, cfg config.Root, proces
 	return sources.NewServer(opts...)
 }
 
-func (a *ApprovalService) newProcessor(ctx context.Context, cfg config.Root, coord eventprocessor.Coordinator) (EventProcessor, error) {
-	sp := &eventprocessor.SourceProcessors{
-		GitHub: []*eventprocessor.GitHubSourceProcessor{},
-	}
-
+func (a *ApprovalService) newProcessor(ctx context.Context, cfg config.Root, tele *teleportclient.Client, coord eventprocessor.Coordinator) (EventProcessor, error) {
+	a.log.Info("Initializing coordinator")
 	coord, err := coordination.NewCoordinator(
 		coordination.WithLogger(a.log),
 		coordination.GitHubWorkflowLeaseDuration(1*time.Minute),
@@ -225,11 +181,30 @@ func (a *ApprovalService) newProcessor(ctx context.Context, cfg config.Root, coo
 		return nil, fmt.Errorf("creating coordinator: %w", err)
 	}
 
-	processor, err := eventprocessor.New(
-		ctx,
-		cfg.ApprovalService.Teleport,
-		sp,
-		coord,
+	a.log.Info("Initializing event processor")
+
+	// Initialize GitHub event sources
+	a.log.Info("Initializing GitHub event sources")
+	sp := &eventprocessor.SourceProcessors{
+		GitHub: []*eventprocessor.GitHubSourceProcessor{},
+	}
+
+	for _, gh := range cfg.EventSources.GitHub {
+		a.log.Info("Initializing GitHub event source", "org", gh.Org, "repo", gh.Repo)
+
+		ghProcessor, err := githubprocessor.New(ctx, gh, tele, githubprocessor.WithLogger(a.log))
+		if err != nil {
+			return nil, fmt.Errorf("creating GitHub processor: %w", err)
+		}
+		sp.GitHub = append(sp.GitHub, &eventprocessor.GitHubSourceProcessor{
+			Org:                    gh.Org,
+			Repo:                   gh.Repo,
+			TeleportRole:           cfg.ApprovalService.Teleport.RoleToRequest,
+			AccessRequestProcessor: ghProcessor,
+		})
+	}
+
+	processor, err := eventprocessor.New(ctx, cfg.ApprovalService.Teleport, sp, coord,
 		eventprocessor.WithLogger(a.log),
 	)
 	if err != nil {
