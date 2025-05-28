@@ -66,7 +66,7 @@ var defaultOpts = []Opt{
 
 // New creates a new Processor.
 func New(ctx context.Context, cfg config.GitHubSource, tele teleClient, opts ...Opt) (*Processor, error) {
-	f, err := os.Open(cfg.PrivateKeyPath)
+	f, err := os.Open(cfg.Authentication.App.PrivateKeyPath)
 	if err != nil {
 		return nil, fmt.Errorf("opening private key: %w", err)
 	}
@@ -78,7 +78,7 @@ func New(ctx context.Context, cfg config.GitHubSource, tele teleClient, opts ...
 		return nil, fmt.Errorf("reading private key: %w", err)
 	}
 
-	client, err := github.NewForApp(cfg.AppID, cfg.InstallationID, pKey)
+	client, err := github.NewForApp(cfg.Authentication.App.AppID, cfg.Authentication.App.InstallationID, pKey)
 	if err != nil {
 		return nil, fmt.Errorf("initializing GitHub client: %w", err)
 	}
