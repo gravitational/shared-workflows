@@ -78,7 +78,7 @@ func New(ctx context.Context, cfg config.GitHubSource, tele teleClient, opts ...
 		return nil, fmt.Errorf("reading private key: %w", err)
 	}
 
-	client, err := github.NewForApp(cfg.Authentication.App.AppID, cfg.Authentication.App.InstallationID, pKey)
+	client, err := github.NewForApp(ctx, cfg.Authentication.App.AppID, cfg.Authentication.App.InstallationID, pKey)
 	if err != nil {
 		return nil, fmt.Errorf("initializing GitHub client: %w", err)
 	}
