@@ -42,7 +42,8 @@ type EventSource interface {
 // EventProcessor provides methods for processing events fromm our event sources.
 // This will be passed to the event sources to handle certain actions provided by the event source.
 type EventProcessor interface {
-	Setup(ctx context.Context) error
+	Run(ctx context.Context) error
+
 	githubevents.GitHubEventProcessor
 	accessrequest.ReviewHandler
 }
@@ -80,7 +81,7 @@ func NewApprovalService(ctx context.Context, cfg config.Root, opts ...Opt) (*App
 		return nil, err
 	}
 
-	processor, err := a.newProcessor(ctx, cfg, tele, nil)
+	processor, err := a.newProcessor(ctx, cfg, tele)
 	if err != nil {
 		return nil, fmt.Errorf("creating event processor: %w", err)
 	}
@@ -114,9 +115,6 @@ func (a *ApprovalService) Setup(ctx context.Context) error {
 		}
 	}
 
-	if err := a.processor.Setup(ctx); err != nil {
-		return fmt.Errorf("setting up event processor: %w", err)
-	}
 	a.log.Info("Approval service setup complete")
 	return nil
 }
@@ -129,6 +127,10 @@ func (a *ApprovalService) Run(ctx context.Context) error {
 			return eventSource.Run(ctx)
 		})
 	}
+
+	eg.Go(func() error {
+		return a.processor.Run(ctx)
+	})
 
 	slog.Default().Info("Approval service started")
 	// Block until an event source has a fatal error
@@ -171,7 +173,7 @@ func (a *ApprovalService) newServer(cfg config.Root, processor EventProcessor) (
 	return sources.NewServer(opts...)
 }
 
-func (a *ApprovalService) newProcessor(ctx context.Context, cfg config.Root, tele *teleportclient.Client, coord eventprocessor.Coordinator) (EventProcessor, error) {
+func (a *ApprovalService) newProcessor(ctx context.Context, cfg config.Root, tele *teleportclient.Client) (EventProcessor, error) {
 	a.log.Info("Initializing coordinator")
 	coord, err := coordination.NewCoordinator(
 		coordination.WithLogger(a.log),

@@ -33,13 +33,27 @@ type GitHubAccessRequestProcessor interface {
 	accessrequest.ReviewHandler
 }
 
+// ProcessDeploymentReviewEvent processes a GitHub deployment review event.
 func (p *Processor) ProcessDeploymentReviewEvent(ctx context.Context, e githubevents.DeploymentReviewEvent) error {
-	err := p.processDeploymentReviewEvent(ctx, e)
-	if err != nil {
-		p.log.Error("failed to process GitHub deployment review event", "error", err, "event", e)
-		return err
-	}
+	p.deployReviewEventC <- e
 	return nil
+}
+
+// githubEventListener handles asynchronous processing of GitHub events.
+// Most GitHub events should be processed asynchronously from the main request due to the potential for long-running operations
+// (e.g. acquiring lease, Access Request creation, etc.).
+//
+// This will block until the context is done or an error occurs and is intended to be run in a goroutine.
+func (p *Processor) githubEventListener(ctx context.Context) error {
+	for {
+		select {
+		case <-ctx.Done():
+			p.log.Info("stopping GitHub event listener")
+			return ctx.Err()
+		case e := <-p.deployReviewEventC:
+			go p.processDeploymentReviewEvent(ctx, e)
+		}
+	}
 }
 
 func (p *Processor) processDeploymentReviewEvent(ctx context.Context, e githubevents.DeploymentReviewEvent) error {
@@ -112,6 +126,7 @@ func (p *Processor) handleGitHubReview(ctx context.Context, req types.AccessRequ
 	return sp.AccessRequestProcessor.HandleReview(ctx, req)
 }
 
+// storeGitHubProcessorID stores the GitHub processor ID in the Access Request's static labels.
 func (p *Processor) storeGitHubProcessorID(id string, req types.AccessRequest) error {
 	labels := req.GetStaticLabels()
 	if labels == nil {
@@ -122,6 +137,7 @@ func (p *Processor) storeGitHubProcessorID(id string, req types.AccessRequest) e
 	return nil
 }
 
+// getGitHubProcessorID retrieves the GitHub processor ID from the Access Request's static labels.
 func (p *Processor) getGitHubProcessorID(req types.AccessRequest) (string, error) {
 	labels := req.GetStaticLabels()
 	if labels == nil {

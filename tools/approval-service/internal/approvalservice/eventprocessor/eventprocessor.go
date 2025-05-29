@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/approvalservice/config"
+	"github.com/gravitational/shared-workflows/tools/approval-service/internal/approvalservice/sources/githubevents"
 	"github.com/gravitational/teleport/api/types"
+	"golang.org/x/sync/errgroup"
 )
 
 // Processor manages changes to the state of Access Requests and their relation to deployment events (e.g. GitHub deployment review events).
@@ -26,13 +28,16 @@ type Processor struct {
 	// This is used to look up the GitHub source processor for a given GitHub event or Access Request.
 	// not safe for concurrent read/write
 	// this is written to during init and only read concurrently during operation.
-	githubProcessors map[string]*GitHubSourceProcessor
+	githubProcessors   map[string]*GitHubSourceProcessor
+	deployReviewEventC chan githubevents.DeploymentReviewEvent
 
 	coordinator Coordinator
 
 	log *slog.Logger
 }
 
+// Coordinator is an interface that defines methods for coordinating tasks among multiple instances of the approval service.
+// Mainly used for ensuring that only one instance of the approval service is handling a specific task at a time.
 type Coordinator interface {
 	LeaseAccessRequest(ctx context.Context, id string) error
 	LeaseGitHubWorkflow(ctx context.Context, org, repo string, workflowID int64) error
@@ -44,8 +49,10 @@ type SourceProcessors struct {
 	GitHub []*GitHubSourceProcessor
 }
 
+// Opt is a functional option for configuring the Processor.
 type Opt func(p *Processor) error
 
+// WithLogger sets the logger for the Processor.
 func WithLogger(logger *slog.Logger) Opt {
 	return func(p *Processor) error {
 		if logger == nil {
@@ -56,6 +63,7 @@ func WithLogger(logger *slog.Logger) Opt {
 	}
 }
 
+// New creates a new Processor instance.
 func New(ctx context.Context, teleConfig config.Teleport, sp *SourceProcessors, coordinator Coordinator, opts ...Opt) (*Processor, error) {
 	p := &Processor{
 		teleportUser:     teleConfig.User,
@@ -72,15 +80,22 @@ func New(ctx context.Context, teleConfig config.Teleport, sp *SourceProcessors, 
 		}
 	}
 
-	return p, nil
-}
-
-func (p *Processor) Setup(ctx context.Context) error {
 	for _, gh := range p.sp.GitHub {
 		p.log.Info("Registering GitHub source processor", "id", githubID(gh.Org, gh.Repo))
 		p.githubProcessors[githubID(gh.Org, gh.Repo)] = gh
 	}
-	return nil
+
+	return p, nil
+}
+
+func (p *Processor) Run(ctx context.Context) error {
+	eg, ctx := errgroup.WithContext(ctx)
+
+	eg.Go(func() error {
+		return p.githubEventListener(ctx)
+	})
+
+	return eg.Wait()
 }
 
 // HandleReview will handle updates to the state of a Teleport Access Request.
