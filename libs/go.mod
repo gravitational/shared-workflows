@@ -5,7 +5,6 @@ go 1.23.7
 toolchain go1.24.0
 
 require (
-	github.com/bradleyfalzon/ghinstallation/v2 v2.15.0
 	github.com/cli/go-gh/v2 v2.11.2
 	github.com/google/go-github/v71 v71.0.0
 	github.com/gravitational/trace v1.5.1
