@@ -139,6 +139,10 @@ func newAppTransport(ctx context.Context, appID, installationID int64, privateKe
 
 // RoundTrip implements the http.RoundTripper interface for the jwtTransport.
 func (j *jwtAuthTransport) RoundTrip(orig *http.Request) (*http.Response, error) {
+	if orig.Body != nil {
+		// As per the http.RoundTripper contract, we should close the body after we're done with it.
+		defer orig.Body.Close()
+	}
 	req := orig.Clone(orig.Context()) // clone the request to avoid modifying the original
 
 	// Account for clock skew by setting the issued at time to 60 seconds in the past.
@@ -163,6 +167,10 @@ func (j *jwtAuthTransport) RoundTrip(orig *http.Request) (*http.Response, error)
 
 // RoundTrip implements the http.RoundTripper interface for the appTransport.
 func (a *installationAuthTransport) RoundTrip(orig *http.Request) (*http.Response, error) {
+	if orig.Body != nil {
+		// As per the http.RoundTripper contract, we should close the body after we're done with it.
+		defer orig.Body.Close()
+	}
 	req := orig.Clone(orig.Context()) // clone the request to avoid modifying the original
 
 	// Get the access token for the installation.
