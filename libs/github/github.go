@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/google/go-github/v71/github"
 	go_github "github.com/google/go-github/v71/github"
 	"golang.org/x/oauth2"
 )
@@ -84,7 +83,7 @@ type installationAuthTransport struct {
 	appsClient     *go_github.Client // GitHub client for making API requests to the GitHub Apps API
 	installationID int64
 
-	token *github.InstallationToken
+	token *go_github.InstallationToken
 	mu    sync.Mutex // mutex to protect access to the token
 }
 
