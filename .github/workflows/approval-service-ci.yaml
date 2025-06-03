@@ -1,0 +1,14 @@
+---
+name: Approval service CI
+
+on:
+  pull_request:
+
+jobs:
+  release:
+    uses: ./.github/workflows/reusable-ci.yaml
+    permissions:
+      contents: write
+      packages: write
+    with:
+      tool-directory: ./tools/approval-service
