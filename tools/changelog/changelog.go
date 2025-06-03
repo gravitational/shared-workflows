@@ -90,7 +90,7 @@ func (c *changelogGenerator) generateChangelog(ctx context.Context, branch strin
 func (c *changelogGenerator) toChangelog(prs []github.ChangelogPR) (string, error) {
 	var clList []changelogInfo
 	for _, pr := range prs {
-		clList = append(clList, newChangelogInfoFromPR(pr))
+		clList = append(clList, newChangelogInfoFromPR(pr)...)
 	}
 
 	var buff bytes.Buffer
@@ -106,29 +106,47 @@ func (c *changelogGenerator) toChangelog(prs []github.ChangelogPR) (string, erro
 }
 
 // convertPRToChangelog will convert the list of PRs to a nicer format.
-func newChangelogInfoFromPR(pr github.ChangelogPR) changelogInfo {
-	found, clSummary := findChangelog(pr.Body)
+func newChangelogInfoFromPR(pr github.ChangelogPR) []changelogInfo {
+	found, summaries := findChangelogs(pr.Body)
 	if !found {
 		// Pull out title and indicate no changelog found
-		clSummary = fmt.Sprintf("NOCL: %s", pr.Title)
+		return []changelogInfo{
+			{
+				Summary: fmt.Sprintf("NOCL: %s", pr.Title),
+				Number:  pr.Number,
+				URL:     pr.URL,
+			},
+		}
 	}
-	return changelogInfo{
-		Summary: prettierSummary(clSummary),
-		Number:  pr.Number,
-		URL:     pr.URL,
+
+	cls := []changelogInfo{}
+	for _, clSummary := range summaries {
+		cls = append(cls, changelogInfo{
+			Summary: prettierSummary(clSummary),
+			Number:  pr.Number,
+			URL:     pr.URL,
+		})
 	}
+
+	return cls
 }
 
 // findChangelog will parse a body of a PR to find a changelog.
-func findChangelog(commentBody string) (found bool, summary string) {
+func findChangelogs(commentBody string) (found bool, summaries []string) {
 	// If a match is found then we should get a non empty slice
 	// 0 index will be the whole match including "changelog: *"
 	// 1 index will be the subgroup match which does not include "changelog: "
-	m := clPattern.FindStringSubmatch(commentBody)
-	if len(m) > 1 {
-		return true, m[1]
+	m := clPattern.FindAllStringSubmatch(commentBody, -1)
+	if len(m) < 1 {
+		return false, nil
 	}
-	return false, ""
+
+	sum := []string{}
+
+	for _, v := range m {
+		sum = append(sum, v[1])
+	}
+	return true, sum
 }
 
 func prettierSummary(cl string) string {
