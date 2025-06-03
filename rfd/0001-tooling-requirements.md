@@ -58,8 +58,8 @@ Existing files in this repo should not be moved until there is a compelling reas
 │   │   ├── labels.json5
 │   │   └── ...
 │   ├── workflows/
-│   │   ├── some-tool-cd.yaml -> ../../tools/some-tool/workflows/cd.yaml
-│   │   ├── some-tool-ci.yaml -> ../../tools/some-tool/workflows/ci.yaml
+│   │   ├── some-tool-cd.yaml
+│   │   ├── some-tool-ci.yaml
 │   │   ├── ...
 │   ├── CODEOWNERS
 │   ├── dependabot.yml
@@ -86,8 +86,8 @@ Existing files in this repo should not be moved until there is a compelling reas
 │   ├── some-tool/
 │   │   ├── docs/
 │   │   ├── workflows/
-│   │   │   ├── cd.yaml
-│   │   │   ├── ci.yaml
+│   │   │   ├── cd.yaml -> ../../../.github/workflows/some-tool-cd.yaml
+│   │   │   ├── ci.yaml -> ../../../.github/workflows/some-tool-cd.yaml
 │   │   │   ├── go.mod
 │   │   │   ├── go.sum
 │   │   │   └── ...
@@ -104,7 +104,7 @@ Existing files in this repo should not be moved until there is a compelling reas
 
 There are few things to note here:
 * Projects should be separated into `tools` and `libs` directories as appropriate. These directories should contain all source code, CI/CD pipelines, documentation, and dependency management configuration associated with each project. The specific layout of source code within these directories is left up to the project's code owner(s).
-* Workflows will live in tool and library directories rather than `.github/workflows` at the root of the repo. This will help ensure that it is clear which workflows correspond with each tool and library. Github still requires that all workflows live in the repo root, so they will be symlinked in `.github/workflows/<project>-<workflow>.yaml` targeting `<lib|tooling>/<project>/workflows/workflow>.yaml` instead.
+* Workflows will live in tool and library directories rather than `.github/workflows` at the root of the repo. This will help ensure that it is clear which workflows correspond with each tool and library. Github still requires that all workflows live in the repo root, and that there are no symlinks under `.github/workflows`, so they will be symlinked in `<lib|tooling>/<project>/workflows/workflow>.yaml` targeting `.github/workflows/<project>-<workflow>.yaml` instead.
 * While Dependabot has historically been used for keeping this repo's tool's dependencies up to date, Renovate will now be added as well. See the [Dependency management](#dependency-management) section for details on why this choice was made. The structure of the configuration will be similar to `gravitational/cloud-terraform`, with a top-level config and individual configs for each tool. This allows Renovate to be specifically configured for each tool.
 * There will be a pull request template for new projects that includes a checklist of all the items listed in [Project requirements](#project-requirements).
 * Some additional boilerplate files will be added such as a `LICENSE` and `SECURITY.md` file. The contents of these files will be copy/pasted from `gravitational/teleport` and tweaked as appropriate.
