@@ -30,7 +30,7 @@ require (
 	github.com/gravitational/trace v1.5.0 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/xhit/go-str2duration/v2 v2.1.0 // indirect
-	golang.org/x/net v0.34.0 // indirect
+	golang.org/x/net v0.38.0 // indirect
 	golang.org/x/oauth2 v0.25.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
