@@ -58,7 +58,8 @@ type EventSource interface {
 // EventProcessor provides methods for processing events from our event sources.
 // This will be passed to the event sources to handle certain actions provided by the event source.
 type EventProcessor interface {
-	Setup(ctx context.Context) error
+	Run(ctx context.Context) error
+
 	githubevents.GitHubEventProcessor
 	accessrequest.ReviewHandler
 }
@@ -95,6 +96,12 @@ func NewFromConfig(ctx context.Context, cfg config.Root, opts ...Opt) (*Service,
 		return nil, fmt.Errorf("creating new teleport client from config: %w", err)
 	}
 
+	processor, err := a.newProcessor(ctx, cfg, tele)
+	if err != nil {
+		return nil, fmt.Errorf("creating event processor: %w", err)
+	}
+	a.processor = processor
+
 	// Initialize server that listens for webhook events
 	srv, err := a.newServer(cfg, a.processor)
 	if err != nil {
@@ -125,9 +132,6 @@ func (a *Service) Setup(ctx context.Context) error {
 		}
 	}
 
-	if err := a.processor.Setup(ctx); err != nil {
-		return fmt.Errorf("setting up event processor: %w", err)
-	}
 	a.log.Info("Approval service setup complete")
 	return nil
 }
@@ -140,6 +144,10 @@ func (a *Service) Run(ctx context.Context) error {
 			return eventSource.Run(ctx)
 		})
 	}
+
+	eg.Go(func() error {
+		return a.processor.Run(ctx)
+	})
 
 	slog.Default().Info("Approval service started")
 	// Block until an event source has a fatal error
@@ -181,6 +189,53 @@ func (a *Service) newServer(cfg config.Root, processor EventProcessor) (*eventso
 	}
 
 	return eventsources.NewServer(opts...)
+}
+
+func (a *ApprovalService) newProcessor(ctx context.Context, cfg config.Root, tele *teleportclient.Client) (EventProcessor, error) {
+	a.log.Info("Initializing coordinator")
+	coord, err := coordination.NewCoordinator(
+		coordination.WithLogger(a.log),
+		coordination.GitHubWorkflowLeaseDuration(1*time.Minute),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("creating coordinator: %w", err)
+	}
+
+	a.log.Info("Initializing event processor")
+
+	// Initialize GitHub event sources
+	a.log.Info("Initializing GitHub event sources")
+	sp := &eventprocessor.SourceProcessors{
+		GitHub: []*eventprocessor.GitHubSourceProcessor{},
+	}
+
+	externalStore, err := store.NewRepository(store.WithGitHubLogger(a.log))
+	if err != nil {
+		return nil, fmt.Errorf("creating external store: %w", err)
+	}
+	for _, gh := range cfg.EventSources.GitHub {
+		a.log.Info("Initializing GitHub event source", "org", gh.Org, "repo", gh.Repo)
+
+		ghProcessor, err := githubprocessor.New(ctx, gh, tele, externalStore.GitHub, githubprocessor.WithLogger(a.log))
+		if err != nil {
+			return nil, fmt.Errorf("creating GitHub processor: %w", err)
+		}
+		sp.GitHub = append(sp.GitHub, &eventprocessor.GitHubSourceProcessor{
+			Org:                    gh.Org,
+			Repo:                   gh.Repo,
+			TeleportRole:           cfg.ApprovalService.Teleport.RoleToRequest,
+			AccessRequestProcessor: ghProcessor,
+		})
+	}
+
+	processor, err := eventprocessor.New(ctx, cfg.ApprovalService.Teleport, sp, coord,
+		eventprocessor.WithLogger(a.log),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("initializing event processor: %w", err)
+	}
+
+	return processor, nil
 }
 
 // This is a simple healthcheck handler that checks if the server is healthy.
