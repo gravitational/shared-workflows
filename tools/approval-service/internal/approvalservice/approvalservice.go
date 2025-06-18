@@ -6,8 +6,6 @@ import (
 	"log/slog"
 	"net/http"
 
-	"time"
-
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/approvalservice/config"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/approvalservice/coordination"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/approvalservice/eventprocessor"
@@ -178,10 +176,7 @@ func (a *ApprovalService) newServer(cfg config.Root, processor EventProcessor) (
 
 func (a *ApprovalService) newProcessor(ctx context.Context, cfg config.Root, tele *teleportclient.Client) (EventProcessor, error) {
 	a.log.Info("Initializing coordinator")
-	coord, err := coordination.NewCoordinator(
-		coordination.WithLogger(a.log),
-		coordination.GitHubWorkflowLeaseDuration(1*time.Minute),
-	)
+	coord, err := coordination.NewCoordinator()
 	if err != nil {
 		return nil, fmt.Errorf("creating coordinator: %w", err)
 	}

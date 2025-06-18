@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/gravitational/shared-workflows/tools/approval-service/internal/approvalservice/coordination"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/approvalservice/sources/accessrequest"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/approvalservice/sources/githubevents"
 	"github.com/gravitational/teleport/api/types"
@@ -64,10 +63,6 @@ func (p *Processor) processDeploymentReviewEvent(ctx context.Context, e githubev
 	defer cancel()
 	err := p.coordinator.LeaseGitHubWorkflow(ctx, e.Organization, e.Repository, e.WorkflowID)
 	if err != nil {
-		if err == coordination.ErrInternalRateLimitExceeded {
-			p.log.Debug("internal rate limit exceeded for GitHub workflow lease", "workflowID", e.WorkflowID)
-			return nil
-		}
 		return fmt.Errorf("leasing GitHub workflow: %w", err)
 	}
 
