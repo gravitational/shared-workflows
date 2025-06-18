@@ -193,10 +193,7 @@ func (a *Service) newServer(cfg config.Root, processor EventProcessor) (*eventso
 
 func (a *ApprovalService) newProcessor(ctx context.Context, cfg config.Root, tele *teleportclient.Client) (EventProcessor, error) {
 	a.log.Info("Initializing coordinator")
-	coord, err := coordination.NewCoordinator(
-		coordination.WithLogger(a.log),
-		coordination.GitHubWorkflowLeaseDuration(1*time.Minute),
-	)
+	coord, err := coordination.NewCoordinator()
 	if err != nil {
 		return nil, fmt.Errorf("creating coordinator: %w", err)
 	}

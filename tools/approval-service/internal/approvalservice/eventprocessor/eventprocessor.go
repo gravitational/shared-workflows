@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/approvalservice/config"
+	"github.com/gravitational/shared-workflows/tools/approval-service/internal/approvalservice/coordination"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/approvalservice/eventprocessor/store"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/approvalservice/sources/githubevents"
 	"github.com/gravitational/teleport/api/types"
@@ -34,16 +35,9 @@ type Processor struct {
 	githubProcessors   map[string]*GitHubSourceProcessor
 	deployReviewEventC chan githubevents.DeploymentReviewEvent
 
-	coordinator Coordinator
+	coordinator coordination.Coordinator
 
 	log *slog.Logger
-}
-
-// Coordinator is an interface that defines methods for coordinating tasks among multiple instances of the approval service.
-// Mainly used for ensuring that only one instance of the approval service is handling a specific task at a time.
-type Coordinator interface {
-	LeaseAccessRequest(ctx context.Context, id string) error
-	LeaseGitHubWorkflow(ctx context.Context, org, repo string, workflowID int64) error
 }
 
 // SourceProcessors contains the a subset of processors that are used to handle events from different sources.
@@ -67,7 +61,7 @@ func WithLogger(logger *slog.Logger) Opt {
 }
 
 // New creates a new Processor instance.
-func New(ctx context.Context, teleConfig config.Teleport, sp *SourceProcessors, coordinator Coordinator, opts ...Opt) (*Processor, error) {
+func New(ctx context.Context, teleConfig config.Teleport, sp *SourceProcessors, coordinator coordination.Coordinator, opts ...Opt) (*Processor, error) {
 	p := &Processor{
 		teleportUser:     teleConfig.User,
 		sp:               sp,
