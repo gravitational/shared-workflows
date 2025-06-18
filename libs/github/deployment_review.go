@@ -2,16 +2,19 @@ package github
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"io"
 
 	"github.com/google/go-github/v71/github"
 )
 
+// PendingDeploymentApprovalState represents the state of a pending deployment approval.
 type PendingDeploymentApprovalState string
 
 const (
+	// PendingDeploymentApprovalStateApproved indicates that the deployment protection rule is approved.
 	PendingDeploymentApprovalStateApproved PendingDeploymentApprovalState = "approved"
+	// PendingDeploymentApprovalStateRejected indicates that the deployment protection rule is rejected.
 	PendingDeploymentApprovalStateRejected PendingDeploymentApprovalState = "rejected"
 )
 
@@ -24,14 +27,10 @@ func (c *Client) ReviewDeploymentProtectionRule(ctx context.Context, org, repo s
 		Comment:         comment,
 	})
 
-	// Sometimes the error can be eaten by the underlying client library.
-	// This is a workaround to get the error from the response body.
 	if err != nil {
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return fmt.Errorf("reading response body: %w", err)
-		}
-		return fmt.Errorf("unexpected response %q: %w", body, err)
+		// Attempt to read the response body for more details on the error.
+		err = errors.Join(err, errorFromBody(resp.Body))
+		return fmt.Errorf("ReviewCustomDeploymentProtectionRule API call: %w", err)
 	}
 
 	return nil

@@ -120,12 +120,12 @@ func NewHandler(eventHandler EventHandler, opts ...Opt) (*Handler, error) {
 // Headers is a list of special headers that are sent with a webhook request.
 // For more information, see: https://docs.github.com/en/webhooks/webhook-events-and-payloads#delivery-headers
 type Headers struct {
-	// GithubHookID is the unique identifier of the webhook.
-	GithubHookID string
-	// GithubEvent is the type of event that triggered the delivery.
-	GithubEvent string
-	// GithubDelivery is a globally unique identifier (GUID) to identify the event
-	GithubDelivery string
+	// GitHubHookID is the unique identifier of the webhook.
+	GitHubHookID string
+	// GitHubEvent is the type of event that triggered the delivery.
+	GitHubEvent string
+	// GitHubDelivery is a globally unique identifier (GUID) to identify the event
+	GitHubDelivery string
 	// GitHubHookInstallationTargetType is the type of resource where the webhook was created.
 	GitHubHookInstallationTargetType string
 	// GitHubHookInstallationTargetID is the unique identifier of the resource where the webhook was created.
@@ -139,12 +139,11 @@ type Headers struct {
 
 // ServeHTTP handles a webhook request.
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	defer r.Body.Close()
 	// Parse headers for debugging and audit purposes.
 	head := Headers{
-		GithubHookID:                     r.Header.Get("X-GitHub-Hook-ID"),
-		GithubEvent:                      r.Header.Get("X-GitHub-Event"),
-		GithubDelivery:                   r.Header.Get("X-GitHub-Delivery"),
+		GitHubHookID:                     r.Header.Get("X-GitHub-Hook-ID"),
+		GitHubEvent:                      r.Header.Get("X-GitHub-Event"),
+		GitHubDelivery:                   r.Header.Get("X-GitHub-Delivery"),
 		GitHubHookInstallationTargetType: r.Header.Get("X-GitHub-Hook-Installation-Target-Type"),
 		GitHubHookInstallationTargetID:   r.Header.Get("X-GitHub-Hook-Installation-Target-ID"),
 		HubSignature256:                  r.Header.Get("X-Hub-Signature-256"),
@@ -152,7 +151,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Signature is present but no secret token is set.
 	// This indicates an issues with the webhook configuration.
-	if h.secretToken == nil && head.HubSignature256 != "" {
+	if len(h.secretToken) == 0 && head.HubSignature256 != "" {
 		h.log.Error("received signature but no secret token is set", "github_headers", head)
 		http.Error(w, "invalid request", http.StatusInternalServerError)
 		return
@@ -165,7 +164,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	event, err := github.ParseWebHook(head.GithubEvent, payload)
+	event, err := github.ParseWebHook(head.GitHubEvent, payload)
 	if err != nil {
 		h.log.Error("failed to parse webhook event", "error", err)
 		http.Error(w, "invalid request", http.StatusBadRequest)
@@ -186,9 +185,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // It presents a structured view of the headers for logging.
 func (h *Headers) LogValue() slog.Value {
 	return slog.GroupValue(
-		slog.String("github_hook_id", h.GithubHookID),
-		slog.String("github_event", h.GithubEvent),
-		slog.String("github_delivery", h.GithubDelivery),
+		slog.String("github_hook_id", h.GitHubHookID),
+		slog.String("github_event", h.GitHubEvent),
+		slog.String("github_delivery", h.GitHubDelivery),
 		slog.String("github_hook_installation_target_type", h.GitHubHookInstallationTargetType),
 		slog.String("github_hook_installation_target_id", h.GitHubHookInstallationTargetID),
 		slog.String("hub_signature_256", h.HubSignature256),
