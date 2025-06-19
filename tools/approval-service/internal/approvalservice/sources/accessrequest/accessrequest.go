@@ -16,6 +16,7 @@ import (
 type EventWatcher struct {
 	teleportClient *teleportclient.Client
 	reviewHandler  ReviewHandler
+	watch          types.Watcher
 
 	requesterFilter string
 
@@ -23,6 +24,8 @@ type EventWatcher struct {
 }
 
 // ReviewHandler is an interface for handling approval and rejection events.
+// When an Access Request is approved or denied, the plugin will call the HandleReview method.
+// The handler should implement the logic to process the review, such as sending notifications or updating records.
 type ReviewHandler interface {
 	HandleReview(ctx context.Context, req types.AccessRequest) error
 }
@@ -41,6 +44,8 @@ func WithLogger(logger *slog.Logger) Opt {
 	}
 }
 
+// WithRequesterFilter sets a filter for the requester of Access Requests.
+// This allows the plugin to only process requests from a specific user.
 func WithRequesterFilter(requester string) Opt {
 	return func(w *EventWatcher) error {
 		if requester == "" {
@@ -74,13 +79,8 @@ func NewEventWatcher(client *teleportclient.Client, handler ReviewHandler, opts 
 	return p, nil
 }
 
+// Setup initializes the plugin by creating a new watcher for Access Requests.
 func (w *EventWatcher) Setup(ctx context.Context) error {
-	return nil
-}
-
-// Run starts the plugin and listens for events.
-// It will block until the context is cancelled.
-func (w *EventWatcher) Run(ctx context.Context) (err error) {
 	watch, err := w.teleportClient.NewWatcher(ctx, types.Watch{
 		Kinds: []types.WatchKind{
 			// AccessRequest is the resource we are interested in.
@@ -94,35 +94,33 @@ func (w *EventWatcher) Run(ctx context.Context) (err error) {
 	if err != nil {
 		return fmt.Errorf("creating watcher from teleport client: %w", err)
 	}
+	w.watch = watch
+	return nil
+}
+
+// Run starts processing events from the Teleport watcher.
+// It will block until the context is cancelled.
+func (w *EventWatcher) Run(ctx context.Context) (err error) {
 	defer func() {
-		err = errors.Join(err, watch.Close())
+		err = errors.Join(err, w.watch.Close())
 	}()
 
 	w.log.Info("Starting the watcher job")
 
 	for {
 		select {
-		case e := <-watch.Events():
+		case e := <-w.watch.Events():
 			if err := w.handleEvent(ctx, e); err != nil {
 				w.log.Error("Error handling event", "error", err)
 			}
-		case <-watch.Done():
-			if err := watch.Error(); err != nil {
+		case <-w.watch.Done():
+			if err := w.watch.Error(); err != nil {
 				return fmt.Errorf("watcher error: %w", err)
 			}
 			w.log.Info("The watcher job is finished")
 			return nil
 		}
 	}
-}
-
-func (w *EventWatcher) buildAccessRequestFilter() map[string]string {
-	m := map[string]string{}
-	if w.requesterFilter != "" {
-		m["requester"] = w.requesterFilter
-	}
-
-	return m
 }
 
 // handleEvent processes a single event received from the Teleport watcher.
@@ -155,4 +153,14 @@ func (w *EventWatcher) handleEvent(ctx context.Context, event types.Event) error
 	}
 
 	return nil
+}
+
+// buildAccessRequestFilter builds a filter for Access Requests based on the requester.
+func (w *EventWatcher) buildAccessRequestFilter() map[string]string {
+	m := map[string]string{}
+	if w.requesterFilter != "" {
+		m["requester"] = w.requesterFilter
+	}
+
+	return m
 }
