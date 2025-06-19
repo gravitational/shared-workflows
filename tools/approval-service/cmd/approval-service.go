@@ -78,9 +78,5 @@ func parseConfig(path string) (cfg config.Root, err error) {
 		return cfg, fmt.Errorf("validating config: %w", err)
 	}
 
-	if err := cfg.Validate(); err != nil {
-		return cfg, fmt.Errorf("validating config: %w", err)
-	}
-
 	return cfg, nil
 }
