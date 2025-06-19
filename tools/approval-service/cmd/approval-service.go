@@ -9,13 +9,13 @@ import (
 	"syscall"
 
 	"github.com/alecthomas/kong"
+	"github.com/goccy/go-yaml"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/approvalservice"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/approvalservice/config"
-	"gopkg.in/yaml.v2"
 )
 
 type CLI struct {
-	ConfigFilePath string `name:"config" short:"c" type:"existingfile" env:"PAS_CONFIG_FILE" default:"/etc/approval-service/config.yaml" help:"Path to the configuration file."`
+	ConfigFilePath string `name:"config" short:"c" type:"existingfile" env:"APPROVAL_SERVICE_CONFIG_FILE" default:"/etc/approval-service/config.yaml" help:"Path to the configuration file."`
 }
 
 func main() {
@@ -28,7 +28,7 @@ func main() {
 func (cli *CLI) Run() error {
 	cfg, err := parseConfig(cli.ConfigFilePath)
 	if err != nil {
-		return err
+		return fmt.Errorf("parsing config: %w", err)
 	}
 
 	svc, err := approvalservice.NewApprovalService(context.Background(), cfg)
@@ -55,7 +55,7 @@ func parseConfig(path string) (cfg config.Root, err error) {
 		return cfg, fmt.Errorf("reading config file %q: %w", path, err)
 	}
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return cfg, err
+		return cfg, fmt.Errorf("unmarshalling config file %q: %w", path, err)
 	}
 
 	if err := cfg.Validate(); err != nil {

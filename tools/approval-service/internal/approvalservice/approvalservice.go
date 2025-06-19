@@ -73,7 +73,7 @@ func NewApprovalService(ctx context.Context, cfg config.Root, opts ...Opt) (*App
 	// Teleport client is common to event source and processor
 	tele, err := newTeleportClientFromConfig(a.ctx, cfg.ApprovalService.Teleport)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("creating new teleport client from config: %w", err)
 	}
 
 	// Initialize server that listens for webhook events
@@ -85,14 +85,14 @@ func NewApprovalService(ctx context.Context, cfg config.Root, opts ...Opt) (*App
 
 	// Initialize AccessRequest plugin that sources events from Teleport
 	a.log.Info("Initializing access request plugin")
-	accessPlugin, err := accessrequest.NewPlugin(
+	accessPlugin, err := accessrequest.NewEventWatcher(
 		tele,
 		nil, // TODO: Implemented in next PR
 		accessrequest.WithRequesterFilter(cfg.ApprovalService.Teleport.User),
 		accessrequest.WithLogger(a.log),
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("creating access request plugin: %w", err)
 	}
 	a.eventSources = append(a.eventSources, accessPlugin)
 
