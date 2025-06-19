@@ -135,21 +135,21 @@ func (w *EventWatcher) handleEvent(ctx context.Context, event types.Event) error
 		return nil
 	}
 
-	r, ok := event.Resource.(types.AccessRequest)
+	req, ok := event.Resource.(types.AccessRequest)
 	if !ok {
 		w.log.Warn("Unknown event received, skipping.", "kind", event.Resource.GetKind(), "type", fmt.Sprintf("%T", event.Resource))
 		return nil
 	}
 
-	switch r.GetState() {
+	switch req.GetState() {
 	case types.RequestState_PENDING:
-		w.log.Info("Received a new access request", "access_request_name", r.GetName())
+		w.log.Info("Received a new access request", "access_request_name", req.GetName())
 	case types.RequestState_APPROVED:
-		return w.reviewHandler.HandleReview(ctx, r)
+		return w.reviewHandler.HandleReview(ctx, req)
 	case types.RequestState_DENIED:
-		return w.reviewHandler.HandleReview(ctx, r)
+		return w.reviewHandler.HandleReview(ctx, req)
 	default:
-		w.log.Warn("Unknown access request state, skipping", "access_request_name", r.GetName(), "state", r.GetState())
+		w.log.Warn("Unknown access request state, skipping", "access_request_name", req.GetName(), "state", req.GetState())
 	}
 
 	return nil
