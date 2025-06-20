@@ -17,22 +17,19 @@ import (
 )
 
 // Processor manages changes to the state of Access Requests and their relation to deployment events (e.g. GitHub deployment review events).
-// It delegates the actual processing of the events to the appropriate processor configured in [SourceProcessors].
-// It's primary purpose is to ensure that events are handled by the appropriate processor.
+// It acts as a broker for the various event sources, ensuring that events are processed by the appropriate consumers.
 type Processor struct {
-	sp *SourceProcessors
-
 	store store.ProcessorService
 
 	teleportUser    string
 	requestTTLHours time.Duration
 
-	// githubProcessors is a map of GitHub source processors.
+	// githubConsumers is a map of GitHub source processors.
 	// The key is a string of the form "org/repo" and the value is the GitHub source processor.
 	// This is used to look up the GitHub source processor for a given GitHub event or Access Request.
 	// not safe for concurrent read/write
 	// this is written to during init and only read concurrently during operation.
-	githubProcessors   map[string]*GitHubSourceProcessor
+	githubConsumers    map[string]*GitHubConsumer
 	deployReviewEventC chan githubevents.DeploymentReviewEvent
 
 	coordinator coordination.Coordinator
@@ -40,10 +37,10 @@ type Processor struct {
 	log *slog.Logger
 }
 
-// SourceProcessors contains the a subset of processors that are used to handle events from different sources.
+// Consumers contains the a subset of processors that are used to handle events from different sources.
 // They are responsible for doing the actual work of processing the events and updating the state of Access Requests.
-type SourceProcessors struct {
-	GitHub []*GitHubSourceProcessor
+type Consumers struct {
+	GitHub []*GitHubConsumer
 }
 
 // Opt is a functional option for configuring the Processor.
@@ -61,14 +58,13 @@ func WithLogger(logger *slog.Logger) Opt {
 }
 
 // New creates a new Processor instance.
-func New(ctx context.Context, teleConfig config.Teleport, sp *SourceProcessors, coordinator coordination.Coordinator, opts ...Opt) (*Processor, error) {
+func New(ctx context.Context, teleConfig config.Teleport, sp *Consumers, coordinator coordination.Coordinator, opts ...Opt) (*Processor, error) {
 	p := &Processor{
-		teleportUser:     teleConfig.User,
-		sp:               sp,
-		requestTTLHours:  cmp.Or(time.Duration(teleConfig.RequestTTLHours)*time.Hour, 7*24*time.Hour),
-		githubProcessors: make(map[string]*GitHubSourceProcessor),
-		coordinator:      coordinator,
-		log:              slog.Default(),
+		teleportUser:    teleConfig.User,
+		requestTTLHours: cmp.Or(time.Duration(teleConfig.RequestTTLHours)*time.Hour, 7*24*time.Hour),
+		githubConsumers: make(map[string]*GitHubConsumer),
+		coordinator:     coordinator,
+		log:             slog.Default(),
 	}
 
 	for _, opt := range opts {
@@ -77,14 +73,15 @@ func New(ctx context.Context, teleConfig config.Teleport, sp *SourceProcessors, 
 		}
 	}
 
-	for _, gh := range p.sp.GitHub {
-		p.log.Info("Registering GitHub source processor", "id", githubID(gh.Org, gh.Repo))
-		p.githubProcessors[githubID(gh.Org, gh.Repo)] = gh
+	for _, gh := range sp.GitHub {
+		p.log.Info("Registering GitHub consumers", "id", githubID(gh.Org, gh.Repo))
+		p.githubConsumers[githubID(gh.Org, gh.Repo)] = gh
 	}
 
 	return p, nil
 }
 
+// Run starts the Processor and starts receiving events from the event sources.
 func (p *Processor) Run(ctx context.Context) error {
 	eg, ctx := errgroup.WithContext(ctx)
 
