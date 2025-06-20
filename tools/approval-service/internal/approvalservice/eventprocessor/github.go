@@ -11,8 +11,8 @@ import (
 	"github.com/gravitational/teleport/api/types"
 )
 
-// GitHubSourceProcessor processes GitHub events and manages the state of Access Requests for them.
-type GitHubSourceProcessor struct {
+// GitHubConsumer processes GitHub events and manages the state of Access Requests for them.
+type GitHubConsumer struct {
 	// Identifiers for the GitHub source.
 	Org  string
 	Repo string
@@ -55,6 +55,8 @@ func (p *Processor) githubEventListener(ctx context.Context) error {
 	}
 }
 
+// processDeploymentReviewEvent is the consumer for GitHub deployment review events.
+// It processes the event by leasing the GitHub workflow, checking for existing Access Requests, and creating new ones if necessary.
 func (p *Processor) processDeploymentReviewEvent(ctx context.Context, e githubevents.DeploymentReviewEvent) error {
 	// Attempt to lease the GitHub workflow for the event.
 	// This is used to prevent multiple processes from handling the same event at the same time which would result in
@@ -69,7 +71,7 @@ func (p *Processor) processDeploymentReviewEvent(ctx context.Context, e githubev
 	p.log.Info("processing GitHub deployment review event", "event", e)
 
 	id := githubID(e.Organization, e.Repository)
-	sp, ok := p.githubProcessors[id]
+	sp, ok := p.githubConsumers[id]
 	if !ok {
 		return fmt.Errorf("no GitHub processor for %s/%s", e.Organization, e.Repository)
 	}
@@ -113,7 +115,7 @@ func (p *Processor) handleGitHubReview(ctx context.Context, req types.AccessRequ
 	if err != nil {
 		return fmt.Errorf("getting GitHub processor ID: %w", err)
 	}
-	sp, ok := p.githubProcessors[id]
+	sp, ok := p.githubConsumers[id]
 	if !ok {
 		return fmt.Errorf("no GitHub processor matching ID %q for Access Request %q", id, req.GetName())
 	}

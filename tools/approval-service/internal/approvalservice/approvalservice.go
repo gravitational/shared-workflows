@@ -185,8 +185,8 @@ func (a *ApprovalService) newProcessor(ctx context.Context, cfg config.Root, tel
 
 	// Initialize GitHub event sources
 	a.log.Info("Initializing GitHub event sources")
-	sp := &eventprocessor.SourceProcessors{
-		GitHub: []*eventprocessor.GitHubSourceProcessor{},
+	sp := &eventprocessor.Consumers{
+		GitHub: []*eventprocessor.GitHubConsumer{},
 	}
 
 	externalStore, err := store.NewRepository(store.WithGitHubLogger(a.log))
@@ -200,7 +200,7 @@ func (a *ApprovalService) newProcessor(ctx context.Context, cfg config.Root, tel
 		if err != nil {
 			return nil, fmt.Errorf("creating GitHub processor: %w", err)
 		}
-		sp.GitHub = append(sp.GitHub, &eventprocessor.GitHubSourceProcessor{
+		sp.GitHub = append(sp.GitHub, &eventprocessor.GitHubConsumer{
 			Org:                    gh.Org,
 			Repo:                   gh.Repo,
 			TeleportRole:           cfg.ApprovalService.Teleport.RoleToRequest,
