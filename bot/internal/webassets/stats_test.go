@@ -44,11 +44,11 @@ func TestLoadStats(t *testing.T) {
 					"vendor.js": 60000,
 				},
 				FileSizes: map[string]int64{
-					"app.js":    50000,
+					"app.js":     50000,
 					"styles.css": 25000,
 				},
 				FileGzipSizes: map[string]int64{
-					"app.js":    15000,
+					"app.js":     15000,
 					"styles.css": 8000,
 				},
 				ModuleSizes: map[string]int64{
@@ -105,9 +105,9 @@ func TestLoadStats(t *testing.T) {
 
 func TestLoadStats_Errors(t *testing.T) {
 	tests := []struct {
-		name      string
-		setup     func(string) string
-		errorMsg  string
+		name     string
+		setup    func(string) string
+		errorMsg string
 	}{
 		{
 			name: "file not found",
