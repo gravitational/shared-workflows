@@ -82,6 +82,8 @@ func main() {
 		err = b.CheckChangelog(ctx)
 	case "docpaths":
 		err = b.CheckDocsPathsForMissingRedirects(ctx, flags.teleportClonePath)
+	case "webassets":
+		err = b.CompareWebAssetsStats(ctx, flags.webassetsStats)
 	default:
 		err = trace.BadParameter("unknown workflow: %v", flags.workflow)
 	}
@@ -118,6 +120,8 @@ type flags struct {
 	// teleportClonePath is a relative path to a gravitational/teleport
 	// repository clone.
 	teleportClonePath string
+	// webassetsStats is a comma separated paths for the before and after web assets stats.
+	webassetsStats string
 }
 
 func parseFlags() (flags, error) {
@@ -134,6 +138,7 @@ func parseFlags() (flags, error) {
 		buildDir          = flag.String("builddir", "", "an absolute path to a build directory containing artifacts to be checked for bloat")
 		artifacts         = flag.String("artifacts", "", "a comma separated list of compile artifacts to analyze for bloat")
 		teleportClonePath = flag.String("teleport-path", "", "relative path to a gravitational/teleport clone")
+		webassetsStats    = flag.String("stats", "", "comma separated paths for the before and after web assets stats, e.g. 'before.json,after.json' (webassets workflow only)")
 	)
 	flag.Parse()
 
@@ -177,6 +182,7 @@ func parseFlags() (flags, error) {
 		baseStats:         string(stats),
 		buildDir:          *buildDir,
 		teleportClonePath: *teleportClonePath,
+		webassetsStats:    *webassetsStats,
 	}, nil
 }
 
