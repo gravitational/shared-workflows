@@ -43,18 +43,36 @@ func (t *tableBuilder) render() string {
 	var result strings.Builder
 
 	headerRow := make([]string, len(t.headers))
+	separators := make([]string, len(t.headers))
+
 	for i, h := range t.headers {
-		headerRow[i] = fmt.Sprintf(" %s ", h)
+		leftAlign := strings.HasPrefix(h, ":")
+		rightAlign := strings.HasSuffix(h, ":")
+
+		cleanHeader := h
+		if leftAlign {
+			cleanHeader = strings.TrimPrefix(cleanHeader, ":")
+		}
+		if rightAlign {
+			cleanHeader = strings.TrimSuffix(cleanHeader, ":")
+		}
+
+		headerRow[i] = fmt.Sprintf(" %s ", cleanHeader)
+
+		if leftAlign && rightAlign {
+			separators[i] = ":---:"
+		} else if rightAlign {
+			separators[i] = "---:"
+		} else if leftAlign {
+			separators[i] = ":---"
+		} else {
+			separators[i] = "---"
+		}
 	}
 
 	result.WriteString("|")
 	result.WriteString(strings.Join(headerRow, "|"))
 	result.WriteString("|\n")
-
-	separators := make([]string, len(t.headers))
-	for i := range separators {
-		separators[i] = "---"
-	}
 
 	result.WriteString("|")
 	result.WriteString(strings.Join(separators, "|"))

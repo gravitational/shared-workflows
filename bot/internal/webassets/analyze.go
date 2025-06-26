@@ -13,11 +13,12 @@ type moduleAnalysis struct {
 }
 
 type moduleChange struct {
-	name     string
-	size     int64
-	gzipSize int64
-	change   sizeChange
-	isNew    bool
+	name       string
+	size       int64
+	gzipSize   int64
+	change     sizeChange
+	gzipChange sizeChange
+	isNew      bool
 }
 
 func analyzeModules(before, after Stats) moduleAnalysis {
@@ -28,18 +29,22 @@ func analyzeModules(before, after Stats) moduleAnalysis {
 		afterGzipSize := after.ModuleGzipSizes[moduleName]
 
 		var change sizeChange
+		var gzipChange sizeChange
 		if existedBefore {
 			change = calculateSizeChange(beforeSize, afterSize)
+			gzipChange = calculateSizeChange(before.ModuleGzipSizes[moduleName], afterGzipSize)
 		} else {
 			change = calculateSizeChange(0, afterSize)
+			gzipChange = calculateSizeChange(0, afterGzipSize)
 		}
 
 		mc := moduleChange{
-			name:     moduleName,
-			size:     afterSize,
-			gzipSize: afterGzipSize,
-			change:   change,
-			isNew:    !existedBefore,
+			name:       moduleName,
+			size:       afterSize,
+			gzipSize:   afterGzipSize,
+			change:     change,
+			gzipChange: gzipChange,
+			isNew:      !existedBefore,
 		}
 
 		if !existedBefore {
@@ -113,10 +118,11 @@ type bundleAnalysis struct {
 }
 
 type bundleChange struct {
-	name     string
-	size     int64
-	gzipSize int64
-	change   sizeChange
+	name       string
+	size       int64
+	gzipSize   int64
+	change     sizeChange
+	gzipChange sizeChange
 }
 
 func analyzeBundles(before, after Stats) bundleAnalysis {
@@ -133,6 +139,7 @@ func analyzeBundles(before, after Stats) bundleAnalysis {
 
 		if !existedBefore {
 			change.change = calculateSizeChange(0, afterSize)
+			change.gzipChange = calculateSizeChange(0, after.BundleGzipSizes[bundleName])
 
 			result.newBundles = append(result.newBundles, change)
 
@@ -140,6 +147,7 @@ func analyzeBundles(before, after Stats) bundleAnalysis {
 		}
 
 		change.change = calculateSizeChange(beforeSize, afterSize)
+		change.gzipChange = calculateSizeChange(before.BundleGzipSizes[bundleName], after.BundleGzipSizes[bundleName])
 
 		if change.change.diff != 0 {
 			result.changedBundles = append(result.changedBundles, change)

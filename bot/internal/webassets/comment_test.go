@@ -256,54 +256,6 @@ func TestGetChangeIndicator(t *testing.T) {
 	}
 }
 
-func TestFormatSizeChange(t *testing.T) {
-	tests := []struct {
-		name          string
-		change        sizeChange
-		thresholdType string
-		gzipped       bool
-		expected      string
-	}{
-		{
-			name:     "new item",
-			change:   calculateSizeChange(0, 100000),
-			expected: "🆕 97.66 KB (+97.66 KB)",
-		},
-		{
-			name:          "increase",
-			change:        calculateSizeChange(100000, 150000),
-			thresholdType: "file",
-			gzipped:       false,
-			expected:      "146.48 KB (+48.83 KB, +50.0%) ⬆️ 🟢",
-		},
-		{
-			name:          "decrease",
-			change:        calculateSizeChange(150000, 100000),
-			thresholdType: "file",
-			gzipped:       false,
-			expected:      "97.66 KB (-48.83 KB, -33.3%) ⬇️ 🟢",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := formatSizeChange(tt.change, tt.thresholdType, tt.gzipped)
-
-			require.Equal(t, tt.expected, result)
-
-			if tt.change.isNew {
-				require.Contains(t, result, "🆕")
-			}
-
-			require.Contains(t, result, "KB")
-
-			if !tt.change.isNew && tt.change.diff != 0 {
-				require.Contains(t, result, "%")
-			}
-		})
-	}
-}
-
 func TestRenderSummary(t *testing.T) {
 	var b strings.Builder
 

@@ -55,7 +55,9 @@ func (c comparison) String() string {
 	renderHeader(&b)
 	renderSummary(&b, c.totalChange, c.totalGzipChange)
 
-	renderDetailsStart(&b, "Full Report")
+	renderDivider(&b)
+
+	renderDetailsStart(&b, "📈 Detailed Analysis")
 
 	if len(c.newBundles) > 0 {
 		renderNewBundles(&b, c.newBundles)

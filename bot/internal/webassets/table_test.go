@@ -81,6 +81,20 @@ func TestTableBuilder(t *testing.T) {
 				"| row2 |",
 			},
 		},
+		{
+			name:    "left aligned",
+			headers: []string{":Left Aligned", "Right Aligned:"},
+			rows: [][]string{
+				{"left", "right"},
+				{"more left", "more right"},
+			},
+			expected: []string{
+				"| Left Aligned | Right Aligned |",
+				"|:---|---:|",
+				"| left | right |",
+				"| more left | more right |",
+			},
+		},
 	}
 
 	for _, tt := range tests {

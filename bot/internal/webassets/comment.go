@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	commentHeader = "# 📦 Bundle Size Report"
+	commentHeader = "## 📦 Bundle Size Report"
 )
 
 const (
@@ -48,16 +48,18 @@ func renderNewBundles(w io.Writer, bundles []bundleChange) {
 }
 
 func renderBundleChanges(w io.Writer, changes []bundleChange) {
-	fmt.Fprint(w, "### 📊 Bundle Changes\n")
+	fmt.Fprint(w, "### 🎯 Bundle Changes\n")
 
-	headers := []string{"Bundle", "Size", "Change"}
+	headers := []string{":Bundle", "Size:", "Δ Size:", "Gzipped:", "Δ Gzipped:"}
 	rows := make([][]string, len(changes))
 
 	for i, bc := range changes {
 		rows[i] = []string{
-			fmt.Sprintf("`%s`", bc.name),
-			fmt.Sprintf("%s (%s gz)", formatBytes(bc.size), formatBytes(bc.gzipSize)),
-			formatSizeChange(bc.change, "file", false),
+			bold(code(bc.name)),
+			code(formatBytes(bc.size)),
+			formatChangeColumn(bc.change, true),
+			code(formatBytes(bc.gzipSize)),
+			formatChangeColumn(bc.gzipChange, true),
 		}
 	}
 
@@ -73,14 +75,16 @@ func renderNewDependencies(w io.Writer, modules []moduleChange) {
 		limit = len(modules)
 	}
 
-	headers := []string{"Package", "Size"}
+	headers := []string{":Package", "Size:", "Gzipped:", ":Impact:"}
 	rows := make([][]string, 0, limit+1)
 
 	for i := 0; i < limit; i++ {
 		module := modules[i]
 		rows = append(rows, []string{
-			fmt.Sprintf("`%s`", module.name),
-			formatSize(module.size, module.gzipSize),
+			bold(code(module.name)),
+			code(formatBytes(module.size)),
+			code(formatBytes(module.gzipSize)),
+			getChangeColor(module.gzipSize, "module", true),
 		})
 	}
 
@@ -103,19 +107,17 @@ func renderIncreasedDependencies(w io.Writer, modules []moduleChange) {
 		limit = len(modules)
 	}
 
-	headers := []string{"Package", "Size", "Change"}
+	headers := []string{":Package", "Size:", "Δ Size:", "Gzipped:", "Δ Gzipped:"}
 	rows := make([][]string, 0, limit+1)
 
 	for i := 0; i < limit; i++ {
 		module := modules[i]
-		color := getChangeColor(module.change.diff, "module", false)
 		rows = append(rows, []string{
-			fmt.Sprintf("`%s`", module.name),
-			formatSize(module.size, module.gzipSize),
-			fmt.Sprintf("+%s (+%.1f%%) ⬆️ %s",
-				formatBytes(module.change.diff),
-				module.change.percentChange,
-				color),
+			bold(code(module.name)),
+			code(formatBytes(module.size)),
+			formatChangeColumn(module.change, false),
+			code(formatBytes(module.gzipSize)),
+			formatChangeColumn(module.gzipChange, true),
 		})
 	}
 
@@ -137,16 +139,17 @@ func renderNewFiles(w io.Writer, files []moduleChange) {
 		limit = len(files)
 	}
 
-	fmt.Fprintf(w, "### 📄 New Files (Top %d)\n", limit)
+	fmt.Fprint(w, "### 📄 New Files\n")
 
-	headers := []string{"File", "Size"}
+	headers := []string{":File", "Size:", "Gzipped:"}
 	rows := make([][]string, 0, limit+1)
 
 	for i := 0; i < limit; i++ {
 		file := files[i]
 		rows = append(rows, []string{
-			fmt.Sprintf("`%s`", file.name),
-			formatSize(file.size, file.gzipSize),
+			code(file.name),
+			code(formatBytes(file.size)),
+			code(formatBytes(file.gzipSize)),
 		})
 	}
 
@@ -171,21 +174,23 @@ func renderDetailsEnd(w io.Writer) {
 }
 
 func renderTopDependencies(w io.Writer, modules []moduleChange) {
-	fmt.Fprintf(w, "### Top %d Dependencies\n", numberOfTopModules)
+	fmt.Fprintf(w, "### 🏆 Largest %d Dependencies\n", numberOfTopModules)
 
 	limit := numberOfTopModules
 	if len(modules) < limit {
 		limit = len(modules)
 	}
 
-	headers := []string{"Package", "Size"}
+	headers := []string{" :", ":Package", "Size:", "Gzipped:"}
 	rows := make([][]string, limit)
 
 	for i := 0; i < limit; i++ {
 		module := modules[i]
 		rows[i] = []string{
-			fmt.Sprintf("`%s`", module.name),
-			formatSize(module.size, module.gzipSize),
+			fmt.Sprintf("%d", i+1),
+			bold(code(module.name)),
+			code(formatBytes(module.size)),
+			code(formatBytes(module.gzipSize)),
 		}
 	}
 
@@ -196,18 +201,53 @@ func renderSubHeading(w io.Writer, text string) {
 	renderHeading(w, subHeadingLevel, text)
 }
 
-func renderSummary(w io.Writer, totalChange, totalGzipChange sizeChange) {
-	renderSubHeading(w, "Summary")
-
-	fmt.Fprintf(w, "**Total Size:** %s\n", formatSizeChange(totalChange, "file", false))
-	fmt.Fprintf(w, "**Gzipped:** %s\n\n", formatSizeChange(totalGzipChange, "file", true))
+func numberSign(number int64) string {
+	if number < 0 {
+		return "-"
+	}
+	return "+"
 }
 
-func calculateCompressionRatio(totalSize, totalGzipSize int64) float64 {
-	if totalSize == 0 {
-		return 0.0
+func renderDivider(w io.Writer) {
+	fmt.Fprint(w, "---\n\n")
+}
+
+func formatChangeColumn(change sizeChange, gzipped bool) string {
+	sign := numberSign(change.diff)
+
+	return fmt.Sprintf("`%s%s (%s%s%%)` %s",
+		sign,
+		formatBytes(change.diff),
+		sign,
+		fmt.Sprintf("%.1f", change.percentChange),
+		getChangeColor(change.diff, "file", gzipped))
+}
+
+func bold(text string) string {
+	return fmt.Sprintf("**%s**", text)
+}
+
+func code(text string) string {
+	return fmt.Sprintf("`%s`", text)
+}
+
+func renderSummary(w io.Writer, totalChange, totalGzipChange sizeChange) {
+	headers := []string{"", "Size:", "Change:"}
+	rows := [][]string{
+		{
+			"**Total Size**",
+			code(formatBytes(totalChange.after)),
+			formatChangeColumn(totalChange, false),
+		},
+		{
+			"**Gzipped**",
+			code(formatBytes(totalGzipChange.after)),
+			formatChangeColumn(totalGzipChange, true),
+		},
 	}
-	return float64(totalSize-totalGzipSize) / float64(totalSize) * 100
+
+	fmt.Fprint(w, generateMarkdownTable(headers, rows))
+	fmt.Fprint(w, "\n\n")
 }
 
 func formatBytes(bytes int64) string {
@@ -223,39 +263,6 @@ func formatBytes(bytes int64) string {
 	}
 
 	return fmt.Sprintf("%.2f %s", float64(bytes)/math.Pow(1024, float64(i)), sizes[i])
-}
-
-func formatSize(size, gzipSize int64) string {
-	return fmt.Sprintf("%s (%s gzipped)", formatBytes(size), formatBytes(gzipSize))
-}
-
-func formatSizeChange(change sizeChange, thresholdType string, gzipped bool) string {
-	sign := "-"
-	percentSign := ""
-	if change.diff >= 0 {
-		sign = "+"
-		percentSign = "+"
-	}
-
-	percentStr := fmt.Sprintf("%.1f", change.percentChange)
-	indicator := getChangeIndicator(change, thresholdType, gzipped)
-
-	abs := int64(math.Abs(float64(change.diff)))
-
-	if change.isNew {
-		return fmt.Sprintf("🆕 %s (%s%s)",
-			formatBytes(change.after),
-			sign,
-			formatBytes(abs))
-	}
-
-	return fmt.Sprintf("%s (%s%s, %s%s%%) %s",
-		formatBytes(change.after),
-		sign,
-		formatBytes(abs),
-		percentSign,
-		percentStr,
-		indicator)
 }
 
 func getChangeColor(diff int64, thresholdType string, gzipped bool) string {
