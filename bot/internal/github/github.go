@@ -251,6 +251,8 @@ type PullRequestFile struct {
 	// Deletions is the number of lines removed from the file
 	Deletions int
 	// Status is either added, removed, modified, renamed, copied, changed, unchanged
+	// See response schema for the current list of statuses:
+	// https://docs.github.com/en/rest/pulls/pulls?apiVersion=2022-11-28#list-pull-requests-files
 	Status string
 	// PreviousName is the name of the file prior to renaming. The GitHub
 	// API only assigns this if Status is "renamed". For deleted files, the

@@ -285,6 +285,36 @@ func TestMissingRedirectSources(t *testing.T) {
 			redirects: []DocsRedirect{},
 			expected:  []string{},
 		},
+		{
+			description: "page replaced with category index",
+			files: []github.PullRequestFile{
+				{
+					Name:   "docs/pages/installation.mdx",
+					Status: "removed",
+				},
+				{
+					Name:   "docs/pages/installation/installation.mdx",
+					Status: "added",
+				},
+			},
+			redirects: []DocsRedirect{},
+			expected:  []string{},
+		},
+		{
+			description: "category index replaced with page",
+			files: []github.PullRequestFile{
+				{
+					Name:   "docs/pages/installation.mdx",
+					Status: "added",
+				},
+				{
+					Name:   "docs/pages/installation/installation.mdx",
+					Status: "removed",
+				},
+			},
+			redirects: []DocsRedirect{},
+			expected:  []string{},
+		},
 	}
 
 	for _, c := range cases {
