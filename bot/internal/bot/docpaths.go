@@ -111,6 +111,16 @@ func missingRedirectSources(conf []DocsRedirect, files github.PullRequestFiles) 
 		sources[s.Source] = struct{}{}
 	}
 
+	// Make a map of URL paths for added files so we can check whether a
+	// deleted file was actually changed to a category index page or vice
+	// versa.
+	addedPaths := make(map[string]struct{})
+	for _, f := range files {
+		if f.Status == "added" {
+			addedPaths[toURLPath(f.Name)] = struct{}{}
+		}
+	}
+
 	res := []string{}
 	for _, f := range files {
 		if !strings.HasPrefix(f.Name, docsPrefix) {
@@ -130,7 +140,9 @@ func missingRedirectSources(conf []DocsRedirect, files github.PullRequestFiles) 
 			}
 		case "removed":
 			p := toURLPath(f.Name)
-			if _, ok := sources[p]; !ok {
+			_, addedPath := addedPaths[p]
+			_, redirect := sources[p]
+			if !addedPath && !redirect {
 				res = append(res, p)
 			}
 		}
