@@ -18,9 +18,11 @@ package github
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"time"
 
-	go_github "github.com/google/go-github/v63/github"
+	go_github "github.com/google/go-github/v71/github"
 	"golang.org/x/oauth2"
 )
 
@@ -48,4 +50,25 @@ func New(ctx context.Context, token string) (*Client, error) {
 		client: cl,
 		search: cl.Search,
 	}, nil
+}
+
+// Sometimes the error can be eaten by the underlying client library.
+// It seems that in some circumstances we can get an inconsistent body structure and the underlying client library won't parse it correctly.
+// If this is the case for a function, this is a workaround to just get the raw body as an error message.
+func errorFromBody(body io.ReadCloser) error {
+	if body == nil {
+		return nil
+	}
+	defer body.Close()
+
+	data, err := io.ReadAll(body)
+	if err != nil {
+		return fmt.Errorf("reading response body: %w", err)
+	}
+
+	if len(data) == 0 {
+		return nil
+	}
+
+	return fmt.Errorf("unexpected response %q", data)
 }
