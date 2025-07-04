@@ -462,7 +462,7 @@ func (r *Assignments) checkInternalReleaseReviews(reviews []github.Review) error
 // checkInternalReviews checks whether review requirements are satisfied
 // for a PR authored by an internal employee
 func (r *Assignments) checkInternalReviews(e *env.Environment, changes env.Changes, reviews []github.Review, files []github.PullRequestFile) error {
-	setA, setB := getReviewerSets(e.Author, r.repoReviewers(e), r.c.CodeReviewersOmit)
+	setA, setB := getReviewerSets(e.Author, r.repoReviewers(e), map[string]bool{})
 
 	// If this PR touches docs, then approvals from docs reviewers also count.
 	// Add them to set B, as docs reviewers are not required so long as we get
@@ -484,6 +484,14 @@ func (r *Assignments) checkInternalReviews(e *env.Environment, changes env.Chang
 		return nil
 	case a > 0 && b > 0 && a+b >= changes.ApproverCount:
 		return nil
+	}
+
+	if b > 0 && a == 0 {
+		return trace.BadParameter("missing approver from g1 set: %v", setA)
+	}
+
+	if a > 0 && b == 0 {
+		return trace.BadParameter("missing approver from g2 set: %v", setB)
 	}
 
 	return trace.BadParameter("at least one approval required from each set %v %v", setA, setB)

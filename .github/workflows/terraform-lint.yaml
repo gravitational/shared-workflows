@@ -2,6 +2,18 @@ name: Lint (Terraform)
 
 on:
   workflow_call:
+    inputs:
+      tflint_config_path:
+        required: false
+        type: string
+      tflint_minimum_failure_severity:
+        required: false
+        type: string
+        default: warning
+      tflint_force:
+        required: false
+        type: boolean
+        default: false
 
 # TODO: Add job for `terraform validate`
 jobs:
@@ -38,6 +50,10 @@ jobs:
           path: ~/.tflint.d/plugins
           key: tflint-${{ hashFiles('.tflint.hcl') }}
 
+      - name: Set config path
+        if: inputs.tflint_config_path != ''
+        run: echo "TFLINT_CONFIG_FILE=${{ inputs.tflint_config_path }}" >> $GITHUB_ENV
+
       - name: Setup TFLint
         uses: terraform-linters/setup-tflint@19a52fbac37dacb22a09518e4ef6ee234f2d4987 # v4.0.0
 
@@ -48,4 +64,7 @@ jobs:
         run: tflint --init
 
       - name: Run TFLint
-        run: tflint -f compact
+        env:
+          MIN_FAILURE_SEVERITY: --minimum-failure-severity=${{ inputs.tflint_minimum_failure_severity }}
+          FORCE: ${{ inputs.tflint_force && '--force' || '' }}
+        run: tflint -f compact --recursive $MIN_FAILURE_SEVERITY $FORCE

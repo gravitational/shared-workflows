@@ -66,6 +66,12 @@ func (b *Bot) labels(ctx context.Context, files []github.PullRequestFile) ([]str
 		labels = append(labels, string(prSize(files)))
 	}
 
+	c := classifyChanges(b.c, files)
+	if c.Docs && !c.Code {
+		log.Println("Label: Adding no-changelog because this is a docs-only change.")
+		labels = append(labels, NoChangelogLabel)
+	}
+
 	// The branch name is unsafe, but here we are simply adding a label.
 	if b.c.Environment.Repository != env.CloudRepo && isReleaseBranch(b.c.Environment.UnsafeBase) {
 		log.Println("Label: Found backport branch.")
@@ -168,7 +174,7 @@ var prefixes = map[string]map[string][]string{
 		"tools/jobs":                   {"salescenter-job"},
 		"tools/prehog":                 {"prehog"},
 		"tools/salescenter":            {"salescenter"},
-		"tools/tcctl":                  {"tcctl"},
+		"tools/tc":                     {"tc"},
 		"tools/tenantoperator":         {"tenant-operator"},
 		"tools/tenantsync":             {"tenant-operator"},
 		"rfd/":                         {"rfd"},

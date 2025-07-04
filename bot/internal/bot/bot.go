@@ -31,7 +31,7 @@ import (
 
 // isCRDRegex matches Teleport operator CRD file paths.
 // Those files receive a special treatment as they're automatically generated.
-var isCRDRegex = regexp.MustCompile(`.*/resources\.teleport\.dev_[[:alpha:]]+\.yaml$`)
+var isCRDRegex = regexp.MustCompile(`.*/resources\.teleport\.dev_[[:alnum:]]+\.yaml$`)
 
 // Client implements the GitHub API.
 type Client interface {
@@ -280,6 +280,7 @@ func skipFileForSizeCheck(name string) bool {
 		strings.HasSuffix(name, ".snap") ||
 		strings.Contains(name, "webassets/") ||
 		strings.Contains(name, "vendor/") ||
+		strings.Contains(name, "integrations/operator/crdgen/testdata/") ||
 		isCRDRegex.MatchString(name)
 }
 

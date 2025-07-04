@@ -36,15 +36,36 @@ func decodeTestData(t *testing.T, data []byte) []github.ChangelogPR {
 }
 
 func TestToChangelog(t *testing.T) {
-	prsText, err := os.ReadFile(filepath.Join("testdata", "listed-prs.json"))
-	require.NoError(t, err)
-	expectedCL, err := os.ReadFile(filepath.Join("testdata", "expected-cl.md"))
-	require.NoError(t, err)
+	testCases := []struct {
+		name           string
+		expectedFile   string
+		excludePRLinks bool
+	}{
+		{
+			name:           "include-links",
+			expectedFile:   "expected-cl.md",
+			excludePRLinks: false,
+		},
+		{
+			name:           "exclude-links",
+			expectedFile:   "expected-cl-no-links.md",
+			excludePRLinks: true,
+		},
+	}
 
-	prs := decodeTestData(t, prsText)
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			prsText, err := os.ReadFile(filepath.Join("testdata", "listed-prs.json"))
+			require.NoError(t, err)
+			expectedCL, err := os.ReadFile(filepath.Join("testdata", tt.expectedFile))
+			require.NoError(t, err)
 
-	gen := &changelogGenerator{}
-	got, err := gen.toChangelog(prs)
-	assert.NoError(t, err)
-	assert.Equal(t, string(expectedCL), got)
+			prs := decodeTestData(t, prsText)
+
+			gen := &changelogGenerator{excludePRLinks: tt.excludePRLinks}
+			got, err := gen.toChangelog(prs)
+			assert.NoError(t, err)
+			assert.Equal(t, string(expectedCL), got)
+		})
+	}
 }

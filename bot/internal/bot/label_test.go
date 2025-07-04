@@ -56,7 +56,7 @@ func TestLabel(t *testing.T) {
 					Deletions: 10,
 				},
 			},
-			labels: []string{"documentation", string(small)},
+			labels: []string{"documentation", NoChangelogLabel, string(small)},
 		},
 		{
 			desc:   "helm",
@@ -91,7 +91,7 @@ func TestLabel(t *testing.T) {
 					Deletions: 1000,
 				},
 			},
-			labels: []string{"backport", "documentation", string(xlarge)},
+			labels: []string{"backport", "documentation", "no-changelog", string(xlarge)},
 		},
 		{
 			desc:   "web only",
