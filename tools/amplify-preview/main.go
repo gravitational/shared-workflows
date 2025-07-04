@@ -119,6 +119,8 @@ func run(ctx context.Context) error {
 		return fmt.Errorf("amplify job is in %q state", currentJob.Status)
 	}
 
+	slog.Info("amplify job completed", logKeyBranchName, amp.branchName, "job_status", currentJob.Status, "job_id", *currentJob.JobId)
+
 	return nil
 }
 
