@@ -24,9 +24,8 @@ import (
 	"os"
 	"os/signal"
 	"strings"
-	"time"
 
-	"github.com/alecthomas/kingpin/v2"
+	kingpin "github.com/alecthomas/kingpin/v2"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/retry"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -41,11 +40,10 @@ var (
 		"Defines whether Amplify branches should be created if missing, or just lookup existing ones").Envar("CREATE_BRANCHES").Default("false").Bool()
 	wait = kingpin.Flag("wait",
 		"Wait for pending/running job to complete").Envar("WAIT").Default("false").Bool()
-)
-
-const (
-	jobWaitSleepTime    = 30 * time.Second
-	jobWaitTimeAttempts = 40
+	waitRetries = kingpin.Flag("wait-retries",
+		"Number of attempts to wait for pending/running job to complete").Envar("WAIT_RETRIES").Default("40").Int()
+	waitInterval = kingpin.Flag("wait-interval",
+		"Interval between attempts to wait for pending/running job to complete").Envar("WAIT_INTERVAL").Default("30s").Duration()
 )
 
 func main() {
@@ -98,11 +96,15 @@ func run(ctx context.Context) error {
 		return fmt.Errorf("failed to post preview URL: %w", err)
 	}
 
+	setAmplifyInfoToGithubOutputs(branch, currentJob)
+
 	slog.Info("Successfully posted PR comment")
 
 	if *wait {
 		currentJob, activeJob, err = amp.WaitForJobCompletion(ctx, branch, currentJob)
-		if err != nil {
+		if errors.Is(err, errJobTimeoutReached) {
+			return fmt.Errorf("job did not complete within the specified timeout (%dx%s). Please retry this job again manually", *waitRetries, waitInterval.String())
+		} else if err != nil {
 			return fmt.Errorf("failed to follow job status: %w", err)
 		}
 
@@ -116,6 +118,8 @@ func run(ctx context.Context) error {
 		slog.Error("amplify job is in failed state", logKeyBranchName, amp.branchName, "job_status", currentJob.Status, "job_id", *currentJob.JobId)
 		return fmt.Errorf("amplify job is in %q state", currentJob.Status)
 	}
+
+	slog.Info("amplify job completed", logKeyBranchName, amp.branchName, "job_status", currentJob.Status, "job_id", *currentJob.JobId)
 
 	return nil
 }
@@ -145,6 +149,30 @@ func ensureAmplifyDeployment(ctx context.Context, amp AmplifyPreview, branch *ty
 		return currentJob, activeJob, err
 	} else {
 		return nil, nil, fmt.Errorf("failed to lookup amplify job for branch %q: %w", amp.branchName, err)
+	}
+}
+
+func setAmplifyInfoToGithubOutputs(branch *types.Branch, job *types.JobSummary) {
+	kv := make(map[string]string)
+
+	if branch.BranchName != nil {
+		kv["AMPLIFY_BRANCH"] = *branch.BranchName
+	}
+
+	if branch.BranchArn != nil {
+		if appId, err := appIDFromBranchARN(*branch.BranchArn); err != nil {
+			slog.Error("failed to extract app ID from branch ARN", "branch_arn", *branch.BranchArn, "error", err)
+		} else {
+			kv["AMPLIFY_APP_ID"] = appId
+		}
+	}
+
+	if job.JobId != nil {
+		kv["AMPLIFY_JOB_ID"] = *job.JobId
+	}
+
+	if err := setGithubOutputs(kv); err != nil {
+		slog.Error("failed to set Amplify info to GitHub outputs", "error", err)
 	}
 }
 
