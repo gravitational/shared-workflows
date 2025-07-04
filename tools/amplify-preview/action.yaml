@@ -20,6 +20,17 @@ inputs:
   wait_interval:
     default: "30s"
     description: "Interval between checking job status"
+outputs:
+  amplify_branch_name:
+    description: "Name of the Amplify branch created for this preview"
+    value: ${{ steps.amplify_preview.outputs.AMPLIFY_BRANCH }}
+  amplify_app_id:
+    description: "ID of the Amplify app this preview is created for"
+    value: ${{ steps.amplify_preview.outputs.AMPLIFY_APP_ID }}
+  amplify_job_id:
+    description: "ID of the Amplify Job this preview is created for"
+    value: ${{ steps.amplify_preview.outputs.AMPLIFY_JOB_ID }}
+    
 runs:
   using: composite
   steps:
@@ -46,6 +57,7 @@ runs:
         cache-dependency-path: ${{ steps.cache_workaround.outputs.go_sum_path }}
 
     - name: Amplify Preview
+      id: amplify_preview
       env:
         AMPLIFY_APP_IDS: ${{ inputs.app_ids }}
         GIT_BRANCH_NAME: ${{ steps.extract_branch.outputs.branch }}
