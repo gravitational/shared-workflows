@@ -14,6 +14,12 @@ inputs:
   wait:
     default: "false"
     description: "If Amplify deployment is pending/running state wait for it's completion"
+  wait_retries:
+    default: "40"
+    description: "Number of attempts to wait before giving up"
+  wait_interval:
+    default: "30s"
+    description: "Interval between checking job status"
 runs:
   using: composite
   steps:
@@ -45,7 +51,9 @@ runs:
         GIT_BRANCH_NAME: ${{ steps.extract_branch.outputs.branch }}
         CREATE_BRANCHES: ${{ inputs.create_branches }}
         GITHUB_TOKEN: ${{ inputs.github_token }}
-        WAIT: ${{ inputs.wait }} 
+        WAIT: ${{ inputs.wait }}
+        WAIT_RETRIES: ${{ inputs.wait_retries }}
+        WAIT_INTERVAL: ${{ inputs.wait_interval }}
       shell: bash
       working-directory: ${{ github.action_path }}
       run: go run .
