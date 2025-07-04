@@ -24,7 +24,6 @@ import (
 	"os"
 	"os/signal"
 	"strings"
-	"time"
 
 	"github.com/alecthomas/kingpin/v2"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -41,11 +40,10 @@ var (
 		"Defines whether Amplify branches should be created if missing, or just lookup existing ones").Envar("CREATE_BRANCHES").Default("false").Bool()
 	wait = kingpin.Flag("wait",
 		"Wait for pending/running job to complete").Envar("WAIT").Default("false").Bool()
-)
-
-const (
-	jobWaitSleepTime    = 30 * time.Second
-	jobWaitTimeAttempts = 40
+	waitRetries = kingpin.Flag("wait-retries",
+		"Number of attempts to wait for pending/running job to complete").Envar("WAIT_RETRIES").Default("40").Int()
+	waitInterval = kingpin.Flag("wait-interval",
+		"Interval between attempts to wait for pending/running job to complete").Envar("WAIT_INTERVAL").Default("30s").Duration()
 )
 
 func main() {
@@ -104,7 +102,9 @@ func run(ctx context.Context) error {
 
 	if *wait {
 		currentJob, activeJob, err = amp.WaitForJobCompletion(ctx, branch, currentJob)
-		if err != nil {
+		if errors.Is(err, errJobTimeoutReached) {
+			return fmt.Errorf("job did not complete within the specified timeout (%dx%s). Please retry this job again manually", *waitRetries, waitInterval.String())
+		} else if err != nil {
 			return fmt.Errorf("failed to follow job status: %w", err)
 		}
 

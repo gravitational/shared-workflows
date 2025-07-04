@@ -33,9 +33,10 @@ import (
 )
 
 var (
-	errBranchNotFound = errors.New("branch not found")
-	errNoJobForBranch = errors.New("current branch has no jobs")
-	errNilBranch      = errors.New("branch is nil")
+	errBranchNotFound    = errors.New("branch not found")
+	errNoJobForBranch    = errors.New("current branch has no jobs")
+	errNilBranch         = errors.New("branch is nil")
+	errJobTimeoutReached = errors.New("job timeout reached")
 )
 
 const (
@@ -245,7 +246,8 @@ func (amp *AmplifyPreview) GetLatestAndActiveJobs(ctx context.Context, branch *t
 }
 
 func (amp *AmplifyPreview) WaitForJobCompletion(ctx context.Context, branch *types.Branch, job *types.JobSummary) (currentJob, activeJob *types.JobSummary, err error) {
-	for i := range jobWaitTimeAttempts {
+	jobCompleted := false
+	for i := range *waitRetries {
 		jobSummaries, err := amp.findJobsByID(ctx, branch, true, *job.JobId)
 		if err != nil {
 			return nil, nil, err
@@ -257,12 +259,17 @@ func (amp *AmplifyPreview) WaitForJobCompletion(ctx context.Context, branch *typ
 			activeJob = &jobSummaries[1]
 		}
 		if isAmplifyJobCompleted(currentJob) {
+			jobCompleted = true
 			break
 		}
 
-		slog.Info(fmt.Sprintf("Job is not in a completed state yet. Sleeping for %s", jobWaitSleepTime.String()),
-			logKeyBranchName, amp.branchName, "job_status", currentJob.Status, "job_id", *currentJob.JobId, "attempts_left", jobWaitTimeAttempts-i)
-		time.Sleep(jobWaitSleepTime)
+		slog.Info(fmt.Sprintf("Job is not in a completed state yet. Sleeping for %s", waitInterval.String()),
+			logKeyBranchName, amp.branchName, "job_status", currentJob.Status, "job_id", *currentJob.JobId, "attempts_left", *waitRetries-i)
+		time.Sleep(*waitInterval)
+	}
+
+	if !jobCompleted {
+		return nil, nil, errJobTimeoutReached
 	}
 
 	return currentJob, activeJob, nil
@@ -278,7 +285,7 @@ func appIDFromBranchARN(branchArn string) (string, error) {
 		return arnParts[1], nil
 	}
 
-	return "", fmt.Errorf("Invalid branch ARN")
+	return "", fmt.Errorf("invalid branch ARN")
 }
 
 func isAmplifyJobCompleted(job *types.JobSummary) bool {
