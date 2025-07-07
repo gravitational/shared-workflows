@@ -23,10 +23,11 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/gravitational/trace"
+
 	"github.com/gravitational/shared-workflows/bot/internal/env"
 	"github.com/gravitational/shared-workflows/bot/internal/github"
 	"github.com/gravitational/shared-workflows/bot/internal/review"
-	"github.com/gravitational/trace"
 )
 
 // isCRDRegex matches Teleport operator CRD file paths.
@@ -67,6 +68,9 @@ type Client interface {
 
 	// CreateComment will leave a comment on an Issue or Pull Request.
 	CreateComment(ctx context.Context, organization string, repository string, number int, comment string) error
+
+	// EditComment will update an existing comment on an Issue or Pull Request.
+	EditComment(ctx context.Context, organization string, repository string, commentID int64, comment string) error
 
 	// ListComments will list all comments on an Issue or Pull Request.
 	ListComments(ctx context.Context, organization string, repository string, number int) ([]github.Comment, error)
