@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"time"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -15,8 +16,8 @@ import (
 // It's typical for build systems to send events via webhooks.
 // This consolidates webhook events into a single server with a single endpoint.
 type Server struct {
-	addr     string
-	ln       net.Listener
+	addr     string       // Address to listen on (ignored if ln is set)
+	ln       net.Listener // Custom listener; if set, addr is ignored
 	handlers map[string]http.Handler
 
 	mux *http.ServeMux
@@ -38,35 +39,26 @@ func WithAddress(addr string) ServerOpt {
 	}
 }
 
-// WithListener sets the listener for the server.
-// This is an alternative to WithAddress for cases where it's more useful to set the listener directly (e.g. testing).
-func WithListener(ln net.Listener) ServerOpt {
+// WithHandler registers a [http.Handler] for a specific path.
+// The pattern follows the same rules defined for [http.ServeMux].
+// This function has some logic to avoid panics that may occur when registering handlers such as:
+// - if the pattern is empty, return an error.
+// - if the handler is nil, return an error.
+// - if the pattern is already registered by another handler, return an error.
+func WithHandler(pattern string, handler http.Handler) ServerOpt {
 	return func(s *Server) error {
-		if ln == nil {
-			return errors.New("listener cannot be nil")
-		}
-		s.ln = ln
-		return nil
-	}
-}
-
-func WithHandler(path string, handler http.Handler) ServerOpt {
-	return func(s *Server) error {
-		if path == "" {
+		if pattern == "" {
 			return errors.New("path cannot be empty")
 		}
 		if handler == nil {
 			return errors.New("handler cannot be nil")
 		}
-		if s.handlers == nil {
-			s.handlers = make(map[string]http.Handler)
-		}
 
 		// Check if the path already exists in the handlers map.
-		if _, ok := s.handlers[path]; ok {
-			return errors.New("handler already exists for path")
+		if _, ok := s.handlers[pattern]; ok {
+			return fmt.Errorf("handler for path %q already exists", pattern)
 		}
-		s.handlers[path] = handler
+		s.handlers[pattern] = handler
 
 		return nil
 	}
@@ -82,7 +74,8 @@ func WithLogger(logger *slog.Logger) ServerOpt {
 
 func NewServer(opt ...ServerOpt) (*Server, error) {
 	s := &Server{
-		log: slog.Default(),
+		log:      slog.Default(),
+		handlers: make(map[string]http.Handler),
 	}
 	for _, o := range opt {
 		if err := o(s); err != nil {
@@ -94,11 +87,16 @@ func NewServer(opt ...ServerOpt) (*Server, error) {
 		return nil, errors.New("address or listener must be set")
 	}
 
+	if len(s.handlers) == 0 {
+		return nil, errors.New("no handlers registered: at least one handler must be registered before starting the server")
+	}
+
 	return s, nil
 }
 
 // Setup sets up the server.
 // This includes starting the listener and setting up any necessary routes.
+// If a custom listener (s.ln) is set, the address (s.addr) is ignored.
 func (s *Server) Setup(ctx context.Context) error {
 	if s.ln == nil {
 		ln, err := net.Listen("tcp", s.addr)
@@ -110,19 +108,45 @@ func (s *Server) Setup(ctx context.Context) error {
 
 	s.mux = http.NewServeMux()
 
+	for path, handler := range s.handlers {
+		s.mux.Handle(path, handler)
+	}
+
 	return nil
 }
 
 // Run starts the server.
 // This blocks until the context is stopped or a fatal error occurs.
 func (s *Server) Run(ctx context.Context) error {
+	srv := &http.Server{
+		Handler: s.mux,
+		BaseContext: func(net.Listener) context.Context {
+			return ctx
+		},
+	}
+
 	eg, ctx := errgroup.WithContext(ctx)
+
+	eg.Go(func() error {
+		// When this returns, the errgroup context will be canceled, which will trigger the shutdown process.
+		return srv.Serve(s.ln)
+	})
+
+	// Listen for context cancellation to gracefully shut down the server.
 	eg.Go(func() error {
 		<-ctx.Done()
-		return s.ln.Close()
+		err := ctx.Err()
+		// Create a new context with a timeout for the shutdown process.
+		// It's likely that if it does take too long, the OS will forcefully terminate the process anyway.
+		shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancelShutdown()
+		if shutdownErr := srv.Shutdown(shutdownCtx); shutdownErr != nil {
+			// Join the context error and shutdown error to ensure both are reported,
+			// as both may provide useful information for debugging shutdown issues.
+			err = errors.Join(err, fmt.Errorf("shutting down server: %w", shutdownErr))
+		}
+		return err
 	})
-	eg.Go(func() error {
-		return http.Serve(s.ln, s.mux)
-	})
+
 	return eg.Wait()
 }
