@@ -35,8 +35,8 @@ type Root struct {
 type ApprovalService struct {
 	// Teleport is the configuration for the Teleport client.
 	Teleport Teleport `yaml:"teleport,omitempty"`
-	// Address is the address the approval service will listen for events on
-	Address string `yaml:"address,omitempty"`
+	// ListenAddr is the address the approval service will listen for events on
+	ListenAddr string `yaml:"listen_addr,omitempty"`
 }
 
 type EventSources struct {

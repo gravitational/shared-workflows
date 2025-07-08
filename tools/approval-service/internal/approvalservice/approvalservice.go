@@ -162,7 +162,7 @@ func newTeleportClientFromConfig(ctx context.Context, cfg config.Teleport) (*tel
 func (a *ApprovalService) newServer(cfg config.Root, processor EventProcessor) (*sources.Server, error) {
 	opts := []sources.ServerOpt{
 		sources.WithLogger(a.log),
-		sources.WithAddress(cfg.ApprovalService.Address),
+		sources.WithAddress(cfg.ApprovalService.ListenAddr),
 		sources.WithHandler("/health", a.healthcheckHandler()),
 	}
 
