@@ -31,13 +31,13 @@ func (cli *CLI) Run() error {
 		return fmt.Errorf("parsing config: %w", err)
 	}
 
-	svc, err := approvalservice.NewApprovalService(context.Background(), cfg)
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+
+	svc, err := approvalservice.NewApprovalService(ctx, cfg)
 	if err != nil {
 		return fmt.Errorf("initializing approval service: %w", err)
 	}
-
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Kill, os.Interrupt, syscall.SIGTERM)
-	defer cancel()
 
 	if err := svc.Setup(ctx); err != nil {
 		return fmt.Errorf("setting up approval service: %w", err)
