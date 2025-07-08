@@ -13,7 +13,8 @@ These are steps that are done before provisioning and deployment
 ### GitHub App
 
 A GitHub App must be created and installed to the repositories you want the tool to manage.
-This will give us credentials necessary to authenticate to approve deployment reviews and also allows 
+This will give us credentials necessary to authenticate to approve deployment reviews and is also necessary to 
+subscribe to GitHub events that are required for the app.
 
 **Repository Permissions**:
 
