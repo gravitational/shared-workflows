@@ -88,10 +88,6 @@ func WithLogger(log *slog.Logger) Opt {
 	}
 }
 
-var defaultOpts = []Opt{
-	WithLogger(slog.Default()),
-}
-
 // NewHandler creates a new webhook handler that implements [http.Handler].
 // The handler will call the eventHandler function when a webhook event is received.
 // Example usage:
@@ -104,14 +100,20 @@ var defaultOpts = []Opt{
 //	))
 func NewHandler(eventHandler EventHandler, opts ...Opt) (*Handler, error) {
 	h := Handler{
+		log:          slog.Default(),
 		eventHandler: eventHandler,
 	}
-	for _, opt := range append(defaultOpts, opts...) {
+	for _, opt := range opts {
 		opt(&h)
 	}
 
 	if !h.payloadValidationDisabled && len(h.secretToken) == 0 {
 		return nil, fmt.Errorf("secret token is required")
+	}
+
+	if h.payloadValidationDisabled {
+		h.log.Warn("payload validation is disabled, webhook will not verify signatures")
+		h.secretToken = []byte{}
 	}
 
 	return &h, nil

@@ -24,7 +24,6 @@ type ApprovalService struct {
 	processor EventProcessor
 
 	log *slog.Logger
-	ctx context.Context
 }
 
 type EventSource interface {
@@ -35,7 +34,7 @@ type EventSource interface {
 	Run(ctx context.Context) error
 }
 
-// EventProcessor provides methods for processing events fromm our event sources.
+// EventProcessor provides methods for processing events from our event sources.
 // This will be passed to the event sources to handle certain actions provided by the event source.
 type EventProcessor interface {
 	Setup(ctx context.Context) error
@@ -58,8 +57,7 @@ func WithLogger(logger *slog.Logger) Opt {
 // An error is returned if the service cannot be initialized e.g. if the Teleport client cannot connect.
 func NewApprovalService(ctx context.Context, cfg config.Root, opts ...Opt) (*ApprovalService, error) {
 	a := &ApprovalService{
-		log:          slog.Default(),
-		eventSources: []EventSource{},
+		log: slog.Default(),
 	}
 
 	// Apply options to the approval service.
@@ -71,13 +69,13 @@ func NewApprovalService(ctx context.Context, cfg config.Root, opts ...Opt) (*App
 	a.log.Info("Initializing approval service")
 
 	// Teleport client is common to event source and processor
-	tele, err := newTeleportClientFromConfig(a.ctx, cfg.ApprovalService.Teleport)
+	tele, err := newTeleportClientFromConfig(ctx, cfg.ApprovalService.Teleport)
 	if err != nil {
 		return nil, fmt.Errorf("creating new teleport client from config: %w", err)
 	}
 
 	// Initialize server that listens for webhook events
-	srv, err := a.newServer(a.ctx, cfg, a.processor)
+	srv, err := a.newServer(cfg, a.processor)
 	if err != nil {
 		return nil, fmt.Errorf("creating server: %w", err)
 	}
@@ -145,7 +143,7 @@ func newTeleportClientFromConfig(ctx context.Context, cfg config.Teleport) (*tel
 	return client, nil
 }
 
-func (a *ApprovalService) newServer(ctx context.Context, cfg config.Root, processor EventProcessor) (*sources.Server, error) {
+func (a *ApprovalService) newServer(cfg config.Root, processor EventProcessor) (*sources.Server, error) {
 	opts := []sources.ServerOpt{
 		sources.WithLogger(a.log),
 		sources.WithAddress(cfg.ApprovalService.Address),

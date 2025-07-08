@@ -102,7 +102,7 @@ func NewSource(cfg config.GitHubSource, processor GitHubEventProcessor, opt ...S
 		opts = append(opts, webhook.WithSecretToken(cfg.Secret))
 	}
 
-	wh, err := webhook.NewHandler(ghes.eventHandler(), opts...)
+	wh, err := webhook.NewHandler(ghes, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("error creating webhook handler: %w", err)
 	}
@@ -116,18 +116,20 @@ func (ghes *Source) Handler() http.Handler {
 	return ghes.handler
 }
 
-func (ghes *Source) eventHandler() webhook.EventHandlerFunc {
-	return func(ctx context.Context, event any) error {
-		switch event := event.(type) {
-		case *github.DeploymentProtectionRuleEvent:
-			return ghes.processDeploymentReviewEvent(ctx, event)
-		case *github.WorkflowDispatchEvent:
-			return errors.New("workflow_dispatch not implemented")
-		default:
-			ghes.log.Debug("unknown event type", "type", fmt.Sprintf("%T", event))
-		}
-		return nil
+// assert that Source implements the webhook.EventHandler interface
+var _ webhook.EventHandler = (*Source)(nil)
+
+// HandleEvent implements the webhook.EventHandler interface
+func (ghes *Source) HandleEvent(ctx context.Context, event any) error {
+	switch event := event.(type) {
+	case *github.DeploymentProtectionRuleEvent:
+		return ghes.processDeploymentReviewEvent(ctx, event)
+	case *github.WorkflowDispatchEvent:
+		return errors.New("workflow_dispatch not implemented")
+	default:
+		ghes.log.Debug("unknown event type", "type", fmt.Sprintf("%T", event))
 	}
+	return nil
 }
 
 // Process a deployment review event.
