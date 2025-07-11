@@ -111,9 +111,13 @@ func NewHandler(eventHandler EventHandler, opts ...Opt) (*Handler, error) {
 		return nil, fmt.Errorf("secret token is required")
 	}
 
+	// If the secret token is set, payload validation will always be enabled.
+	if len(h.secretToken) > 0 {
+		h.payloadValidationDisabled = false
+	}
+
 	if h.payloadValidationDisabled {
 		h.log.Warn("payload validation is disabled, webhook will not verify signatures")
-		h.secretToken = []byte{}
 	}
 
 	return &h, nil
