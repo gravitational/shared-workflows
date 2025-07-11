@@ -25,7 +25,7 @@ import (
 
 	"github.com/google/go-github/v71/github"
 	"github.com/gravitational/shared-workflows/libs/github/webhook"
-	"github.com/gravitational/shared-workflows/tools/approval-service/internal/approvalservice/config"
+	"github.com/gravitational/shared-workflows/tools/approval-service/internal/config"
 )
 
 // Source is a webhook that listens for GitHub events and processes them.

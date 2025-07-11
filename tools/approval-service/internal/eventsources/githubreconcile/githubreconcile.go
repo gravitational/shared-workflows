@@ -21,8 +21,8 @@ import (
 	"time"
 
 	"github.com/gravitational/shared-workflows/libs/github"
-	"github.com/gravitational/shared-workflows/tools/approval-service/internal/approvalservice/sources/accessrequest"
-	"github.com/gravitational/shared-workflows/tools/approval-service/internal/approvalservice/sources/githubevents"
+	"github.com/gravitational/shared-workflows/tools/approval-service/internal/eventsources/accessrequest"
+	"github.com/gravitational/shared-workflows/tools/approval-service/internal/eventsources/githubevents"
 	"github.com/gravitational/teleport/api/types"
 )
 

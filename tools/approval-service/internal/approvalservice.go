@@ -14,7 +14,7 @@
  *  limitations under the License.
  */
 
-package approvalservice
+package internal
 
 import (
 	"context"
@@ -22,15 +22,17 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/gravitational/shared-workflows/tools/approval-service/internal/approvalservice/config"
-	"github.com/gravitational/shared-workflows/tools/approval-service/internal/approvalservice/sources"
-	"github.com/gravitational/shared-workflows/tools/approval-service/internal/approvalservice/sources/accessrequest"
-	"github.com/gravitational/shared-workflows/tools/approval-service/internal/approvalservice/sources/githubevents"
+	"github.com/gravitational/shared-workflows/tools/approval-service/internal/config"
+	"github.com/gravitational/shared-workflows/tools/approval-service/internal/eventsources"
+	"github.com/gravitational/shared-workflows/tools/approval-service/internal/eventsources/accessrequest"
+	"github.com/gravitational/shared-workflows/tools/approval-service/internal/eventsources/githubevents"
 	teleportclient "github.com/gravitational/teleport/api/client"
 
 	"golang.org/x/sync/errgroup"
 )
 
+// ApprovalService configured and runs the various components of the approval service.
+// It sets up event sources and an event processor to handle events from those sources.
 type ApprovalService struct {
 	// eventSources is a list of event sources that the approval service listens to.
 	// This will be things like GitHub webhook events, Teleport access request updates, etc.
@@ -42,6 +44,9 @@ type ApprovalService struct {
 	log *slog.Logger
 }
 
+// EvenrSource provides methods for setting up and running event sources.
+// This is an interface that allows us to abstract different event sources like GitHub webhooks, Teleport access requests, etc.
+// Each event source should implement this interface to provide its own setup and run logic.
 type EventSource interface {
 	// This should do thinks like setup API clients and webhooks.
 	Setup(ctx context.Context) error
@@ -159,22 +164,23 @@ func newTeleportClientFromConfig(ctx context.Context, cfg config.Teleport) (*tel
 	return client, nil
 }
 
-func (a *ApprovalService) newServer(cfg config.Root, processor EventProcessor) (*sources.Server, error) {
-	opts := []sources.ServerOpt{
-		sources.WithLogger(a.log),
-		sources.WithAddress(cfg.ApprovalService.ListenAddr),
-		sources.WithHandler("/health", a.healthcheckHandler()),
+func (a *ApprovalService) newServer(cfg config.Root, processor EventProcessor) (*eventsources.Server, error) {
+	opts := []eventsources.ServerOpt{
+		eventsources.WithLogger(a.log),
+		eventsources.WithAddress(cfg.ApprovalService.ListenAddr),
+		eventsources.WithHandler("/health", a.healthcheckHandler()),
 	}
 
+	// GitHub event sources are webhooks that are registered as handlers on the HTTP server.
 	for _, gh := range cfg.EventSources.GitHub {
 		gitHubSource, err := githubevents.NewSource(gh, processor)
 		if err != nil {
 			return nil, fmt.Errorf("creating github source: %w", err)
 		}
-		opts = append(opts, sources.WithHandler(gh.Path, gitHubSource.Handler()))
+		opts = append(opts, eventsources.WithHandler(gh.Path, gitHubSource.Handler()))
 	}
 
-	return sources.NewServer(opts...)
+	return eventsources.NewServer(opts...)
 }
 
 // This is a simple healthcheck handler that checks if the server is healthy.
