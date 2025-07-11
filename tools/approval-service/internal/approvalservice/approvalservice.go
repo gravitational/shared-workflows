@@ -14,7 +14,7 @@
  *  limitations under the License.
  */
 
-package internal
+package approvalservice
 
 import (
 	"context"
@@ -31,9 +31,9 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// ApprovalService configured and runs the various components of the approval service.
+// Service configures and runs the various components of the approval service.
 // It sets up event sources and an event processor to handle events from those sources.
-type ApprovalService struct {
+type Service struct {
 	// eventSources is a list of event sources that the approval service listens to.
 	// This will be things like GitHub webhook events, Teleport access request updates, etc.
 	eventSources []EventSource
@@ -64,20 +64,20 @@ type EventProcessor interface {
 }
 
 // Opt is an option for the approval service.
-type Opt func(*ApprovalService) error
+type Opt func(*Service) error
 
 // WithLogger sets the logger for the approval service.
 func WithLogger(logger *slog.Logger) Opt {
-	return func(s *ApprovalService) error {
+	return func(s *Service) error {
 		s.log = logger
 		return nil
 	}
 }
 
-// NewApprovalService initializes a new approval service from config.
+// NewFromConfig initializes a new approval service from config.
 // An error is returned if the service cannot be initialized e.g. if the Teleport client cannot connect.
-func NewApprovalService(ctx context.Context, cfg config.Root, opts ...Opt) (*ApprovalService, error) {
-	a := &ApprovalService{
+func NewFromConfig(ctx context.Context, cfg config.Root, opts ...Opt) (*Service, error) {
+	a := &Service{
 		log: slog.Default(),
 	}
 
@@ -118,7 +118,7 @@ func NewApprovalService(ctx context.Context, cfg config.Root, opts ...Opt) (*App
 	return a, nil
 }
 
-func (a *ApprovalService) Setup(ctx context.Context) error {
+func (a *Service) Setup(ctx context.Context) error {
 	for _, eventSource := range a.eventSources {
 		if err := eventSource.Setup(ctx); err != nil {
 			return fmt.Errorf("setting up event source: %w", err)
@@ -133,7 +133,7 @@ func (a *ApprovalService) Setup(ctx context.Context) error {
 }
 
 // Run starts the approval service.
-func (a *ApprovalService) Run(ctx context.Context) error {
+func (a *Service) Run(ctx context.Context) error {
 	eg, ctx := errgroup.WithContext(ctx)
 	for _, eventSource := range a.eventSources {
 		eg.Go(func() error {
@@ -164,7 +164,7 @@ func newTeleportClientFromConfig(ctx context.Context, cfg config.Teleport) (*tel
 	return client, nil
 }
 
-func (a *ApprovalService) newServer(cfg config.Root, processor EventProcessor) (*eventsources.Server, error) {
+func (a *Service) newServer(cfg config.Root, processor EventProcessor) (*eventsources.Server, error) {
 	opts := []eventsources.ServerOpt{
 		eventsources.WithLogger(a.log),
 		eventsources.WithAddress(cfg.ApprovalService.ListenAddr),
@@ -184,7 +184,7 @@ func (a *ApprovalService) newServer(cfg config.Root, processor EventProcessor) (
 }
 
 // This is a simple healthcheck handler that checks if the server is healthy.
-func (a *ApprovalService) healthcheckHandler() http.Handler {
+func (a *Service) healthcheckHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})

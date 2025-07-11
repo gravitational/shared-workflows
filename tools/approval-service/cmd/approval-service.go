@@ -26,7 +26,7 @@ import (
 
 	"github.com/alecthomas/kong"
 	"github.com/goccy/go-yaml"
-	"github.com/gravitational/shared-workflows/tools/approval-service/internal"
+	"github.com/gravitational/shared-workflows/tools/approval-service/internal/approvalservice"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/config"
 )
 
@@ -50,7 +50,7 @@ func (cli *CLI) Run() error {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	svc, err := internal.NewApprovalService(ctx, cfg)
+	svc, err := approvalservice.NewFromConfig(ctx, cfg)
 	if err != nil {
 		return fmt.Errorf("initializing approval service: %w", err)
 	}
