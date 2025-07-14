@@ -86,7 +86,6 @@ func TestSource(t *testing.T) {
 
 			f, err := os.Open(tt.testFile)
 			require.NoError(t, err)
-			defer f.Close()
 
 			req, err := http.NewRequest("POST", srv.URL, f)
 			require.NoError(t, err)
@@ -95,7 +94,7 @@ func TestSource(t *testing.T) {
 
 			resp, err := srv.Client().Do(req)
 			require.NoError(t, err)
-			defer resp.Body.Close()
+			t.Cleanup(func() { require.NoError(t, resp.Body.Close()) })
 			if tt.expectErr {
 				assert.NotEqual(t, http.StatusOK, resp.StatusCode)
 			} else {
