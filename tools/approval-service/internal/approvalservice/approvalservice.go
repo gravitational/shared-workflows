@@ -23,6 +23,7 @@ import (
 	"net/http"
 
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/config"
+	"github.com/gravitational/shared-workflows/tools/approval-service/internal/coordination"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/eventsources"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/eventsources/accessrequest"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/eventsources/githubevents"
@@ -191,7 +192,7 @@ func (a *Service) newServer(cfg config.Root, processor EventProcessor) (*eventso
 	return eventsources.NewServer(opts...)
 }
 
-func (a *ApprovalService) newProcessor(ctx context.Context, cfg config.Root, tele *teleportclient.Client) (EventProcessor, error) {
+func (a *Service) newProcessor(ctx context.Context, cfg config.Root, tele *teleportclient.Client) (EventProcessor, error) {
 	a.log.Info("Initializing coordinator")
 	coord, err := coordination.NewCoordinator()
 	if err != nil {

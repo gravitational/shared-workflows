@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/gravitational/shared-workflows/tools/approval-service/internal/approvalservice/sources/accessrequest"
-	"github.com/gravitational/shared-workflows/tools/approval-service/internal/approvalservice/sources/githubevents"
+	"github.com/gravitational/shared-workflows/tools/approval-service/internal/eventsources/accessrequest"
+	"github.com/gravitational/shared-workflows/tools/approval-service/internal/eventsources/githubevents"
 	"github.com/gravitational/teleport/api/types"
 )
 
@@ -33,7 +33,7 @@ type GitHubAccessRequestProcessor interface {
 }
 
 // ProcessDeploymentReviewEvent processes a GitHub deployment review event.
-func (p *Processor) ProcessDeploymentReviewEvent(ctx context.Context, e githubevents.DeploymentReviewEvent) error {
+func (p *Dispatcher) ProcessDeploymentReviewEvent(ctx context.Context, e githubevents.DeploymentReviewEvent) error {
 	p.deployReviewEventC <- e
 	return nil
 }
@@ -43,7 +43,7 @@ func (p *Processor) ProcessDeploymentReviewEvent(ctx context.Context, e githubev
 // (e.g. acquiring lease, Access Request creation, etc.).
 //
 // This will block until the context is done or an error occurs and is intended to be run in a goroutine.
-func (p *Processor) githubEventListener(ctx context.Context) error {
+func (p *Dispatcher) githubEventListener(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
@@ -57,7 +57,7 @@ func (p *Processor) githubEventListener(ctx context.Context) error {
 
 // processDeploymentReviewEvent is the consumer for GitHub deployment review events.
 // It processes the event by leasing the GitHub workflow, checking for existing Access Requests, and creating new ones if necessary.
-func (p *Processor) processDeploymentReviewEvent(ctx context.Context, e githubevents.DeploymentReviewEvent) error {
+func (p *Dispatcher) processDeploymentReviewEvent(ctx context.Context, e githubevents.DeploymentReviewEvent) error {
 	// Attempt to lease the GitHub workflow for the event.
 	// This is used to prevent multiple processes from handling the same event at the same time which would result in
 	// multiple Access Requests being created for the same event.
@@ -104,12 +104,12 @@ func (p *Processor) processDeploymentReviewEvent(ctx context.Context, e githubev
 	return err
 }
 
-func (p *Processor) ProcessWorkflowDispatchEvent(ctx context.Context, e githubevents.WorkflowDispatchEvent) error {
+func (p *Dispatcher) ProcessWorkflowDispatchEvent(ctx context.Context, e githubevents.WorkflowDispatchEvent) error {
 	// This is not implemented yet.
 	return fmt.Errorf("workflow_dispatch event processing is not implemented")
 }
 
-func (p *Processor) handleGitHubReview(ctx context.Context, req types.AccessRequest) error {
+func (p *Dispatcher) handleGitHubReview(ctx context.Context, req types.AccessRequest) error {
 	id, err := p.store.GetProcID(ctx, req)
 	p.log.Info("labels", "labels", req.GetStaticLabels())
 	if err != nil {
