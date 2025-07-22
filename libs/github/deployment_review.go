@@ -48,3 +48,26 @@ func (c *Client) ReviewDeploymentProtectionRule(ctx context.Context, org, repo s
 
 	return nil
 }
+
+// PendingDeploymentInfo contains information about a pending deployment.
+type PendingDeploymentInfo struct {
+	// Environment is the name of the GitHub environment that is being requested for deployment.
+	Environment string
+}
+
+// GetPendingDeployments retrieves all pending deployments for a given workflow run.
+func (c *Client) GetPendingDeployments(ctx context.Context, org, repo string, runID int64) ([]PendingDeploymentInfo, error) {
+	data, _, err := c.client.Actions.GetPendingDeployments(ctx, org, repo, runID)
+	if err != nil {
+		return nil, fmt.Errorf("getting pending deployments: %w", err)
+	}
+
+	pending := []PendingDeploymentInfo{}
+	for _, deployment := range data {
+		pending = append(pending, PendingDeploymentInfo{
+			Environment: deployment.GetEnvironment().GetName(),
+		})
+	}
+
+	return pending, nil
+}
