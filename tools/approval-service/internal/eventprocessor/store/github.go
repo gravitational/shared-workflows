@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/gravitational/teleport/api/types"
@@ -28,13 +29,40 @@ type GitHubWorkflowInfo struct {
 	// WorkflowRunID is the ID of the workflow run that is waiting for approval.
 	WorkflowRunID int64
 }
-type githubOpts struct {
+
+type GitHubStorerOpt func(g *githubStore) error
+
+type githubStore struct {
 	log *slog.Logger
 }
 
-// githubStore implements the GitHubService interface.
-type githubStore struct {
-	*githubOpts
+func NewGitHubStore(opts ...GitHubStorerOpt) (GitHubStorer, error) {
+	g := &githubStore{
+		log: slog.Default(),
+	}
+
+	for _, opt := range opts {
+		if err := opt(g); err != nil {
+			return nil, fmt.Errorf("applying GitHubStorerOpt: %w", err)
+		}
+	}
+
+	return g, nil
+}
+
+// MissingLabelError is returned when a required label is missing from the access request.
+// This error is used to indicate that the access request does not contain the necessary labels to retrieve or store GitHub workflow information.
+// In some cases, this is not an error, but rather a signal that the access request needs to be updated with the required labels.
+type MissingLabelError struct {
+	// RequestID is the ID of the access request that is missing the label.
+	RequestID string
+	// LabelsKeys is the list of label keys that are required but missing from the access request.
+	LabelKeys []string
+}
+
+// Error implements the error interface for MissingLabelError.
+func (m *MissingLabelError) Error() string {
+	return fmt.Sprintf("access request %q is missing required labels: %s", m.RequestID, strings.Join(m.LabelKeys, ", "))
 }
 
 const (
@@ -146,4 +174,21 @@ func (g *githubStore) GetWorkflowInfo(ctx context.Context, req types.AccessReque
 		Env:           env,
 		WorkflowRunID: int64(runIDInt),
 	}, nil
+}
+
+var WithGitHubLogger = func(logger *slog.Logger) GitHubStorerOpt {
+	return func(s *githubStore) error {
+		if logger == nil {
+			return errors.New("logger cannot be nil")
+		}
+		s.log = logger
+		return nil
+	}
+}
+
+func newMissingLabelError(req types.AccessRequest, labelKeys []string) *MissingLabelError {
+	return &MissingLabelError{
+		RequestID: req.GetName(),
+		LabelKeys: labelKeys,
+	}
 }

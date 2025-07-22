@@ -27,7 +27,7 @@ type WorkflowRunInfo struct {
 }
 
 // GeWorkflowRunInfo retrieves information about a specific workflow run by its ID.
-func (c *Client) GeWorkflowRunInfo(ctx context.Context, org, repo string, runID int64) (WorkflowRunInfo, error) {
+func (c *Client) GetWorkflowRunInfo(ctx context.Context, org, repo string, runID int64) (WorkflowRunInfo, error) {
 	workflow, _, err := c.client.Actions.GetWorkflowRunByID(ctx, org, repo, runID)
 	if err != nil {
 		return WorkflowRunInfo{}, fmt.Errorf("GetWorkflowRunByID API call: %w", err)

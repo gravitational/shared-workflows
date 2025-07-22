@@ -8,6 +8,7 @@ require (
 	github.com/alecthomas/kong v1.9.0
 	github.com/goccy/go-yaml v1.18.0
 	github.com/google/go-github/v71 v71.0.0
+	github.com/google/uuid v1.6.0
 	github.com/gravitational/teleport/api v0.0.0-20250304181506-29a19b0f92da
 	github.com/stretchr/testify v1.10.0
 	golang.org/x/sync v0.12.0
@@ -25,10 +26,8 @@ require (
 	github.com/gobwas/httphead v0.1.0 // indirect
 	github.com/gobwas/pool v0.2.1 // indirect
 	github.com/gobwas/ws v1.4.0 // indirect
-	github.com/goccy/go-yaml v1.18.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/gravitational/trace v1.5.1 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.25.1 // indirect
 	github.com/jonboulle/clockwork v0.5.0 // indirect
