@@ -146,10 +146,8 @@ func (w *WorkflowEventsProcessor) HandleAccessRequestReviewed(ctx context.Contex
 }
 
 func (w *WorkflowEventsProcessor) onDeploymentReviewEventReceived(ctx context.Context, e githubevents.DeploymentReviewEvent) {
-	// One workflow can spawn multiple deployment review events (e.g. multiple jobs starting at the same time).
-	// We need to deduplicate these events to avoid creating multiple Access Requests for the same workflow.
-	// We use the workflow ID and the organization/repository as the unique identifier for the event
-	eventID := fmt.Sprintf("%s/%s/%d", e.Organization, e.Repository, e.WorkflowID)
+	// One Access Request should be created per workflow run and environment.
+	eventID := fmt.Sprintf("%s/%s/%d/%s", e.Organization, e.Repository, e.WorkflowID, e.Environment)
 	if !w.tryStartEventProcessing(eventID) {
 		// Already processing this event, skip it.
 		w.log.Debug("Skipping already processed event", "event_id", eventID)
@@ -224,9 +222,9 @@ func (w *WorkflowEventsProcessor) findExistingAccessRequest(ctx context.Context,
 
 // createAccessRequest creates a new Access Request for the given GitHub deployment review event.
 func (w *WorkflowEventsProcessor) createAccessRequest(ctx context.Context, e githubevents.DeploymentReviewEvent) (types.AccessRequest, error) {
-	approvalHandler, ok := w.deploymentApprovalHandlers[formatGitHubRepoKey(e.Organization, e.Repository)]
-	if !ok {
-		return nil, fmt.Errorf("no GitHub repository decision handler found for organization %q and repository %q", e.Organization, e.Repository)
+	approvalHandler, err := w.getApprovalHandler(e.Organization, e.Repository)
+	if err != nil {
+		return nil, fmt.Errorf("getting approval handler for organization %q and repository %q: %w", e.Organization, e.Repository, err)
 	}
 
 	role, err := approvalHandler.teleportRoleForEnvironment(e.Environment)
@@ -289,9 +287,6 @@ func (w *WorkflowEventsProcessor) finishEventProcessing(eventID string) {
 
 // onAccessRequestReviewed processes the Access Request review event.
 func (w *WorkflowEventsProcessor) onAccessRequestReviewed(ctx context.Context, req types.AccessRequest) {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
 	info, err := w.store.GetWorkflowInfo(ctx, req)
 	if err != nil {
 		// If we cannot find the workflow info, we cannot process the request.
@@ -300,9 +295,9 @@ func (w *WorkflowEventsProcessor) onAccessRequestReviewed(ctx context.Context, r
 		return
 	}
 
-	approvalHandler, ok := w.deploymentApprovalHandlers[formatGitHubRepoKey(info.Org, info.Repo)]
-	if !ok {
-		w.log.Error("Couldn't find a configured GitHub Repository to handle access request", "access_request_name", req.GetName(), "org", info.Org, "repo", info.Repo)
+	approvalHandler, err := w.getApprovalHandler(info.Org, info.Repo)
+	if err != nil {
+		w.log.Error("Error getting approval handler for access request", "access_request_name", req.GetName(), "org", info.Org, "repo", info.Repo, "error", err)
 		return
 	}
 
@@ -311,6 +306,14 @@ func (w *WorkflowEventsProcessor) onAccessRequestReviewed(ctx context.Context, r
 		return
 	}
 	w.log.Info("Handled access request reviewed", "access_request_name", req.GetName(), "org", info.Org, "repo", info.Repo)
+}
+
+func (w *WorkflowEventsProcessor) getApprovalHandler(org, repo string) (*GitHubDeploymentApprovalHandler, error) {
+	handler, ok := w.deploymentApprovalHandlers[formatGitHubRepoKey(org, repo)]
+	if !ok {
+		return nil, fmt.Errorf("the organization %q and repository %q are not configured for deployment approval", org, repo)
+	}
+	return handler, nil
 }
 
 // newGitHubDeploymentApprovalHandler creates a new GitHub deployment approval handler for deployment protection rules
@@ -326,7 +329,7 @@ func newGitHubDeploymentApprovalHandler(ctx context.Context, cfg config.GitHubSo
 		return nil, fmt.Errorf("creating GitHub client for app: %w", err)
 	}
 
-	p := &GitHubDeploymentApprovalHandler{
+	h := &GitHubDeploymentApprovalHandler{
 		log:       log,
 		org:       cfg.Org,
 		repo:      cfg.Repo,
@@ -335,10 +338,10 @@ func newGitHubDeploymentApprovalHandler(ctx context.Context, cfg config.GitHubSo
 	}
 
 	for _, env := range cfg.Environments {
-		p.envToRole[env.Name] = env.TeleportRole
+		h.envToRole[env.Name] = env.TeleportRole
 	}
 
-	return p, nil
+	return h, nil
 }
 
 // teleportRoleForEnvironment returns the Teleport role for a given environment.
