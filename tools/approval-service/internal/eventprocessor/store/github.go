@@ -11,8 +11,8 @@ import (
 	"github.com/gravitational/teleport/api/types"
 )
 
-// GitHubService is responsible for managing external data related to GitHub workflows and deployments.
-type GitHubService interface {
+// GitHubStorer is responsible for managing external data related to GitHub workflows and deployments.
+type GitHubStorer interface {
 	StoreWorkflowInfo(ctx context.Context, req types.AccessRequest, info GitHubWorkflowInfo) error
 	GetWorkflowInfo(ctx context.Context, req types.AccessRequest) (GitHubWorkflowInfo, error)
 }
@@ -45,11 +45,6 @@ const (
 )
 
 func (g *githubStore) StoreWorkflowInfo(ctx context.Context, req types.AccessRequest, info GitHubWorkflowInfo) error {
-	labels := req.GetStaticLabels()
-	if labels == nil {
-		labels = make(map[string]string)
-	}
-
 	if info.Org == "" {
 		return errors.New("GitHub organization cannot be empty")
 	}
@@ -68,6 +63,11 @@ func (g *githubStore) StoreWorkflowInfo(ctx context.Context, req types.AccessReq
 	if err := validateUserInput(info); err != nil {
 		g.log.Error("invalid GitHub workflow info", "error", err, "info", info)
 		return errors.New("invalid GitHub workflow info")
+	}
+
+	labels := req.GetStaticLabels()
+	if labels == nil {
+		labels = make(map[string]string)
 	}
 
 	labels[workflowRunLabel] = strconv.Itoa(int(info.WorkflowRunID))
@@ -111,8 +111,8 @@ func (g *githubStore) GetWorkflowInfo(ctx context.Context, req types.AccessReque
 	missingLabels := []string{}
 	labels := req.GetStaticLabels()
 
-	runIDLabel := labels[workflowRunLabel]
-	if runIDLabel == "" {
+	runID := labels[workflowRunLabel]
+	if runID == "" {
 		missingLabels = append(missingLabels, workflowRunLabel)
 	}
 
@@ -135,7 +135,7 @@ func (g *githubStore) GetWorkflowInfo(ctx context.Context, req types.AccessReque
 		return GitHubWorkflowInfo{}, newMissingLabelError(req, missingLabels)
 	}
 
-	runID, err := strconv.Atoi(runIDLabel)
+	runIDInt, err := strconv.Atoi(runID)
 	if err != nil {
 		return GitHubWorkflowInfo{}, fmt.Errorf("parsing workflow run ID: %w", err)
 	}
@@ -144,6 +144,6 @@ func (g *githubStore) GetWorkflowInfo(ctx context.Context, req types.AccessReque
 		Org:           org,
 		Repo:          repo,
 		Env:           env,
-		WorkflowRunID: int64(runID),
+		WorkflowRunID: int64(runIDInt),
 	}, nil
 }

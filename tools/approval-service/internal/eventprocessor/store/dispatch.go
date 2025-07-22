@@ -7,8 +7,9 @@ import (
 	"github.com/gravitational/teleport/api/types"
 )
 
-// ProcessorService is an interface for managing high-level information about event processing.
-type ProcessorService interface {
+// DispatchStorer is used by the Dispatcher to encode information about which processor should handle a given Access Request.
+// Given an Access Request, it should be possible to retrieve information necessary to determine which processor is appropriate for handling the Access Request.
+type DispatchStorer interface {
 	// StoreProcID stores the processor ID for a given Access Request.
 	// This is used to track which processor is appropriate for handling the Access Request.
 	StoreProcID(ctx context.Context, req types.AccessRequest, procID string) error
@@ -17,30 +18,30 @@ type ProcessorService interface {
 	GetProcID(ctx context.Context, req types.AccessRequest) (string, error)
 }
 
-// processorService implements the ProcessorService interface.
-type processorService struct {
+// dispatchStore implements the DispatchStorer interface.
+type dispatchStore struct {
 }
 
 const procIDLabel = "procid"
 
-func (p *processorService) StoreProcID(ctx context.Context, req types.AccessRequest, procID string) error {
-	labels := req.GetStaticLabels()
-	if labels == nil {
-		labels = make(map[string]string)
-	}
+func (p *dispatchStore) StoreProcID(ctx context.Context, req types.AccessRequest, procID string) error {
 	if procID == "" {
 		return errors.New("processor ID cannot be empty")
 	}
 
-	labels["procid"] = procID
+	labels := req.GetStaticLabels()
+	if labels == nil {
+		labels = make(map[string]string)
+	}
+	labels[procIDLabel] = procID
 	req.SetStaticLabels(labels)
 	return nil
 }
 
-func (p *processorService) GetProcID(ctx context.Context, req types.AccessRequest) (string, error) {
+func (p *dispatchStore) GetProcID(ctx context.Context, req types.AccessRequest) (string, error) {
 	labels := req.GetStaticLabels()
 
-	procID := labels["procid"]
+	procID := labels[procIDLabel]
 	if procID == "" {
 		return "", newMissingLabelError(req, []string{procIDLabel})
 	}

@@ -17,16 +17,19 @@ import (
 	"github.com/gravitational/teleport/api/types"
 )
 
-// Dispatcher is responsible for coordinating the processing of events from different sources to their respective consumers.
+// Dispatcher is responsible for listening to events from various sources and orchestrating their processing.
+// It also handles coordination between multiple instances of the service to ensure that certain events are processed by only one instance at a time.
 type Dispatcher struct {
-	store store.ProcessorService
+	store store.DispatchStorer
 
 	teleportUser    string
 	requestTTLHours time.Duration
 
-	// workflowEventsProcessor is a map of GitHub source processors.
-	// The key is a string of the form "org/repo" and the value is the GitHub source processor.
-	// This is used to look up the GitHub source processor for a given GitHub event or Access Request.
+	// workflowEventsProcessor is a map of GitHub Workflow Events Processors.
+	// This is keyed by the GitHub organization and repository name.
+	// This key will be encoded into the Access Request labels during the initial request creation.
+	// When the Access Request is updated, this key will be used to find the appropriate processor for the event.
+	//
 	// not safe for concurrent read/write
 	// this is written to during init and only read concurrently during operation.
 	workflowEventsProcessor map[string]githubprocessors.WorkflowEventsProcessor
@@ -56,7 +59,7 @@ func WithLogger(logger *slog.Logger) Opt {
 }
 
 // NewDispatcher creates a new Dispatcher instance.
-func NewDispatcher(teleConfig config.Teleport, le coordination.LeaderElector, store store.ProcessorService, opts ...Opt) (*Dispatcher, error) {
+func NewDispatcher(teleConfig config.Teleport, le coordination.LeaderElector, store store.DispatchStorer, opts ...Opt) (*Dispatcher, error) {
 	d := &Dispatcher{
 		teleportUser:            teleConfig.User,
 		workflowEventsProcessor: make(map[string]githubprocessors.WorkflowEventsProcessor),
@@ -147,7 +150,8 @@ func (d *Dispatcher) onDeploymentReviewEventReceived(ctx context.Context, e gith
 		}
 
 		// Use async processing for the access request
-		d.HandleAccessRequestReviewed(ctx, existingRequest)
+		// Async handling does not return an error.
+		_ = d.HandleAccessRequestReviewed(ctx, existingRequest)
 		return
 	}
 

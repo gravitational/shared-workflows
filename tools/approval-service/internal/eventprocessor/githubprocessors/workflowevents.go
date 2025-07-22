@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"strconv"
 	"text/template"
 
 	"github.com/gravitational/shared-workflows/libs/github"
@@ -50,7 +49,7 @@ type workflowEventsProcessor struct {
 	repo       string
 	envToRole  map[string]string
 	teleClient teleClient
-	store      store.GitHubService
+	store      store.GitHubStorer
 
 	log *slog.Logger
 }
@@ -85,7 +84,7 @@ func WithLogger(log *slog.Logger) Opt {
 }
 
 // NewWorkflowEventsProcessor creates a new WorkflowEventsProcessor for handling GitHub workflow events.
-func NewWorkflowEventsProcessor(ctx context.Context, cfg config.GitHubSource, tele teleClient, store store.GitHubService, opts ...Opt) (WorkflowEventsProcessor, error) {
+func NewWorkflowEventsProcessor(ctx context.Context, cfg config.GitHubSource, tele teleClient, store store.GitHubStorer, opts ...Opt) (WorkflowEventsProcessor, error) {
 	key, err := os.ReadFile(cfg.Authentication.App.PrivateKeyPath)
 	if err != nil {
 		return nil, fmt.Errorf("reading private key file %q: %w", cfg.Authentication.App.PrivateKeyPath, err)
@@ -126,11 +125,13 @@ func (p *workflowEventsProcessor) FindExistingAccessRequest(ctx context.Context,
 		return nil, fmt.Errorf("getting access requests: %w", err)
 	}
 	for _, req := range list {
-		labels := req.GetStaticLabels()
-		if labels == nil {
-			continue
+		info, err := p.store.GetWorkflowInfo(ctx, req)
+		if err != nil {
+			// Not all Access Requests will have workflow info, so we can ignore this error.
+			p.log.Debug("failed to get workflow info for access request", "access_request_name", req.GetName(), "error", err)
 		}
-		if labels["organization"] == e.Organization && labels["repository"] == e.Repository && labels["environment"] == e.Environment && labels["workflow_run_id"] == strconv.Itoa(int(e.WorkflowID)) {
+
+		if info.Org == e.Organization && info.Repo == e.Repository && info.Env == e.Environment && info.WorkflowRunID == e.WorkflowID {
 			return req, nil
 		}
 	}

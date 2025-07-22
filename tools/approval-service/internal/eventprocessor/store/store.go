@@ -12,10 +12,10 @@ import (
 // Repository is used for managing external data related to Access Requests and their lifecycle.
 type Repository struct {
 	// GitHubService is responsible for storing and retrieving GitHub workflow information.
-	GitHub GitHubService
+	GitHub GitHubStorer
 
 	// ProcessorService is responsible for managing high-level information about event processing.
-	ProcessorService ProcessorService
+	ProcessorService DispatchStorer
 
 	githubOpts *githubOpts
 }
@@ -42,7 +42,7 @@ func NewRepository(opts ...RepositoryOpt) (*Repository, error) {
 	}
 	repo := &Repository{
 		GitHub:           &githubStore{githubOpts: ghOpts},
-		ProcessorService: &processorService{},
+		ProcessorService: &dispatchStore{},
 		githubOpts:       ghOpts,
 	}
 
