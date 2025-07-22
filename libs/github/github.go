@@ -63,8 +63,10 @@ func NewForApp(ctx context.Context, appID int64, installationID int64, privateKe
 	if err != nil {
 		return nil, err
 	}
-	httpClient := &http.Client{Transport: appTr}
-	httpClient.Timeout = ClientTimeout
+	httpClient := &http.Client{
+		Transport: appTr,
+		Timeout:   ClientTimeout,
+	}
 
 	cl := go_github.NewClient(httpClient)
 	return &Client{
@@ -84,8 +86,8 @@ type installationAuthTransport struct {
 	appsClient     *go_github.Client // GitHub client for making API requests to the GitHub Apps API
 	installationID int64
 
+	mu    sync.Mutex
 	token *go_github.InstallationToken
-	mu    sync.Mutex // mutex to protect access to the token
 }
 
 // jwtAuthTransport is a middleware that adds JWT authentication to HTTP requests.
@@ -140,10 +142,6 @@ func newAppTransport(ctx context.Context, appID, installationID int64, privateKe
 
 // RoundTrip implements the http.RoundTripper interface for the jwtTransport.
 func (j *jwtAuthTransport) RoundTrip(orig *http.Request) (*http.Response, error) {
-	if orig.Body != nil {
-		// As per the http.RoundTripper contract, we should close the body after we're done with it.
-		defer orig.Body.Close()
-	}
 	req := orig.Clone(orig.Context()) // clone the request to avoid modifying the original
 
 	// Account for clock skew by setting the issued at time to 60 seconds in the past.
@@ -168,10 +166,6 @@ func (j *jwtAuthTransport) RoundTrip(orig *http.Request) (*http.Response, error)
 
 // RoundTrip implements the http.RoundTripper interface for the appTransport.
 func (a *installationAuthTransport) RoundTrip(orig *http.Request) (*http.Response, error) {
-	if orig.Body != nil {
-		// As per the http.RoundTripper contract, we should close the body after we're done with it.
-		defer orig.Body.Close()
-	}
 	req := orig.Clone(orig.Context()) // clone the request to avoid modifying the original
 
 	// Get the access token for the installation.

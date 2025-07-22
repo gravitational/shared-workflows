@@ -110,26 +110,23 @@ func validateUserInput(info GitHubWorkflowInfo) error {
 func (g *githubStore) GetWorkflowInfo(ctx context.Context, req types.AccessRequest) (GitHubWorkflowInfo, error) {
 	missingLabels := []string{}
 	labels := req.GetStaticLabels()
-	if labels == nil {
-		return GitHubWorkflowInfo{}, newMissingLabelError(req, []string{workflowRunLabel, organizationLabel, repositoryLabel, environmentLabel})
-	}
 
-	runIDLabel := req.GetStaticLabels()[workflowRunLabel]
+	runIDLabel := labels[workflowRunLabel]
 	if runIDLabel == "" {
 		missingLabels = append(missingLabels, workflowRunLabel)
 	}
 
-	org := req.GetStaticLabels()[organizationLabel]
+	org := labels[organizationLabel]
 	if org == "" {
 		missingLabels = append(missingLabels, organizationLabel)
 	}
 
-	repo := req.GetStaticLabels()[repositoryLabel]
+	repo := labels[repositoryLabel]
 	if repo == "" {
 		missingLabels = append(missingLabels, repositoryLabel)
 	}
 
-	env := req.GetStaticLabels()[environmentLabel]
+	env := labels[environmentLabel]
 	if env == "" {
 		missingLabels = append(missingLabels, environmentLabel)
 	}

@@ -24,6 +24,9 @@ import (
 
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/config"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/coordination"
+	"github.com/gravitational/shared-workflows/tools/approval-service/internal/eventprocessor"
+	"github.com/gravitational/shared-workflows/tools/approval-service/internal/eventprocessor/githubprocessors"
+	"github.com/gravitational/shared-workflows/tools/approval-service/internal/eventprocessor/store"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/eventsources"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/eventsources/accessrequest"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/eventsources/githubevents"
@@ -62,7 +65,7 @@ type EventProcessor interface {
 	Run(ctx context.Context) error
 
 	githubevents.GitHubEventProcessor
-	accessrequest.ReviewHandler
+	accessrequest.AccessRequestReviewedHandler
 }
 
 // Opt is an option for the approval service.
@@ -97,7 +100,7 @@ func NewFromConfig(ctx context.Context, cfg config.Root, opts ...Opt) (*Service,
 		return nil, fmt.Errorf("creating new teleport client from config: %w", err)
 	}
 
-	processor, err := a.newProcessor(ctx, cfg, tele)
+	processor, err := newEventProcessor(ctx, cfg, tele, a.log)
 	if err != nil {
 		return nil, fmt.Errorf("creating event processor: %w", err)
 	}
@@ -192,48 +195,36 @@ func (a *Service) newServer(cfg config.Root, processor EventProcessor) (*eventso
 	return eventsources.NewServer(opts...)
 }
 
-func (a *Service) newProcessor(ctx context.Context, cfg config.Root, tele *teleportclient.Client) (EventProcessor, error) {
-	a.log.Info("Initializing coordinator")
-	coord, err := coordination.NewCoordinator()
+// Initializes the event processor from config.
+func newEventProcessor(ctx context.Context, cfg config.Root, tele *teleportclient.Client, log *slog.Logger) (EventProcessor, error) {
+	le, err := coordination.NewLeaderElector()
 	if err != nil {
-		return nil, fmt.Errorf("creating coordinator: %w", err)
+		return nil, fmt.Errorf("creating leader elector: %w", err)
 	}
 
-	a.log.Info("Initializing event processor")
-
-	// Initialize GitHub event sources
-	a.log.Info("Initializing GitHub event sources")
-	sp := &eventprocessor.Consumers{
-		GitHub: []*eventprocessor.GitHubConsumer{},
-	}
-
-	externalStore, err := store.NewRepository(store.WithGitHubLogger(a.log))
+	storage, err := store.NewRepository()
 	if err != nil {
-		return nil, fmt.Errorf("creating external store: %w", err)
+		return nil, fmt.Errorf("creating repository: %w", err)
 	}
+
+	opts := []eventprocessor.Opt{
+		eventprocessor.WithLogger(log),
+	}
+
 	for _, gh := range cfg.EventSources.GitHub {
-		a.log.Info("Initializing GitHub event source", "org", gh.Org, "repo", gh.Repo)
-
-		ghProcessor, err := githubprocessor.New(ctx, gh, tele, externalStore.GitHub, githubprocessor.WithLogger(a.log))
+		p, err := githubprocessors.NewWorkflowEventsProcessor(ctx, gh, tele, storage.GitHub, githubprocessors.WithLogger(log))
 		if err != nil {
-			return nil, fmt.Errorf("creating GitHub processor: %w", err)
+			return nil, fmt.Errorf("creating github workflow events processor: %w", err)
 		}
-		sp.GitHub = append(sp.GitHub, &eventprocessor.GitHubConsumer{
-			Org:                    gh.Org,
-			Repo:                   gh.Repo,
-			TeleportRole:           cfg.ApprovalService.Teleport.RoleToRequest,
-			AccessRequestProcessor: ghProcessor,
-		})
+		opts = append(opts, eventprocessor.WithGitHubWorkflowEventProcessor(gh.Org, gh.Repo, p))
 	}
 
-	processor, err := eventprocessor.New(ctx, cfg.ApprovalService.Teleport, sp, coord,
-		eventprocessor.WithLogger(a.log),
+	return eventprocessor.NewDispatcher(
+		cfg.ApprovalService.Teleport,
+		le,
+		storage.ProcessorService,
+		opts...,
 	)
-	if err != nil {
-		return nil, fmt.Errorf("initializing event processor: %w", err)
-	}
-
-	return processor, nil
 }
 
 // This is a simple healthcheck handler that checks if the server is healthy.

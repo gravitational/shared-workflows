@@ -39,12 +39,9 @@ func (p *processorService) StoreProcID(ctx context.Context, req types.AccessRequ
 
 func (p *processorService) GetProcID(ctx context.Context, req types.AccessRequest) (string, error) {
 	labels := req.GetStaticLabels()
-	if labels == nil {
-		return "", newMissingLabelError(req, []string{procIDLabel})
-	}
 
-	procID, ok := labels["procid"]
-	if !ok {
+	procID := labels["procid"]
+	if procID == "" {
 		return "", newMissingLabelError(req, []string{procIDLabel})
 	}
 	return procID, nil

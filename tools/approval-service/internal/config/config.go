@@ -53,11 +53,18 @@ type GitHubSource struct {
 	// Repo is the repository that the event must be from.
 	Repo string `yaml:"repo,omitempty"`
 	// Environments is a list of environments that the event must be for.
-	Environments []string `yaml:"environments,omitempty"`
+	Environments []GitHubEnvironmentEntry `yaml:"environments,omitempty"`
 	// Secret is the secret token used to verify the webhook events.
 	Secret string `yaml:"secret,omitempty"`
 	// Authentication configuration for the GitHub REST API
 	Authentication GitHubAuthentication `yaml:"authentication,omitempty"`
+}
+
+type GitHubEnvironmentEntry struct {
+	// Name is the name of the environment.
+	Name string `yaml:"name"`
+	// TeleportRole is the Teleport role to request for this environment.
+	TeleportRole string `yaml:"teleport_role"`
 }
 
 // GitHubAuthentication is the configuration for the GitHub App authentication.
@@ -129,6 +136,31 @@ func (c *GitHubSource) Validate() error {
 	}
 	if len(c.Environments) == 0 {
 		missing = append(missing, "environments")
+	}
+
+	for _, env := range c.Environments {
+		if err := env.Validate(); err != nil {
+			return fmt.Errorf("environment %s: %w", env.Name, err)
+		}
+	}
+
+	if c.Secret == "" {
+		missing = append(missing, "secret")
+	}
+
+	if len(missing) > 0 {
+		return fmt.Errorf("missing required fields: %s", strings.Join(missing, ", "))
+	}
+	return nil
+}
+
+func (c *GitHubEnvironmentEntry) Validate() error {
+	missing := []string{}
+	if c.Name == "" {
+		missing = append(missing, "name")
+	}
+	if c.TeleportRole == "" {
+		missing = append(missing, "teleport_role")
 	}
 
 	if len(missing) > 0 {
