@@ -8,6 +8,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/gravitational/shared-workflows/tools/approval-service/internal/eventsources/githubevents"
 	"github.com/gravitational/teleport/api/types"
 )
 
@@ -146,6 +147,10 @@ func GetWorkflowInfoFromLabels(ctx context.Context, req types.AccessRequest) (Gi
 		Env:           env,
 		WorkflowRunID: int64(runIDInt),
 	}, nil
+}
+
+func (l GitHubWorkflowInfo) MatchesEvent(e githubevents.DeploymentReviewEvent) bool {
+	return l.Org == e.Organization && l.Repo == e.Repository && l.Env == e.Environment && l.WorkflowRunID == e.WorkflowID
 }
 
 func newMissingLabelError(req types.AccessRequest, labelKeys []string) *MissingLabelError {

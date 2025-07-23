@@ -176,7 +176,7 @@ func (w *ReleaseService) findExistingAccessRequest(ctx context.Context, e github
 		}
 
 		// Check if the Access Request matches the GitHub deployment review event.
-		if info.Org == e.Organization && info.Repo == e.Repository && info.Env == e.Environment && info.WorkflowRunID == e.WorkflowID {
+		if info.MatchesEvent(e) {
 			w.log.Info("Found existing access request for deployment review event", "access_request_name", req.GetName(), "event", e)
 			return req, nil
 		}
