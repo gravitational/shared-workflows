@@ -92,8 +92,6 @@ type Teleport struct {
 	IdentityFile string `yaml:"identity_file"`
 	// User is the Teleport user to use for creating the access request.
 	User string `yaml:"user"`
-	// RoleToRequest is the Teleport role to request for the access request.
-	RoleToRequest string `yaml:"role_to_request"`
 	// RequestTTLHours is used to determine the expiry.
 	// By default this is 7*24 hours (7 days).
 	RequestTTLHours int64 `yaml:"request_ttl_hours"`
@@ -201,9 +199,6 @@ func (c *Teleport) Validate() error {
 	}
 	if c.User == "" {
 		missing = append(missing, "user")
-	}
-	if c.RoleToRequest == "" {
-		missing = append(missing, "role_to_request")
 	}
 
 	if len(missing) > 0 {

@@ -118,7 +118,7 @@ func NewFromConfig(ctx context.Context, cfg config.Root, opts ...Opt) (*Service,
 	a.log.Info("Initializing access request plugin")
 	accessPlugin, err := accessrequest.NewEventWatcher(
 		tele,
-		nil, // TODO: Implemented in next PR
+		processor,
 		accessrequest.WithRequesterFilter(cfg.ApprovalService.Teleport.User),
 		accessrequest.WithLogger(a.log),
 	)
