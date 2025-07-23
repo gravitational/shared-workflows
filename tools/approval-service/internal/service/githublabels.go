@@ -1,7 +1,6 @@
-package store
+package service
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strconv"
@@ -12,8 +11,8 @@ import (
 	"github.com/gravitational/teleport/api/types"
 )
 
-// GitHubWorkflowInfo holds information about a GitHub workflow run that is waiting for approval.
-type GitHubWorkflowInfo struct {
+// githubWorkflowLabels holds information about a GitHub workflow run that is waiting for approval.
+type githubWorkflowLabels struct {
 	// Org is the GitHub organization name.
 	Org string
 	// Repo is the GitHub repository name.
@@ -46,7 +45,7 @@ const (
 	environmentLabel  = "environment"
 )
 
-func SetWorkflowInfoLabels(ctx context.Context, req types.AccessRequest, info GitHubWorkflowInfo) error {
+func setWorkflowLabels(req types.AccessRequest, info githubWorkflowLabels) error {
 	if info.Org == "" {
 		return errors.New("GitHub organization cannot be empty")
 	}
@@ -85,7 +84,7 @@ func SetWorkflowInfoLabels(ctx context.Context, req types.AccessRequest, info Gi
 // A malicious user could launch a denial of service attack by sending very long strings or invalid UTF-8 sequences.
 // We still allow some flexibility in the length of the strings, but we enforce a maximum length to prevent abuse.
 // This does NOT mean that we are validating the content of the strings, only that they are valid UTF-8 and within reasonable length limits.
-func validateUserInput(info GitHubWorkflowInfo) error {
+func validateUserInput(info githubWorkflowLabels) error {
 	// GitHub webhook events are UTF-8 encoded.
 	if !utf8.ValidString(info.Org) || !utf8.ValidString(info.Repo) || !utf8.ValidString(info.Env) {
 		return errors.New("GitHub organization, repository, and environment must be valid UTF-8 strings")
@@ -108,7 +107,7 @@ func validateUserInput(info GitHubWorkflowInfo) error {
 	return nil
 }
 
-func GetWorkflowInfoFromLabels(ctx context.Context, req types.AccessRequest) (GitHubWorkflowInfo, error) {
+func getWorkflowLabels(req types.AccessRequest) (githubWorkflowLabels, error) {
 	missingLabels := []string{}
 	labels := req.GetStaticLabels()
 
@@ -133,15 +132,15 @@ func GetWorkflowInfoFromLabels(ctx context.Context, req types.AccessRequest) (Gi
 	}
 
 	if len(missingLabels) > 0 {
-		return GitHubWorkflowInfo{}, newMissingLabelError(req, missingLabels)
+		return githubWorkflowLabels{}, newMissingLabelError(req, missingLabels)
 	}
 
 	runIDInt, err := strconv.Atoi(runID)
 	if err != nil {
-		return GitHubWorkflowInfo{}, fmt.Errorf("parsing workflow run ID: %w", err)
+		return githubWorkflowLabels{}, fmt.Errorf("parsing workflow run ID: %w", err)
 	}
 
-	return GitHubWorkflowInfo{
+	return githubWorkflowLabels{
 		Org:           org,
 		Repo:          repo,
 		Env:           env,
@@ -149,7 +148,7 @@ func GetWorkflowInfoFromLabels(ctx context.Context, req types.AccessRequest) (Gi
 	}, nil
 }
 
-func (l GitHubWorkflowInfo) MatchesEvent(e githubevents.DeploymentReviewEvent) bool {
+func (l githubWorkflowLabels) matchesEvent(e githubevents.DeploymentReviewEvent) bool {
 	return l.Org == e.Organization && l.Repo == e.Repository && l.Env == e.Environment && l.WorkflowRunID == e.WorkflowID
 }
 

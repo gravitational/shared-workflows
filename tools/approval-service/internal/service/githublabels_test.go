@@ -1,7 +1,6 @@
-package store
+package service
 
 import (
-	"context"
 	"strconv"
 	"strings"
 	"testing"
@@ -16,11 +15,11 @@ import (
 func TestGitHubService(t *testing.T) {
 
 	t.Run("StoreWorkflowRunInfo", func(t *testing.T) {
-		storeWorkflowRunInfoTestFunc := func(t *testing.T, info GitHubWorkflowInfo, wantErr bool) {
+		storeWorkflowRunInfoTestFunc := func(t *testing.T, info githubWorkflowLabels, wantErr bool) {
 			req, err := types.NewAccessRequest(uuid.NewString(), "test-user", "test-role")
 			require.NoError(t, err, "failed to create access request")
 
-			err = SetWorkflowInfoLabels(context.Background(), req, info)
+			err = setWorkflowLabels(req, info)
 			if wantErr {
 				assert.Error(t, err, "expected error but got none")
 				return
@@ -35,7 +34,7 @@ func TestGitHubService(t *testing.T) {
 		}
 
 		t.Run("Sanity Check", func(t *testing.T) {
-			storeWorkflowRunInfoTestFunc(t, GitHubWorkflowInfo{
+			storeWorkflowRunInfoTestFunc(t, githubWorkflowLabels{
 				Org:           "test-org",
 				Repo:          "test-repo",
 				Env:           "test-env",
@@ -71,7 +70,7 @@ func TestGitHubService(t *testing.T) {
 
 type missingLabelTestCases struct {
 	name string
-	info GitHubWorkflowInfo
+	info githubWorkflowLabels
 }
 
 // genMissingWorkflowInfo generates test cases for all combinations of missing labels in GitHubWorkflowInfo.
@@ -90,7 +89,7 @@ func genMissingWorkflowInfo() []missingLabelTestCases {
 	)
 
 	for i := int64(15); i > 0; i-- {
-		info := GitHubWorkflowInfo{
+		info := githubWorkflowLabels{
 			Org:           "test-org",
 			Repo:          "test-repo",
 			Env:           "test-env",
@@ -132,20 +131,20 @@ func FuzzStoreWorkflowInfo(f *testing.F) {
 		req, err := types.NewAccessRequest(uuid.NewString(), "test-user", "test-role")
 		require.NoError(t, err, "failed to create access request")
 
-		info := GitHubWorkflowInfo{
+		info := githubWorkflowLabels{
 			Org:           org,
 			Repo:          repo,
 			Env:           env,
 			WorkflowRunID: runID,
 		}
 
-		err = SetWorkflowInfoLabels(context.Background(), req, info)
+		err = setWorkflowLabels(req, info)
 		if err == nil {
 			return
 		}
 
 		var missingLabelErr *MissingLabelError
-		_, err = GetWorkflowInfoFromLabels(context.Background(), req)
+		_, err = getWorkflowLabels(req)
 		assert.ErrorAs(t, err, &missingLabelErr)
 	})
 }

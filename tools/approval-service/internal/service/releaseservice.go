@@ -12,7 +12,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/config"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/eventsources/githubevents"
-	"github.com/gravitational/shared-workflows/tools/approval-service/internal/store"
 	teleportclient "github.com/gravitational/teleport/api/client"
 	"github.com/gravitational/teleport/api/types"
 )
@@ -168,7 +167,7 @@ func (w *ReleaseService) findExistingAccessRequest(ctx context.Context, e github
 	}
 
 	for _, req := range list {
-		info, err := store.GetWorkflowInfoFromLabels(ctx, req)
+		info, err := getWorkflowLabels(req)
 		if err != nil {
 			w.log.Debug("failed to get workflow info for access request", "access_request_name", req.GetName(), "error", err)
 			// Not all Access Requests will have workflow info, so we can ignore this error.
@@ -176,7 +175,7 @@ func (w *ReleaseService) findExistingAccessRequest(ctx context.Context, e github
 		}
 
 		// Check if the Access Request matches the GitHub deployment review event.
-		if info.MatchesEvent(e) {
+		if info.matchesEvent(e) {
 			w.log.Info("Found existing access request for deployment review event", "access_request_name", req.GetName(), "event", e)
 			return req, nil
 		}
@@ -197,7 +196,7 @@ func (w *ReleaseService) createAccessRequest(ctx context.Context, e githubevents
 		return nil, fmt.Errorf("generating new access request: %w", err)
 	}
 	newReq.SetExpiry(time.Now().Add(w.requestTTLHours))
-	err = store.SetWorkflowInfoLabels(ctx, newReq, store.GitHubWorkflowInfo{
+	err = setWorkflowLabels(newReq, githubWorkflowLabels{
 		Org:           e.Organization,
 		Repo:          e.Repository,
 		Env:           e.Environment,
@@ -248,7 +247,7 @@ func (w *ReleaseService) finishEventProcessing(eventID string) {
 
 // onAccessRequestReviewed processes the Access Request review event.
 func (w *ReleaseService) onAccessRequestReviewed(ctx context.Context, req types.AccessRequest) {
-	info, err := store.GetWorkflowInfoFromLabels(ctx, req)
+	info, err := getWorkflowLabels(req)
 	if err != nil {
 		// If we cannot find the workflow info, we cannot process the request.
 		// This is likely due to the access request not having the required labels.
