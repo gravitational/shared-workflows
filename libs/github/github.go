@@ -184,8 +184,10 @@ func (a *installationAuthTransport) getAccessToken(ctx context.Context) (string,
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
+	// Allow for a small buffer before the token expires to account for clock skew.
+	expiryWithBuffer := a.token.GetExpiresAt().Time.Add(-5 * time.Second)
 	// If the token is nil or expired, create a new one.
-	if a.token == nil || a.token.GetToken() == "" || time.Now().After(a.token.GetExpiresAt().Time) {
+	if a.token == nil || a.token.GetToken() == "" || time.Now().After(expiryWithBuffer) {
 		newToken, err := a.createAccessToken(ctx)
 		if err != nil {
 			return "", fmt.Errorf("creating access token: %w", err)
