@@ -132,7 +132,7 @@ func getWorkflowLabels(req types.AccessRequest) (githubWorkflowLabels, error) {
 	}
 
 	if len(missingLabels) > 0 {
-		return githubWorkflowLabels{}, newMissingLabelError(req, missingLabels)
+		return githubWorkflowLabels{}, newMissingLabelError(req, missingLabels...)
 	}
 
 	runIDInt, err := strconv.Atoi(runID)
@@ -152,7 +152,7 @@ func (l githubWorkflowLabels) matchesEvent(e githubevents.DeploymentReviewEvent)
 	return l.Org == e.Organization && l.Repo == e.Repository && l.Env == e.Environment && l.WorkflowRunID == e.WorkflowID
 }
 
-func newMissingLabelError(req types.AccessRequest, labelKeys []string) *MissingLabelError {
+func newMissingLabelError(req types.AccessRequest, labelKeys ...string) *MissingLabelError {
 	return &MissingLabelError{
 		RequestID: req.GetName(),
 		LabelKeys: labelKeys,
