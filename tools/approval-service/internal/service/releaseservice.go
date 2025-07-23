@@ -139,7 +139,11 @@ func (w *ReleaseService) onDeploymentReviewEventReceived(ctx context.Context, e 
 
 		// Existing request is already reviewed (approved/rejected).
 		// This happens when a previous job in the workflow has already triggered the review process.
-		_ = w.HandleAccessRequestReviewed(ctx, existingRequest) // Async handling does not return an error.
+		err = w.HandleAccessRequestReviewed(ctx, existingRequest)
+		if err != nil {
+			w.log.Error("Handling existing access request", "access_request_name", existingRequest.GetName(), "error", err)
+			return
+		}
 		return
 	}
 
