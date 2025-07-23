@@ -178,22 +178,17 @@ func newTeleportClientFromConfig(ctx context.Context, cfg config.Teleport) (*tel
 }
 
 func (a *Service) newServer(cfg config.Root, processor EventProcessor) (*eventsources.Server, error) {
-	opts := []eventsources.ServerOpt{
+	githubSource, err := githubevents.NewSource(cfg.EventSources.GitHub, processor)
+	if err != nil {
+		return nil, fmt.Errorf("creating GitHub event source: %w", err)
+	}
+
+	return eventsources.NewServer(
 		eventsources.WithLogger(a.log),
 		eventsources.WithAddress(cfg.ApprovalService.ListenAddr),
+		eventsources.WithHandler(cfg.EventSources.GitHub.Path, githubSource.Handler()),
 		eventsources.WithHandler("/health", a.healthcheckHandler()),
-	}
-
-	// GitHub event sources are webhooks that are registered as handlers on the HTTP server.
-	for _, gh := range cfg.EventSources.GitHub {
-		gitHubSource, err := githubevents.NewSource(gh, processor)
-		if err != nil {
-			return nil, fmt.Errorf("creating github source: %w", err)
-		}
-		opts = append(opts, eventsources.WithHandler(gh.Path, gitHubSource.Handler()))
-	}
-
-	return eventsources.NewServer(opts...)
+	)
 }
 
 // This is a simple healthcheck handler that checks if the server is healthy.

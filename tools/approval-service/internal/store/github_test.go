@@ -17,13 +17,10 @@ func TestGitHubService(t *testing.T) {
 
 	t.Run("StoreWorkflowRunInfo", func(t *testing.T) {
 		storeWorkflowRunInfoTestFunc := func(t *testing.T, info GitHubWorkflowInfo, wantErr bool) {
-			store, err := NewGitHubStore()
-			require.NoError(t, err, "failed to create GitHub store")
-
 			req, err := types.NewAccessRequest(uuid.NewString(), "test-user", "test-role")
 			require.NoError(t, err, "failed to create access request")
 
-			err = store.StoreWorkflowInfo(context.Background(), req, info)
+			err = SetWorkflowInfoLabels(context.Background(), req, info)
 			if wantErr {
 				assert.Error(t, err, "expected error but got none")
 				return
@@ -132,9 +129,6 @@ func genMissingWorkflowInfo() []missingLabelTestCases {
 func FuzzStoreWorkflowInfo(f *testing.F) {
 	f.Add("test-org", "test-repo", "test-env", int64(12345))
 	f.Fuzz(func(t *testing.T, org, repo, env string, runID int64) {
-		store, err := NewGitHubStore()
-		require.NoError(t, err, "failed to create GitHub store")
-
 		req, err := types.NewAccessRequest(uuid.NewString(), "test-user", "test-role")
 		require.NoError(t, err, "failed to create access request")
 
@@ -145,13 +139,13 @@ func FuzzStoreWorkflowInfo(f *testing.F) {
 			WorkflowRunID: runID,
 		}
 
-		err = store.StoreWorkflowInfo(context.Background(), req, info)
+		err = SetWorkflowInfoLabels(context.Background(), req, info)
 		if err == nil {
 			return
 		}
 
 		var missingLabelErr *MissingLabelError
-		_, err = store.GetWorkflowInfo(context.Background(), req)
+		_, err = GetWorkflowInfoFromLabels(context.Background(), req)
 		assert.ErrorAs(t, err, &missingLabelErr)
 	})
 }

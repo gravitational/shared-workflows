@@ -42,25 +42,27 @@ type ApprovalService struct {
 type EventSources struct {
 	// GitHub is the configuration for the GitHub App and webhook.
 	// This is used to listen for events from GitHub and to respond to approvals.
-	GitHub []GitHubSource `yaml:"github,omitempty"`
+	GitHub GitHubSource `yaml:"github,omitempty"`
 }
 
 // GitHubSource represents the per-repo configuration for webhook events and API authentication.
 type GitHubSource struct {
+	// Path is the URL path that the webhook will be sent to.
 	Path string `yaml:"path,omitempty"`
 	// Org is the organization that the event must be from.
 	Org string `yaml:"org,omitempty"`
 	// Repo is the repository that the event must be from.
 	Repo string `yaml:"repo,omitempty"`
 	// Environments is a list of environments that the event must be for.
-	Environments []GitHubEnvironmentEntry `yaml:"environments,omitempty"`
+	Environments []GitHubEnvironment `yaml:"environments,omitempty"`
 	// Secret is the secret token used to verify the webhook events.
 	Secret string `yaml:"secret,omitempty"`
 	// Authentication configuration for the GitHub REST API
 	Authentication GitHubAuthentication `yaml:"authentication,omitempty"`
 }
 
-type GitHubEnvironmentEntry struct {
+// GitHubEnvironment configures the environment and the associated Teleport Role to request for that environment.
+type GitHubEnvironment struct {
 	// Name is the name of the environment.
 	Name string `yaml:"name"`
 	// TeleportRole is the Teleport role to request for this environment.
@@ -112,15 +114,7 @@ func (c *ApprovalService) Validate() error {
 }
 
 func (c *EventSources) Validate() error {
-	if len(c.GitHub) == 0 {
-		return errors.New("at least one event source is required")
-	}
-	for _, gh := range c.GitHub {
-		if err := gh.Validate(); err != nil {
-			return fmt.Errorf("github: %w", err)
-		}
-	}
-	return nil
+	return c.GitHub.Validate()
 }
 
 func (c *GitHubSource) Validate() error {
@@ -154,7 +148,7 @@ func (c *GitHubSource) Validate() error {
 	return nil
 }
 
-func (c *GitHubEnvironmentEntry) Validate() error {
+func (c *GitHubEnvironment) Validate() error {
 	missing := []string{}
 	if c.Name == "" {
 		missing = append(missing, "name")

@@ -4,19 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"strconv"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/gravitational/teleport/api/types"
 )
-
-// GitHubStorer is responsible for managing external data related to GitHub workflows and deployments.
-type GitHubStorer interface {
-	StoreWorkflowInfo(ctx context.Context, req types.AccessRequest, info GitHubWorkflowInfo) error
-	GetWorkflowInfo(ctx context.Context, req types.AccessRequest) (GitHubWorkflowInfo, error)
-}
 
 // GitHubWorkflowInfo holds information about a GitHub workflow run that is waiting for approval.
 type GitHubWorkflowInfo struct {
@@ -28,26 +21,6 @@ type GitHubWorkflowInfo struct {
 	Env string
 	// WorkflowRunID is the ID of the workflow run that is waiting for approval.
 	WorkflowRunID int64
-}
-
-type GitHubStorerOpt func(g *githubStore) error
-
-type githubStore struct {
-	log *slog.Logger
-}
-
-func NewGitHubStore(opts ...GitHubStorerOpt) (GitHubStorer, error) {
-	g := &githubStore{
-		log: slog.Default(),
-	}
-
-	for _, opt := range opts {
-		if err := opt(g); err != nil {
-			return nil, fmt.Errorf("applying GitHubStorerOpt: %w", err)
-		}
-	}
-
-	return g, nil
 }
 
 // MissingLabelError is returned when a required label is missing from the access request.
@@ -72,7 +45,7 @@ const (
 	environmentLabel  = "environment"
 )
 
-func (g *githubStore) StoreWorkflowInfo(ctx context.Context, req types.AccessRequest, info GitHubWorkflowInfo) error {
+func SetWorkflowInfoLabels(ctx context.Context, req types.AccessRequest, info GitHubWorkflowInfo) error {
 	if info.Org == "" {
 		return errors.New("GitHub organization cannot be empty")
 	}
@@ -89,7 +62,6 @@ func (g *githubStore) StoreWorkflowInfo(ctx context.Context, req types.AccessReq
 	}
 
 	if err := validateUserInput(info); err != nil {
-		g.log.Error("invalid GitHub workflow info", "error", err, "info", info)
 		return errors.New("invalid GitHub workflow info")
 	}
 
@@ -135,7 +107,7 @@ func validateUserInput(info GitHubWorkflowInfo) error {
 	return nil
 }
 
-func (g *githubStore) GetWorkflowInfo(ctx context.Context, req types.AccessRequest) (GitHubWorkflowInfo, error) {
+func GetWorkflowInfoFromLabels(ctx context.Context, req types.AccessRequest) (GitHubWorkflowInfo, error) {
 	missingLabels := []string{}
 	labels := req.GetStaticLabels()
 
@@ -174,16 +146,6 @@ func (g *githubStore) GetWorkflowInfo(ctx context.Context, req types.AccessReque
 		Env:           env,
 		WorkflowRunID: int64(runIDInt),
 	}, nil
-}
-
-var WithGitHubLogger = func(logger *slog.Logger) GitHubStorerOpt {
-	return func(s *githubStore) error {
-		if logger == nil {
-			return errors.New("logger cannot be nil")
-		}
-		s.log = logger
-		return nil
-	}
 }
 
 func newMissingLabelError(req types.AccessRequest, labelKeys []string) *MissingLabelError {

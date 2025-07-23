@@ -1,22 +1,19 @@
 package eventprocessor
 
 import (
-	"bytes"
 	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 	"sync"
-	"text/template"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/gravitational/shared-workflows/libs/github"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/config"
-	"github.com/gravitational/shared-workflows/tools/approval-service/internal/eventprocessor/store"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/eventsources/githubevents"
+	"github.com/gravitational/shared-workflows/tools/approval-service/internal/service"
+	"github.com/gravitational/shared-workflows/tools/approval-service/internal/store"
 	teleportclient "github.com/gravitational/teleport/api/client"
 	"github.com/gravitational/teleport/api/types"
 )
@@ -26,20 +23,12 @@ import (
 // and then creates a Teleport Access Request for the workflow.
 // It then waits for the Access Request to be reviewed, and based on the review, it approves or rejects the workflow in GitHub.
 type WorkflowEventsProcessor struct {
-	store store.GitHubStorer
-
 	// Required for creating new Access Requests.
 	teleportUser    string
 	requestTTLHours time.Duration
 	teleClient      *teleportclient.Client
 
-	// deploymentApprovalHandlers will be used to handle decisions to approve or reject deployment protection rules.
-	// This is a map of GitHub organization/repository names to their respective approval handlers.
-	// This allows us to handle multiple repositories with authentication and environment-specific logic.
-	//
-	// not safe for concurrent read/write
-	// this is written to during init and only read concurrently during operation.
-	deploymentApprovalHandlers map[string]*GitHubDeploymentApprovalHandler
+	releaseService *service.GitHubReleaseService
 
 	// Channels for asynchronous processing of events.
 	deploymentReviewEventChan chan githubevents.DeploymentReviewEvent
@@ -53,36 +42,17 @@ type WorkflowEventsProcessor struct {
 	log *slog.Logger
 }
 
-// GitHubDeploymentApprovalHandler handles approvals/rejections for deployment protection reviews on workflows
-// based on the reviewed Access Requests. This is per-repo, and contains the logic to handle the
-// decision-making process for deployment protection rules.
-type GitHubDeploymentApprovalHandler struct {
-	ghClient *github.Client
-	org      string
-	repo     string
-
-	envToRole map[string]string
-	log       *slog.Logger
-}
-
 // WorkflowEventsProcessorOption is a functional option for configuring the WorkflowEventsProcessor.
 type WorkflowEventsProcessorOption func(d *WorkflowEventsProcessor) error
 
 // NewWorkflowEventsProcessor creates a new WorkflowEventsProcessor instance.
 func NewWorkflowEventsProcessor(cfg config.Root, teleClient *teleportclient.Client, opts ...WorkflowEventsProcessorOption) (*WorkflowEventsProcessor, error) {
-	store, err := store.NewGitHubStore()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create GitHub store: %w", err)
-	}
-
 	d := &WorkflowEventsProcessor{
-		store:                      store,
-		teleClient:                 teleClient,
-		requestTTLHours:            cmp.Or(time.Duration(cfg.ApprovalService.Teleport.RequestTTLHours)*time.Hour, 7*24*time.Hour),
-		teleportUser:               cfg.ApprovalService.Teleport.User,
-		deploymentApprovalHandlers: make(map[string]*GitHubDeploymentApprovalHandler),
-		currentlyProcessing:        make(map[string]struct{}),
-		log:                        slog.Default(),
+		teleClient:          teleClient,
+		requestTTLHours:     cmp.Or(time.Duration(cfg.ApprovalService.Teleport.RequestTTLHours)*time.Hour, 7*24*time.Hour),
+		teleportUser:        cfg.ApprovalService.Teleport.User,
+		currentlyProcessing: make(map[string]struct{}),
+		log:                 slog.Default(),
 		// Channels for asynchronous processing of events.
 		// Setting buffer size to 1 to allow for non-blocking sends but still allow for some backpressure.
 		// An issue is that for large buffers, we end up with a lot of events queued in memory that will be lost if the service crashes.
@@ -90,15 +60,6 @@ func NewWorkflowEventsProcessor(cfg config.Root, teleClient *teleportclient.Clie
 		// Balancing throughput and backpressure is important to avoid overwhelming the system and to properly handle event processing.
 		deploymentReviewEventChan: make(chan githubevents.DeploymentReviewEvent, 1),
 		accessRequestReviewChan:   make(chan types.AccessRequest, 1),
-	}
-
-	for _, repoCfg := range cfg.EventSources.GitHub {
-		// Create a new decision handler for each repository.
-		handler, err := newGitHubDeploymentApprovalHandler(context.Background(), repoCfg, d.log)
-		if err != nil {
-			return nil, fmt.Errorf("creating GitHub deployment approval handler for %s/%s: %w", repoCfg.Org, repoCfg.Repo, err)
-		}
-		d.deploymentApprovalHandlers[formatGitHubRepoKey(repoCfg.Org, repoCfg.Repo)] = handler
 	}
 
 	for _, opt := range opts {
@@ -202,7 +163,7 @@ func (w *WorkflowEventsProcessor) findExistingAccessRequest(ctx context.Context,
 	}
 
 	for _, req := range list {
-		info, err := w.store.GetWorkflowInfo(ctx, req)
+		info, err := store.GetWorkflowInfoFromLabels(ctx, req)
 		if err != nil {
 			w.log.Debug("failed to get workflow info for access request", "access_request_name", req.GetName(), "error", err)
 			// Not all Access Requests will have workflow info, so we can ignore this error.
@@ -222,12 +183,7 @@ func (w *WorkflowEventsProcessor) findExistingAccessRequest(ctx context.Context,
 
 // createAccessRequest creates a new Access Request for the given GitHub deployment review event.
 func (w *WorkflowEventsProcessor) createAccessRequest(ctx context.Context, e githubevents.DeploymentReviewEvent) (types.AccessRequest, error) {
-	approvalHandler, err := w.getApprovalHandler(e.Organization, e.Repository)
-	if err != nil {
-		return nil, fmt.Errorf("getting approval handler for organization %q and repository %q: %w", e.Organization, e.Repository, err)
-	}
-
-	role, err := approvalHandler.teleportRoleForEnvironment(e.Environment)
+	role, err := w.releaseService.TeleportRoleForEnvironment(e.Environment)
 	if err != nil {
 		return nil, fmt.Errorf("getting Teleport role for environment %q: %w", e.Environment, err)
 	}
@@ -236,7 +192,7 @@ func (w *WorkflowEventsProcessor) createAccessRequest(ctx context.Context, e git
 		return nil, fmt.Errorf("generating new access request: %w", err)
 	}
 	newReq.SetExpiry(time.Now().Add(w.requestTTLHours))
-	err = w.store.StoreWorkflowInfo(ctx, newReq, store.GitHubWorkflowInfo{
+	err = store.SetWorkflowInfoLabels(ctx, newReq, store.GitHubWorkflowInfo{
 		Org:           e.Organization,
 		Repo:          e.Repository,
 		Env:           e.Environment,
@@ -246,7 +202,7 @@ func (w *WorkflowEventsProcessor) createAccessRequest(ctx context.Context, e git
 		return nil, fmt.Errorf("storing workflow info: %w", err)
 	}
 
-	reason, err := approvalHandler.generateAccessRequestReason(e.WorkflowID, e.Environment)
+	reason, err := w.releaseService.GenerateAccessRequestReason(e.WorkflowID, e.Environment)
 	if err != nil {
 		return nil, fmt.Errorf("generating access request reason: %w", err)
 	}
@@ -287,7 +243,7 @@ func (w *WorkflowEventsProcessor) finishEventProcessing(eventID string) {
 
 // onAccessRequestReviewed processes the Access Request review event.
 func (w *WorkflowEventsProcessor) onAccessRequestReviewed(ctx context.Context, req types.AccessRequest) {
-	info, err := w.store.GetWorkflowInfo(ctx, req)
+	info, err := store.GetWorkflowInfoFromLabels(ctx, req)
 	if err != nil {
 		// If we cannot find the workflow info, we cannot process the request.
 		// This is likely due to the access request not having the required labels.
@@ -295,126 +251,11 @@ func (w *WorkflowEventsProcessor) onAccessRequestReviewed(ctx context.Context, r
 		return
 	}
 
-	approvalHandler, err := w.getApprovalHandler(info.Org, info.Repo)
-	if err != nil {
-		w.log.Error("Error getting approval handler for access request", "access_request_name", req.GetName(), "org", info.Org, "repo", info.Repo, "error", err)
-		return
-	}
-
-	if err := approvalHandler.handleDecisionForAccessRequestReviewed(ctx, req.GetState(), info.Env, info.WorkflowRunID); err != nil {
+	if err := w.releaseService.HandleDecisionForAccessRequestReviewed(ctx, req.GetState(), info.Env, info.WorkflowRunID); err != nil {
 		w.log.Error("Error handling access request reviewed", "access_request_name", req.GetName(), "error", err)
 		return
 	}
 	w.log.Info("Handled access request reviewed", "access_request_name", req.GetName(), "org", info.Org, "repo", info.Repo)
-}
-
-func (w *WorkflowEventsProcessor) getApprovalHandler(org, repo string) (*GitHubDeploymentApprovalHandler, error) {
-	handler, ok := w.deploymentApprovalHandlers[formatGitHubRepoKey(org, repo)]
-	if !ok {
-		return nil, fmt.Errorf("the organization %q and repository %q are not configured for deployment approval", org, repo)
-	}
-	return handler, nil
-}
-
-// newGitHubDeploymentApprovalHandler creates a new GitHub deployment approval handler for deployment protection rules
-// in a given GitHub organization and repository.
-func newGitHubDeploymentApprovalHandler(ctx context.Context, cfg config.GitHubSource, log *slog.Logger) (*GitHubDeploymentApprovalHandler, error) {
-	key, err := os.ReadFile(cfg.Authentication.App.PrivateKeyPath)
-	if err != nil {
-		return nil, fmt.Errorf("reading private key file %q: %w", cfg.Authentication.App.PrivateKeyPath, err)
-	}
-
-	client, err := github.NewForApp(ctx, cfg.Authentication.App.AppID, cfg.Authentication.App.InstallationID, key)
-	if err != nil {
-		return nil, fmt.Errorf("creating GitHub client for app: %w", err)
-	}
-
-	h := &GitHubDeploymentApprovalHandler{
-		log:       log,
-		org:       cfg.Org,
-		repo:      cfg.Repo,
-		envToRole: make(map[string]string),
-		ghClient:  client,
-	}
-
-	for _, env := range cfg.Environments {
-		h.envToRole[env.Name] = env.TeleportRole
-	}
-
-	return h, nil
-}
-
-// teleportRoleForEnvironment returns the Teleport role for a given environment.
-func (h *GitHubDeploymentApprovalHandler) teleportRoleForEnvironment(env string) (string, error) {
-	role, ok := h.envToRole[env]
-	if !ok {
-		return "", fmt.Errorf("no Teleport role configured for environment %q", env)
-	}
-	return role, nil
-}
-
-// handleDecisionForAccessRequestReviewed processes the decision for an access request that has been reviewed.
-// It will either approve or reject the deployment protection rule based on the state of the access request
-func (h *GitHubDeploymentApprovalHandler) handleDecisionForAccessRequestReviewed(ctx context.Context, status types.RequestState, env string, workflowID int64) error {
-	var decision github.PendingDeploymentApprovalState
-	switch status {
-	case types.RequestState_APPROVED:
-		decision = github.PendingDeploymentApprovalStateApproved
-	default:
-		decision = github.PendingDeploymentApprovalStateRejected
-	}
-
-	if err := h.ghClient.ReviewDeploymentProtectionRule(ctx, h.org, h.repo, workflowID, decision, env, ""); err != nil {
-		return fmt.Errorf("reviewing deployment protection rule: %w", err)
-	}
-
-	h.log.Info("Handled decision for access request reviewed", "org", h.org, "repo", h.repo, "env", env, "workflow_run_id", workflowID, "decision", decision)
-	return nil
-}
-
-var reasonTmpl = template.Must(template.New("").Parse(`GitHub Deployment Review for:
-
-Repository: {{ .Organization}}/{{ .Repository }}
-Workflow name: {{ .WorkflowName }}
-URL: {{ .URL }}
-Environment: {{ .Environment }}
-Workflow run ID: {{ .WorkflowID }}
-Requester: {{ .Requester }}
-
-This request was generated by the pipeline approval service.
-`))
-
-type accessRequestReasonTemplateData struct {
-	Organization string
-	Repository   string
-	WorkflowName string
-	URL          string
-	Environment  string
-	WorkflowID   int64
-	Requester    string
-}
-
-func (h *GitHubDeploymentApprovalHandler) generateAccessRequestReason(runID int64, env string) (string, error) {
-	runInfo, err := h.ghClient.GetWorkflowRunInfo(context.Background(), h.org, h.repo, runID)
-	if err != nil {
-		return "", fmt.Errorf("getting workflow run info: %w", err)
-	}
-
-	templateData := &accessRequestReasonTemplateData{
-		Organization: h.org,
-		Repository:   h.repo,
-		WorkflowName: runInfo.Name,
-		URL:          runInfo.HTMLURL,
-		Environment:  env,
-		WorkflowID:   runID,
-		Requester:    runInfo.Requester,
-	}
-
-	var buff bytes.Buffer
-	if err := reasonTmpl.Execute(&buff, templateData); err != nil {
-		return "", fmt.Errorf("executing reason template: %w", err)
-	}
-	return buff.String(), nil
 }
 
 // WithLogger sets the logger for the WorkflowEventsProcessor.
@@ -426,8 +267,4 @@ func WithLogger(logger *slog.Logger) WorkflowEventsProcessorOption {
 		d.log = logger
 		return nil
 	}
-}
-
-func formatGitHubRepoKey(org, repo string) string {
-	return org + "/" + repo
 }
