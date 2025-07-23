@@ -23,10 +23,10 @@ import (
 	"net/http"
 
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/config"
-	"github.com/gravitational/shared-workflows/tools/approval-service/internal/eventprocessor"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/eventsources"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/eventsources/accessrequest"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/eventsources/githubevents"
+	"github.com/gravitational/shared-workflows/tools/approval-service/internal/service"
 	teleportclient "github.com/gravitational/teleport/api/client"
 
 	"golang.org/x/sync/errgroup"
@@ -97,10 +97,10 @@ func NewFromConfig(ctx context.Context, cfg config.Root, opts ...Opt) (*Service,
 		return nil, fmt.Errorf("creating new teleport client from config: %w", err)
 	}
 
-	processor, err := eventprocessor.NewWorkflowEventsProcessor(
+	processor, err := service.NewReleaseService(
 		cfg,
 		tele,
-		eventprocessor.WithLogger(a.log),
+		service.WithLogger(a.log),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("creating event processor: %w", err)

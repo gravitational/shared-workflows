@@ -31,11 +31,13 @@ type ReviewDeploymentProtectionRuleInfo struct {
 	Comment string `json:"comment,omitempty"`
 }
 
-func (c *Client) ReviewDeploymentProtectionRule(ctx context.Context, org, repo string, runID int64, state PendingDeploymentApprovalState, envName, comment string) error {
-	resp, err := c.client.Actions.ReviewCustomDeploymentProtectionRule(ctx, org, repo, runID, &github.ReviewCustomDeploymentProtectionRuleRequest{
-		State:           string(state),
-		EnvironmentName: envName,
-		Comment:         comment,
+// ReviewDeploymentProtectionRule reviews a deployment protection rule.
+// This is used by GitHub Apps that are configured for environment protection rules.
+func (c *Client) ReviewDeploymentProtectionRule(ctx context.Context, org, repo string, info ReviewDeploymentProtectionRuleInfo) error {
+	resp, err := c.client.Actions.ReviewCustomDeploymentProtectionRule(ctx, org, repo, info.RunID, &github.ReviewCustomDeploymentProtectionRuleRequest{
+		State:           string(info.State),
+		EnvironmentName: info.EnvironmentName,
+		Comment:         info.Comment,
 	})
 
 	if err != nil {

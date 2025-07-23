@@ -26,7 +26,7 @@ type WorkflowRunInfo struct {
 	Repository string
 }
 
-// GeWorkflowRunInfo retrieves information about a specific workflow run by its ID.
+// GetWorkflowRunInfo retrieves information about a specific workflow run by its ID.
 func (c *Client) GetWorkflowRunInfo(ctx context.Context, org, repo string, runID int64) (WorkflowRunInfo, error) {
 	workflow, _, err := c.client.Actions.GetWorkflowRunByID(ctx, org, repo, runID)
 	if err != nil {
@@ -50,7 +50,7 @@ func (c *Client) ListWaitingWorkflowRuns(ctx context.Context, org, repo string) 
 		Status: "waiting",
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("listing waiting workflow runs: %w", err)
 	}
 
 	allRuns := []WorkflowRunInfo{}

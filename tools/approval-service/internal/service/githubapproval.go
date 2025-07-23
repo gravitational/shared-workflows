@@ -13,10 +13,10 @@ import (
 	"github.com/gravitational/teleport/api/types"
 )
 
-// GitHubReleaseService handles approvals/rejections for deployment protection reviews on workflows
+// gitHubWorkflowApprover handles approvals/rejections for deployment protection reviews on workflows
 // based on the reviewed Access Requests. This is per-repo, and contains the logic to handle the
 // decision-making process for deployment protection rules.
-type GitHubReleaseService struct {
+type gitHubWorkflowApprover struct {
 	ghClient *github.Client
 	org      string
 	repo     string
@@ -25,9 +25,9 @@ type GitHubReleaseService struct {
 	log       *slog.Logger
 }
 
-// NewGitHubReleaseService creates a new GitHub deployment approval handler for deployment protection rules
+// newGitHubWorkflowApprover creates a new GitHub deployment approval handler for deployment protection rules
 // in a given GitHub organization and repository.
-func NewGitHubReleaseService(ctx context.Context, cfg config.GitHubSource, log *slog.Logger) (*GitHubReleaseService, error) {
+func newGitHubWorkflowApprover(ctx context.Context, cfg config.GitHubSource, log *slog.Logger) (*gitHubWorkflowApprover, error) {
 	key, err := os.ReadFile(cfg.Authentication.App.PrivateKeyPath)
 	if err != nil {
 		return nil, fmt.Errorf("reading private key file %q: %w", cfg.Authentication.App.PrivateKeyPath, err)
@@ -38,7 +38,7 @@ func NewGitHubReleaseService(ctx context.Context, cfg config.GitHubSource, log *
 		return nil, fmt.Errorf("creating GitHub client for app: %w", err)
 	}
 
-	h := &GitHubReleaseService{
+	h := &gitHubWorkflowApprover{
 		log:       log,
 		org:       cfg.Org,
 		repo:      cfg.Repo,
@@ -53,8 +53,8 @@ func NewGitHubReleaseService(ctx context.Context, cfg config.GitHubSource, log *
 	return h, nil
 }
 
-// TeleportRoleForEnvironment returns the Teleport role for a given environment.
-func (h *GitHubReleaseService) TeleportRoleForEnvironment(env string) (string, error) {
+// teleportRoleForEnvironment returns the Teleport role for a given environment.
+func (h *gitHubWorkflowApprover) teleportRoleForEnvironment(env string) (string, error) {
 	role, ok := h.envToRole[env]
 	if !ok {
 		return "", fmt.Errorf("no Teleport role configured for environment %q", env)
@@ -62,9 +62,9 @@ func (h *GitHubReleaseService) TeleportRoleForEnvironment(env string) (string, e
 	return role, nil
 }
 
-// HandleDecisionForAccessRequestReviewed processes the decision for an access request that has been reviewed.
+// handleDecisionForAccessRequestReviewed processes the decision for an access request that has been reviewed.
 // It will either approve or reject the deployment protection rule based on the state of the access request
-func (h *GitHubReleaseService) HandleDecisionForAccessRequestReviewed(ctx context.Context, status types.RequestState, env string, workflowID int64) error {
+func (h *gitHubWorkflowApprover) handleDecisionForAccessRequestReviewed(ctx context.Context, status types.RequestState, env string, workflowID int64) error {
 	var decision github.PendingDeploymentApprovalState
 	switch status {
 	case types.RequestState_APPROVED:
@@ -73,7 +73,15 @@ func (h *GitHubReleaseService) HandleDecisionForAccessRequestReviewed(ctx contex
 		decision = github.PendingDeploymentApprovalStateRejected
 	}
 
-	if err := h.ghClient.ReviewDeploymentProtectionRule(ctx, h.org, h.repo, workflowID, decision, env, ""); err != nil {
+	err := h.ghClient.ReviewDeploymentProtectionRule(ctx, h.org, h.repo,
+		github.ReviewDeploymentProtectionRuleInfo{
+			RunID:           workflowID,
+			State:           decision,
+			EnvironmentName: env,
+			Comment:         "Decision made by the approval service based on Access Request state",
+		},
+	)
+	if err != nil {
 		return fmt.Errorf("reviewing deployment protection rule: %w", err)
 	}
 
@@ -81,9 +89,9 @@ func (h *GitHubReleaseService) HandleDecisionForAccessRequestReviewed(ctx contex
 	return nil
 }
 
-// GenerateAccessRequestReason generates a reason for the access request based on the workflow run information.
+// generateAccessRequestReason generates a reason for the access request based on the workflow run information.
 // This reason will be used in the access request to provide context for the approval.
-func (h *GitHubReleaseService) GenerateAccessRequestReason(runID int64, env string) (string, error) {
+func (h *gitHubWorkflowApprover) generateAccessRequestReason(runID int64, env string) (string, error) {
 	runInfo, err := h.ghClient.GetWorkflowRunInfo(context.Background(), h.org, h.repo, runID)
 	if err != nil {
 		return "", fmt.Errorf("getting workflow run info: %w", err)

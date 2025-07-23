@@ -1,4 +1,4 @@
-package eventprocessor
+package service
 
 import (
 	"cmp"
@@ -12,23 +12,22 @@ import (
 	"github.com/google/uuid"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/config"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/eventsources/githubevents"
-	"github.com/gravitational/shared-workflows/tools/approval-service/internal/service"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/store"
 	teleportclient "github.com/gravitational/teleport/api/client"
 	"github.com/gravitational/teleport/api/types"
 )
 
-// WorkflowEventsProcessor processes GitHub Events and Teleport Access Request state changes that are related to GitHub workflows.
+// ReleaseService processes GitHub Events and Teleport Access Request state changes that are related to GitHub workflows.
 // At a high level, it waits for a GitHub Workflow to request access to an environment (signaled by deployment_protection_rule),
 // and then creates a Teleport Access Request for the workflow.
 // It then waits for the Access Request to be reviewed, and based on the review, it approves or rejects the workflow in GitHub.
-type WorkflowEventsProcessor struct {
+type ReleaseService struct {
 	// Required for creating new Access Requests.
 	teleportUser    string
 	requestTTLHours time.Duration
 	teleClient      *teleportclient.Client
 
-	releaseService *service.GitHubReleaseService
+	ghApprover *gitHubWorkflowApprover
 
 	// Channels for asynchronous processing of events.
 	deploymentReviewEventChan chan githubevents.DeploymentReviewEvent
@@ -42,12 +41,18 @@ type WorkflowEventsProcessor struct {
 	log *slog.Logger
 }
 
-// WorkflowEventsProcessorOption is a functional option for configuring the WorkflowEventsProcessor.
-type WorkflowEventsProcessorOption func(d *WorkflowEventsProcessor) error
+// ReleaseServiceOpts is a functional option for configuring the WorkflowEventsProcessor.
+type ReleaseServiceOpts func(d *ReleaseService) error
 
-// NewWorkflowEventsProcessor creates a new WorkflowEventsProcessor instance.
-func NewWorkflowEventsProcessor(cfg config.Root, teleClient *teleportclient.Client, opts ...WorkflowEventsProcessorOption) (*WorkflowEventsProcessor, error) {
-	d := &WorkflowEventsProcessor{
+// NewReleaseService creates a new WorkflowEventsProcessor instance.
+func NewReleaseService(cfg config.Root, teleClient *teleportclient.Client, opts ...ReleaseServiceOpts) (*ReleaseService, error) {
+	approver, err := newGitHubWorkflowApprover(context.Background(), cfg.EventSources.GitHub, slog.Default())
+	if err != nil {
+		return nil, fmt.Errorf("creating GitHub workflow approver: %w", err)
+	}
+
+	d := &ReleaseService{
+		ghApprover:          approver,
 		teleClient:          teleClient,
 		requestTTLHours:     cmp.Or(time.Duration(cfg.ApprovalService.Teleport.RequestTTLHours)*time.Hour, 7*24*time.Hour),
 		teleportUser:        cfg.ApprovalService.Teleport.User,
@@ -74,7 +79,7 @@ func NewWorkflowEventsProcessor(cfg config.Root, teleClient *teleportclient.Clie
 // Run starts the WorkflowEventsProcessor and begins listening for events.
 // This method fans-in events from multiple sources and asynchronously fans-out to the appropriate processors.
 // It blocks until the context is cancelled.
-func (w *WorkflowEventsProcessor) Run(ctx context.Context) error {
+func (w *ReleaseService) Run(ctx context.Context) error {
 	for {
 		select {
 		case deployReviewEvent := <-w.deploymentReviewEventChan:
@@ -89,24 +94,24 @@ func (w *WorkflowEventsProcessor) Run(ctx context.Context) error {
 
 // HandleDeploymentReviewEventReceived multiplexes deployment review events and handles them asynchronously.
 // This function will return a nil error since the processing is done asynchronously.
-func (w *WorkflowEventsProcessor) HandleDeploymentReviewEventReceived(ctx context.Context, e githubevents.DeploymentReviewEvent) error {
+func (w *ReleaseService) HandleDeploymentReviewEventReceived(ctx context.Context, e githubevents.DeploymentReviewEvent) error {
 	w.deploymentReviewEventChan <- e
 	return nil
 }
 
 // HandleWorkflowDispatchEventReceived is a placeholder for processing workflow dispatch events.
-func (w *WorkflowEventsProcessor) HandleWorkflowDispatchEventReceived(ctx context.Context, e githubevents.WorkflowDispatchEvent) error {
+func (w *ReleaseService) HandleWorkflowDispatchEventReceived(ctx context.Context, e githubevents.WorkflowDispatchEvent) error {
 	// This is not implemented yet.
 	return fmt.Errorf("workflow_dispatch event processing is not implemented")
 }
 
 // HandleAccessRequestReviewed will handle updates to the state of a Teleport Access Request.
-func (w *WorkflowEventsProcessor) HandleAccessRequestReviewed(ctx context.Context, req types.AccessRequest) error {
+func (w *ReleaseService) HandleAccessRequestReviewed(ctx context.Context, req types.AccessRequest) error {
 	w.accessRequestReviewChan <- req
 	return nil
 }
 
-func (w *WorkflowEventsProcessor) onDeploymentReviewEventReceived(ctx context.Context, e githubevents.DeploymentReviewEvent) {
+func (w *ReleaseService) onDeploymentReviewEventReceived(ctx context.Context, e githubevents.DeploymentReviewEvent) {
 	// One Access Request should be created per workflow run and environment.
 	eventID := fmt.Sprintf("%s/%s/%d/%s", e.Organization, e.Repository, e.WorkflowID, e.Environment)
 	if !w.tryStartEventProcessing(eventID) {
@@ -156,7 +161,7 @@ func (w *WorkflowEventsProcessor) onDeploymentReviewEventReceived(ctx context.Co
 //  1. If no Access Request exists, we need to create one.
 //  2. If an Access Request exists, and is pending, no further action is needed.
 //  3. If an Access Request exists, and is not pending, we can update the state of the GitHub deployment accordingly.
-func (w *WorkflowEventsProcessor) findExistingAccessRequest(ctx context.Context, e githubevents.DeploymentReviewEvent) (types.AccessRequest, error) {
+func (w *ReleaseService) findExistingAccessRequest(ctx context.Context, e githubevents.DeploymentReviewEvent) (types.AccessRequest, error) {
 	list, err := w.teleClient.GetAccessRequests(ctx, types.AccessRequestFilter{})
 	if err != nil {
 		return nil, fmt.Errorf("getting access requests: %w", err)
@@ -182,8 +187,8 @@ func (w *WorkflowEventsProcessor) findExistingAccessRequest(ctx context.Context,
 }
 
 // createAccessRequest creates a new Access Request for the given GitHub deployment review event.
-func (w *WorkflowEventsProcessor) createAccessRequest(ctx context.Context, e githubevents.DeploymentReviewEvent) (types.AccessRequest, error) {
-	role, err := w.releaseService.TeleportRoleForEnvironment(e.Environment)
+func (w *ReleaseService) createAccessRequest(ctx context.Context, e githubevents.DeploymentReviewEvent) (types.AccessRequest, error) {
+	role, err := w.ghApprover.teleportRoleForEnvironment(e.Environment)
 	if err != nil {
 		return nil, fmt.Errorf("getting Teleport role for environment %q: %w", e.Environment, err)
 	}
@@ -202,7 +207,7 @@ func (w *WorkflowEventsProcessor) createAccessRequest(ctx context.Context, e git
 		return nil, fmt.Errorf("storing workflow info: %w", err)
 	}
 
-	reason, err := w.releaseService.GenerateAccessRequestReason(e.WorkflowID, e.Environment)
+	reason, err := w.ghApprover.generateAccessRequestReason(e.WorkflowID, e.Environment)
 	if err != nil {
 		return nil, fmt.Errorf("generating access request reason: %w", err)
 	}
@@ -219,7 +224,7 @@ func (w *WorkflowEventsProcessor) createAccessRequest(ctx context.Context, e git
 // tryStartEventProcessing attempts to start processing an event if it's not already being processed.
 // Returns true if processing should proceed, false if the event is already being processed.
 // This method provides deduplication to prevent concurrent processing of the same workflow event.
-func (w *WorkflowEventsProcessor) tryStartEventProcessing(eventID string) bool {
+func (w *ReleaseService) tryStartEventProcessing(eventID string) bool {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
@@ -235,14 +240,14 @@ func (w *WorkflowEventsProcessor) tryStartEventProcessing(eventID string) bool {
 
 // finishEventProcessing marks an event as finished processing, allowing it to be processed again in the future.
 // This removes the event from the currently processing set to prevent memory leaks.
-func (w *WorkflowEventsProcessor) finishEventProcessing(eventID string) {
+func (w *ReleaseService) finishEventProcessing(eventID string) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	delete(w.currentlyProcessing, eventID)
 }
 
 // onAccessRequestReviewed processes the Access Request review event.
-func (w *WorkflowEventsProcessor) onAccessRequestReviewed(ctx context.Context, req types.AccessRequest) {
+func (w *ReleaseService) onAccessRequestReviewed(ctx context.Context, req types.AccessRequest) {
 	info, err := store.GetWorkflowInfoFromLabels(ctx, req)
 	if err != nil {
 		// If we cannot find the workflow info, we cannot process the request.
@@ -251,7 +256,7 @@ func (w *WorkflowEventsProcessor) onAccessRequestReviewed(ctx context.Context, r
 		return
 	}
 
-	if err := w.releaseService.HandleDecisionForAccessRequestReviewed(ctx, req.GetState(), info.Env, info.WorkflowRunID); err != nil {
+	if err := w.ghApprover.handleDecisionForAccessRequestReviewed(ctx, req.GetState(), info.Env, info.WorkflowRunID); err != nil {
 		w.log.Error("Error handling access request reviewed", "access_request_name", req.GetName(), "error", err)
 		return
 	}
@@ -259,8 +264,8 @@ func (w *WorkflowEventsProcessor) onAccessRequestReviewed(ctx context.Context, r
 }
 
 // WithLogger sets the logger for the WorkflowEventsProcessor.
-func WithLogger(logger *slog.Logger) WorkflowEventsProcessorOption {
-	return func(d *WorkflowEventsProcessor) error {
+func WithLogger(logger *slog.Logger) ReleaseServiceOpts {
+	return func(d *ReleaseService) error {
 		if logger == nil {
 			return errors.New("logger cannot be nil")
 		}
