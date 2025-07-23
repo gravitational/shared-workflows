@@ -3,9 +3,9 @@ package service
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
 	"log/slog"
-	"os"
 	"text/template"
 
 	"github.com/gravitational/shared-workflows/libs/github"
@@ -28,9 +28,9 @@ type gitHubWorkflowApprover struct {
 // newGitHubWorkflowApprover creates a new GitHub deployment approval handler for deployment protection rules
 // in a given GitHub organization and repository.
 func newGitHubWorkflowApprover(ctx context.Context, cfg config.GitHubSource, log *slog.Logger) (*gitHubWorkflowApprover, error) {
-	key, err := os.ReadFile(cfg.Authentication.App.PrivateKeyPath)
+	key, err := base64.StdEncoding.DecodeString(cfg.Authentication.App.PrivateKey)
 	if err != nil {
-		return nil, fmt.Errorf("reading private key file %q: %w", cfg.Authentication.App.PrivateKeyPath, err)
+		return nil, fmt.Errorf("decoding private key %q: %w", cfg.Authentication.App.PrivateKey, err)
 	}
 
 	client, err := github.NewForApp(ctx, cfg.Authentication.App.AppID, cfg.Authentication.App.InstallationID, key)
