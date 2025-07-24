@@ -19,7 +19,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"regexp"
 	"strings"
 	"text/template"
@@ -90,7 +89,7 @@ func (c *changelogGenerator) generateChangelog(ctx context.Context, branch strin
 func (c *changelogGenerator) toChangelog(prs []github.ChangelogPR) (string, error) {
 	var clList []changelogInfo
 	for _, pr := range prs {
-		clList = append(clList, newChangelogInfoFromPR(pr))
+		clList = append(clList, newChangelogInfoFromPR(pr)...)
 	}
 
 	var buff bytes.Buffer
@@ -106,29 +105,39 @@ func (c *changelogGenerator) toChangelog(prs []github.ChangelogPR) (string, erro
 }
 
 // convertPRToChangelog will convert the list of PRs to a nicer format.
-func newChangelogInfoFromPR(pr github.ChangelogPR) changelogInfo {
-	found, clSummary := findChangelog(pr.Body)
-	if !found {
-		// Pull out title and indicate no changelog found
-		clSummary = fmt.Sprintf("NOCL: %s", pr.Title)
-	}
-	return changelogInfo{
-		Summary: prettierSummary(clSummary),
+func newChangelogInfoFromPR(pr github.ChangelogPR) []changelogInfo {
+	var result []changelogInfo
+
+	info := changelogInfo{
+		Summary: "NOCL: " + pr.Title, // default summary
 		Number:  pr.Number,
 		URL:     pr.URL,
 	}
+
+	changelogs := findChangelogs(pr.Body)
+	if len(changelogs) == 0 {
+		return []changelogInfo{info}
+	}
+	for _, summary := range changelogs {
+		info.Summary = prettierSummary(summary)
+		result = append(result, info)
+	}
+	return result
 }
 
-// findChangelog will parse a body of a PR to find a changelog.
-func findChangelog(commentBody string) (found bool, summary string) {
-	// If a match is found then we should get a non empty slice
-	// 0 index will be the whole match including "changelog: *"
-	// 1 index will be the subgroup match which does not include "changelog: "
-	m := clPattern.FindStringSubmatch(commentBody)
-	if len(m) > 1 {
-		return true, m[1]
+// findChangelogs will parse a body of a PR to find it's changelogs.
+func findChangelogs(commentBody string) []string {
+	var result []string
+	matches := clPattern.FindAllStringSubmatch(commentBody, -1)
+	for _, m := range matches {
+		// If a match is found then we should get a non empty slice
+		// 0 index will be the whole match including "changelog: *"
+		// 1 index will be the subgroup match which does not include "changelog: "
+		if len(m) > 1 {
+			result = append(result, m[1])
+		}
 	}
-	return false, ""
+	return result
 }
 
 func prettierSummary(cl string) string {
