@@ -102,7 +102,7 @@
         "url": "https://github.com/gravitational/teleport/pull/43161"
     },
     {
-        "body": "backport  #42161 to branch/v16\r\n\r\nchangelog: Adds `tctl desktop bootstrap` for bootstrapping AD environments to work with Desktop Access.",
+        "body": "backport  #42161 to branch/v16\r\n\r\nchangelog: Adds `tctl desktop bootstrap` for bootstrapping AD environments to work with Desktop Access.\r\nchangelog: Adds a changelog for testing.\r\n",
         "number": 43150,
         "title": "[v16] Adds `tctl desktop bootstrap`, updates docs.",
         "url": "https://github.com/gravitational/teleport/pull/43150"

@@ -16,3 +16,4 @@
 * Fix setting request reason for automatic ssh access requests.
 * Improved log rotation logic in Teleport Connect; now the non-numbered files always contain recent logs.
 * Adds `tctl desktop bootstrap` for bootstrapping AD environments to work with Desktop Access.
+* Adds a changelog for testing.

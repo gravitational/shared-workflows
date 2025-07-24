@@ -1,8 +1,6 @@
 module github.com/gravitational/shared-workflows/tools/changelog
 
-go 1.23.0
-
-toolchain go1.24.0
+go 1.23
 
 require (
 	github.com/alecthomas/kingpin/v2 v2.4.0

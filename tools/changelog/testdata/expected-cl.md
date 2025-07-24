@@ -16,3 +16,4 @@
 * Fix setting request reason for automatic ssh access requests. [#43178](https://github.com/gravitational/teleport/pull/43178)
 * Improved log rotation logic in Teleport Connect; now the non-numbered files always contain recent logs. [#43161](https://github.com/gravitational/teleport/pull/43161)
 * Adds `tctl desktop bootstrap` for bootstrapping AD environments to work with Desktop Access. [#43150](https://github.com/gravitational/teleport/pull/43150)
+* Adds a changelog for testing. [#43150](https://github.com/gravitational/teleport/pull/43150)
