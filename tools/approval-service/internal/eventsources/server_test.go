@@ -18,6 +18,7 @@ package eventsources
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -97,9 +98,12 @@ func TestServer(t *testing.T) {
 		err = s.Setup(ctx)
 		require.NoError(t, err)
 
+		errChan := make(chan error)
 		go func() {
-			err := s.Run(ctx)
-			assert.NoError(t, err)
+			close(errChan)
+			if err := s.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+				errChan <- err
+			}
 		}()
 
 		reqUrl, err := url.JoinPath("http://"+ln.Addr().String(), "/health")
@@ -111,7 +115,9 @@ func TestServer(t *testing.T) {
 		require.NoError(t, err)
 		resp, err = http.Post(reqUrl, "text/plain", strings.NewReader("test request"))
 		require.NoError(t, err)
+		assert.NoError(t, resp.Body.Close())
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		assert.NoError(t, <-errChan)
 	})
 }
 
