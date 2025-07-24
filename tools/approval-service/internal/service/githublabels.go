@@ -61,8 +61,16 @@ func setWorkflowLabels(req types.AccessRequest, info githubWorkflowLabels) error
 		return fmt.Errorf("invalid workflow run ID: %d", info.WorkflowRunID)
 	}
 
-	if err := validateUserInput(info); err != nil {
-		return errors.New("invalid GitHub workflow info")
+	// Validate the individual fields for length and UTF-8 validity.
+	// This is a public API so we want to ensure that strings are valid UTF-8 and within reasonable length limits.
+	if err := validateInputString(info.Org, 15); err != nil {
+		return fmt.Errorf("invalid organization name: %w", err)
+	}
+	if err := validateInputString(info.Repo, 100); err != nil {
+		return fmt.Errorf("invalid repository name: %w", err)
+	}
+	if err := validateInputString(info.Env, 30); err != nil {
+		return fmt.Errorf("invalid environment name: %w", err)
 	}
 
 	labels := req.GetStaticLabels()
@@ -79,31 +87,13 @@ func setWorkflowLabels(req types.AccessRequest, info githubWorkflowLabels) error
 	return nil
 }
 
-// validateUserInput checks each field for validity
-// The info we gather is user input and part of a public API so we need to sanitize the data.
-// A malicious user could launch a denial of service attack by sending very long strings or invalid UTF-8 sequences.
-// We still allow some flexibility in the length of the strings, but we enforce a maximum length to prevent abuse.
-// This does NOT mean that we are validating the content of the strings, only that they are valid UTF-8 and within reasonable length limits.
-func validateUserInput(info githubWorkflowLabels) error {
-	// GitHub webhook events are UTF-8 encoded.
-	if !utf8.ValidString(info.Org) || !utf8.ValidString(info.Repo) || !utf8.ValidString(info.Env) {
-		return errors.New("GitHub organization, repository, and environment must be valid UTF-8 strings")
+func validateInputString(s string, maxLength int) error {
+	if !utf8.ValidString(s) {
+		return fmt.Errorf("string %q is not valid UTF-8", s)
 	}
-
-	// Low limit but we only use for gravitational so we can assume that the org name is not too long.
-	if utf8.RuneCountInString(info.Org) > 15 {
-		return fmt.Errorf("GitHub organization name is too long: %s", info.Org)
+	if utf8.RuneCountInString(s) > maxLength {
+		return fmt.Errorf("string %q is too long, maximum length is %d", s, maxLength)
 	}
-
-	if utf8.RuneCountInString(info.Repo) > 100 {
-		return fmt.Errorf("GitHub repository name is too long: %s", info.Repo)
-	}
-
-	// Another low limit but our environments are usually short names.
-	if utf8.RuneCountInString(info.Env) > 30 {
-		return fmt.Errorf("environment name is too long: %s", info.Env)
-	}
-
 	return nil
 }
 
