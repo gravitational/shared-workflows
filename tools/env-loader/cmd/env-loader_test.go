@@ -93,7 +93,8 @@ func TestGetRequestedEnvValues(t *testing.T) {
 }
 
 func TestRun(t *testing.T) {
-	os.Setenv("SOPS_AGE_KEY_FILE", filepath.Join("..", "pkg", "loaders", "testdata", "key1.age"))
+	err := os.Setenv("SOPS_AGE_KEY_FILE", filepath.Join("..", "pkg", "loaders", "testdata", "key1.age"))
+	require.NoError(t, err)
 
 	tests := []struct {
 		desc            string
