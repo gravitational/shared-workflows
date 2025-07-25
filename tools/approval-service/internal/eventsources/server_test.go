@@ -76,10 +76,6 @@ func TestServer(t *testing.T) {
 	t.Run("Handlers Receive Requests", func(t *testing.T) {
 		ln, err := net.Listen("tcp", ":0")
 		require.NoError(t, err)
-		t.Cleanup(func() {
-			err = ln.Close()
-			assert.NoError(t, err)
-		})
 
 		s, err := NewServer(
 			withListener(ln),
@@ -100,23 +96,30 @@ func TestServer(t *testing.T) {
 
 		errChan := make(chan error)
 		go func() {
-			close(errChan)
-			if err := s.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+			defer close(errChan)
+			if err := s.Run(ctx); err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, http.ErrServerClosed) {
 				errChan <- err
 			}
 		}()
 
 		reqUrl, err := url.JoinPath("http://"+ln.Addr().String(), "/health")
+		require.NoError(t, err)
+
 		resp, err := http.Get(reqUrl)
-		assert.NoError(t, err)
+		require.NoError(t, err)
+		assert.NoError(t, resp.Body.Close())
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 		reqUrl, err = url.JoinPath("http://"+ln.Addr().String(), "/test")
 		require.NoError(t, err)
+
 		resp, err = http.Post(reqUrl, "text/plain", strings.NewReader("test request"))
 		require.NoError(t, err)
 		assert.NoError(t, resp.Body.Close())
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		// Stop gracefully
+		cancel()
 		assert.NoError(t, <-errChan)
 	})
 }
