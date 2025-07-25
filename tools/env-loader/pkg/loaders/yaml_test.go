@@ -236,10 +236,12 @@ func TestSOPSYamlSubloader_GetEnvironmentValues(t *testing.T) {
 		}
 
 		if testCase.ageKeyFileName != "" {
-			os.Setenv(AGE_KEY_ENV_VAR_NAME,
+			err := os.Setenv(AGE_KEY_ENV_VAR_NAME,
 				filepath.Join("testdata", testCase.ageKeyFileName))
+			require.NoError(t, err)
 		} else {
-			os.Unsetenv(AGE_KEY_ENV_VAR_NAME)
+			err := os.Unsetenv(AGE_KEY_ENV_VAR_NAME)
+			require.NoError(t, err)
 		}
 
 		// All output value should be marked as secret. Set this here for

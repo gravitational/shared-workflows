@@ -44,7 +44,7 @@ func postPreviewURL(ctx context.Context, commentBody string) error {
 
 	prID, err := strconv.Atoi(strings.TrimSuffix(refName, "/merge"))
 	if err != nil {
-		return fmt.Errorf("Failed to extract PR ID from GITHUB_REF_NAME=%s: %s", refName, err)
+		return fmt.Errorf("failed to extract PR ID from GITHUB_REF_NAME=%s: %s", refName, err)
 	}
 
 	targetComment := github.CommentTraits{
@@ -53,7 +53,7 @@ func postPreviewURL(ctx context.Context, commentBody string) error {
 
 	githubRepoParts := strings.Split(githubRepository, "/")
 	if len(githubRepoParts) < 2 {
-		return fmt.Errorf("Couldn't extract repo and owner from %q", githubRepository)
+		return fmt.Errorf("couldn't extract repo and owner from %q", githubRepository)
 	}
 	currentPR := github.IssueIdentifier{
 		Number: prID,
@@ -72,7 +72,7 @@ func postPreviewURL(ctx context.Context, commentBody string) error {
 	return gh.UpdateComment(ctx, currentPR, comment.GetID(), commentBody)
 }
 
-func setGithubOutputs(kv map[string]string) error {
+func setGithubOutputs(kv map[string]string) (err error) {
 	githubOutput := os.Getenv(github.OutputEnv)
 	if githubOutput == "" {
 		return errGithubOutputNotAvailable
@@ -82,7 +82,13 @@ func setGithubOutputs(kv map[string]string) error {
 	if err != nil {
 		return fmt.Errorf("failed to open file %s: %w", githubOutput, err)
 	}
-	defer file.Close()
+	defer func() {
+		if cerr := file.Close(); cerr != nil && err == nil {
+			// Only return the error from Close if we are not already
+			// returning ane error.
+			err = cerr
+		}
+	}()
 
 	for key, value := range kv {
 		if _, err := fmt.Fprintf(file, "%s=%s\n", key, value); err != nil {
