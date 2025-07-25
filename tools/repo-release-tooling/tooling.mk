@@ -19,7 +19,7 @@ print-version:
 	@echo "$(VERSION)"
 
 lint:
-	@golangci-lint run ./... --out-format colored-line-number -vvv
+	@golangci-lint run ./... -vvv
 
 test:
 	@gotestsum --format github-actions ./... -- -count 100 -shuffle on -timeout 2m -race
