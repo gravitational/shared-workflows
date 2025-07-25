@@ -26,6 +26,7 @@ import (
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/eventsources"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/eventsources/accessrequest"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/eventsources/githubevents"
+	"github.com/gravitational/shared-workflows/tools/approval-service/internal/service"
 	teleportclient "github.com/gravitational/teleport/api/client"
 
 	"golang.org/x/sync/errgroup"
@@ -58,9 +59,10 @@ type EventSource interface {
 // EventProcessor provides methods for processing events from our event sources.
 // This will be passed to the event sources to handle certain actions provided by the event source.
 type EventProcessor interface {
-	Setup(ctx context.Context) error
+	Run(ctx context.Context) error
+
 	githubevents.GitHubEventProcessor
-	accessrequest.ReviewHandler
+	accessrequest.AccessRequestReviewedHandler
 }
 
 // Opt is an option for the approval service.
@@ -95,6 +97,16 @@ func NewFromConfig(ctx context.Context, cfg config.Root, opts ...Opt) (*Service,
 		return nil, fmt.Errorf("creating new teleport client from config: %w", err)
 	}
 
+	processor, err := service.NewReleaseService(
+		cfg,
+		tele,
+		service.WithLogger(a.log),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("creating event processor: %w", err)
+	}
+	a.processor = processor
+
 	// Initialize server that listens for webhook events
 	srv, err := a.newServer(cfg, a.processor)
 	if err != nil {
@@ -106,7 +118,7 @@ func NewFromConfig(ctx context.Context, cfg config.Root, opts ...Opt) (*Service,
 	a.log.Info("Initializing access request plugin")
 	accessPlugin, err := accessrequest.NewEventWatcher(
 		tele,
-		nil, // TODO: Implemented in next PR
+		processor,
 		accessrequest.WithRequesterFilter(cfg.ApprovalService.Teleport.User),
 		accessrequest.WithLogger(a.log),
 	)
@@ -125,9 +137,6 @@ func (a *Service) Setup(ctx context.Context) error {
 		}
 	}
 
-	if err := a.processor.Setup(ctx); err != nil {
-		return fmt.Errorf("setting up event processor: %w", err)
-	}
 	a.log.Info("Approval service setup complete")
 	return nil
 }
@@ -140,6 +149,10 @@ func (a *Service) Run(ctx context.Context) error {
 			return eventSource.Run(ctx)
 		})
 	}
+
+	eg.Go(func() error {
+		return a.processor.Run(ctx)
+	})
 
 	slog.Default().Info("Approval service started")
 	// Block until an event source has a fatal error
@@ -165,22 +178,17 @@ func newTeleportClientFromConfig(ctx context.Context, cfg config.Teleport) (*tel
 }
 
 func (a *Service) newServer(cfg config.Root, processor EventProcessor) (*eventsources.Server, error) {
-	opts := []eventsources.ServerOpt{
+	githubSource, err := githubevents.NewSource(cfg.EventSources.GitHub, processor)
+	if err != nil {
+		return nil, fmt.Errorf("creating GitHub event source: %w", err)
+	}
+
+	return eventsources.NewServer(
 		eventsources.WithLogger(a.log),
 		eventsources.WithAddress(cfg.ApprovalService.ListenAddr),
+		eventsources.WithHandler(cfg.EventSources.GitHub.Path, githubSource.Handler()),
 		eventsources.WithHandler("/health", a.healthcheckHandler()),
-	}
-
-	// GitHub event sources are webhooks that are registered as handlers on the HTTP server.
-	for _, gh := range cfg.EventSources.GitHub {
-		gitHubSource, err := githubevents.NewSource(gh, processor)
-		if err != nil {
-			return nil, fmt.Errorf("creating github source: %w", err)
-		}
-		opts = append(opts, eventsources.WithHandler(gh.Path, gitHubSource.Handler()))
-	}
-
-	return eventsources.NewServer(opts...)
+	)
 }
 
 // This is a simple healthcheck handler that checks if the server is healthy.

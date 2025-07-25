@@ -43,7 +43,7 @@ func TestSource(t *testing.T) {
 		{
 			name: "Valid Deployment Review Event",
 			proc: &fakeGitHubEventProcessor{
-				ProcessDeploymentReviewEventFunc: func(ctx context.Context, event DeploymentReviewEvent) error {
+				HandleDeploymentReviewEventReceivedFunc: func(ctx context.Context, event DeploymentReviewEvent) error {
 					assert.Equal(t, "gravitational", event.Organization)
 					assert.Equal(t, "test-repo", event.Repository)
 					assert.Equal(t, "build/prod", event.Environment)
@@ -58,7 +58,7 @@ func TestSource(t *testing.T) {
 		{
 			name: "Valid Workflow Dispatch Event",
 			proc: &fakeGitHubEventProcessor{
-				ProcessWorkflowDispatchEventFunc: func(ctx context.Context, event WorkflowDispatchEvent) error {
+				HandleWorkflowDispatchEventReceivedFunc: func(ctx context.Context, event WorkflowDispatchEvent) error {
 					assert.Equal(t, "gravitational", event.Organization)
 					assert.Equal(t, "test-repo", event.Repository)
 					assert.Equal(t, "gravitational-member", event.Requester)
@@ -113,16 +113,16 @@ func withoutValidation() SourceOpt {
 }
 
 type fakeGitHubEventProcessor struct {
-	ProcessDeploymentReviewEventFunc func(ctx context.Context, event DeploymentReviewEvent) error
-	ProcessWorkflowDispatchEventFunc func(ctx context.Context, event WorkflowDispatchEvent) error
+	HandleDeploymentReviewEventReceivedFunc func(ctx context.Context, event DeploymentReviewEvent) error
+	HandleWorkflowDispatchEventReceivedFunc func(ctx context.Context, event WorkflowDispatchEvent) error
 }
 
-func (f *fakeGitHubEventProcessor) ProcessDeploymentReviewEvent(ctx context.Context, event DeploymentReviewEvent) error {
-	return f.ProcessDeploymentReviewEventFunc(ctx, event)
+func (f *fakeGitHubEventProcessor) HandleDeploymentReviewEventReceived(ctx context.Context, event DeploymentReviewEvent) error {
+	return f.HandleDeploymentReviewEventReceivedFunc(ctx, event)
 }
 
-func (f *fakeGitHubEventProcessor) ProcessWorkflowDispatchEvent(ctx context.Context, event WorkflowDispatchEvent) error {
-	return f.ProcessWorkflowDispatchEventFunc(ctx, event)
+func (f *fakeGitHubEventProcessor) HandleWorkflowDispatchEventReceived(ctx context.Context, event WorkflowDispatchEvent) error {
+	return f.HandleWorkflowDispatchEventReceivedFunc(ctx, event)
 }
 
 // FuzzHeaders checks the handling of arbitrary headers in the GitHub webhook handler.
@@ -140,9 +140,9 @@ func FuzzHeaders(f *testing.F) {
 			Secret: "test-secret",
 		},
 		&fakeGitHubEventProcessor{
-			ProcessDeploymentReviewEventFunc: func(ctx context.Context, event DeploymentReviewEvent) error {
+			HandleDeploymentReviewEventReceivedFunc: func(ctx context.Context, event DeploymentReviewEvent) error {
 				// This should not be called during fuzzing
-				f.Fatal("unexpected call to ProcessDeploymentReviewEvent")
+				f.Fatal("unexpected call to HandleDeploymentReviewEventReceived")
 				return nil
 			},
 		},
@@ -176,7 +176,7 @@ func FuzzDeploymentReview(f *testing.F) {
 	src, err := NewSource(
 		config.GitHubSource{},
 		&fakeGitHubEventProcessor{
-			ProcessDeploymentReviewEventFunc: func(ctx context.Context, event DeploymentReviewEvent) error {
+			HandleDeploymentReviewEventReceivedFunc: func(ctx context.Context, event DeploymentReviewEvent) error {
 				// noop
 				return nil
 			},
