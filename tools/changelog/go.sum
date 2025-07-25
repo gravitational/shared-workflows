@@ -22,6 +22,7 @@ github.com/gravitational/shared-workflows/libs v0.1.4 h1:PW5xkoh5r+OKCFG9JwJkcCu
 github.com/gravitational/shared-workflows/libs v0.1.4/go.mod h1:hzF3OgNdM/Mrgovq++B3ZymG58p54Ccjb8sbPZGfp08=
 github.com/gravitational/trace v1.5.0 h1:JbeL2HDGyzgy7G72Z2hP2gExEyA6Y2p7fCiSjyZwCJw=
 github.com/gravitational/trace v1.5.0/go.mod h1:dxezSkKm880IIDx+czWG8fq+pLnXjETBewMgN3jOBlg=
+github.com/kr/pretty v0.2.1/go.mod h1:ipq/a2n7PKx3OHsz4KJII5eveXtPO4qwEXGdVfWzfnI=
 github.com/kr/pretty v0.3.1 h1:flRD4NNwYAUpkphVc1HcthR4KEIFJ65n8Mw5qdRn3LE=
 github.com/kr/pretty v0.3.1/go.mod h1:hoEshYVHaxMs3cyo3Yncou5ZscifuDolrwPKZanG3xk=
 github.com/kr/pty v1.1.1/go.mod h1:pFQYn66WHrOpPYNljwOMqo10TkYh1fy3cYio2l3bCsQ=
