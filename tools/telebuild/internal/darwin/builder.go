@@ -16,6 +16,12 @@ var binaries = []string{
 	"tsh",
 }
 
+// Builder handles the creation of Darwin-specific release artifacts such as tarballs, package installers, etc.
+// It manages the build process for macOS targets, supporting both Intel (amd64) and Apple Silicon (arm64)
+// architectures, as well as universal binaries that run on both architectures.
+//
+// The Builder contains configuration options common between all macOS builds such as build directories,
+// output directories, dry-run mode, etc.
 type Builder struct {
 	builddir  string // Directory where build artifacts are stored
 	outputdir string // Directory where the final output will be placed

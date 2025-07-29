@@ -21,8 +21,6 @@ type CommonFlags struct {
 	OutputDir string `name:"output-dir" short:"o" type:"path" env:"TELEBUILD_OUTPUT_DIR" default:"build/artifacts" help:"Directory to place the resulting release artifacts."`
 	// DryRun indicates whether to perform a dry run without actual building.
 	DryRun bool `name:"dry-run" short:"d" env:"TELEBUILD_DRY_RUN" help:"Perform a dry run without actual building."`
-	// Version shows the version and exits.
-	Version bool `name:"version" short:"v" help:"Show version information and exit."`
 }
 
 const (
