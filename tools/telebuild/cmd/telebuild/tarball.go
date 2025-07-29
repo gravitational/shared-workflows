@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 
 	"github.com/gravitational/shared-workflows/tools/telebuild/internal/darwin"
 )
@@ -25,19 +26,21 @@ func (cmd *TarballCmd) Run(cli *CLI) error {
 }
 
 func (cmd *TarballCmd) buildDarwinUniversalTarball(cli *CLI) error {
-	// Placeholder to show the use of common top-level flags
+	opts := []darwin.BuilderOpt{
+		darwin.WithLogger(slog.Default().With("task", "darwin-universal-tarball")),
+	}
+
 	if cli.DryRun {
-		fmt.Println("Dry run: would build a universal tarball for darwin")
-		return nil
+		opts = append(opts, darwin.WithDryRun(cli.DryRun))
 	}
 
-	builder, err := darwin.NewUniversalTarballBuilder()
+	builder, err := darwin.NewBuilder(opts...)
 	if err != nil {
-		return fmt.Errorf("initializing darwin universal tarball builder: %w", err)
+		return fmt.Errorf("failed to create darwin builder: %w", err)
 	}
 
-	if err := builder.Build(); err != nil {
-		return fmt.Errorf("building darwin universal tarball: %w", err)
+	if err := builder.BuildUniversalTarball(); err != nil {
+		return fmt.Errorf("failed to build universal tarball: %w", err)
 	}
 
 	return nil

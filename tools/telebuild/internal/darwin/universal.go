@@ -2,51 +2,31 @@ package darwin
 
 import (
 	"errors"
-	"fmt"
-	"log/slog"
+	"os/exec"
+	"path/filepath"
 )
 
-// UnversalTarballBuilder builds a tairball that contains multi-architecture binaries for macOS.
+// BuildUniversalTarball builds a tarball that contains multi-architecture binaries for macOS.
 // The "universal" binaries can run on both Intel and Apple Silicon Macs.
 // This is useful for distributing a single tarball that works across different Mac architectures.
 //
 // This uses the `lipo` tool to create a universal binary from multiple architecture-specific binaries.
 // The best way to find more information on `lipo` is to refer to the official Apple documentation or run `man lipo` in the terminal.
-type UniversalTarballBuilder struct {
-	log *slog.Logger
-}
+func (b *Builder) BuildUniversalTarball() error {
+	for _, bin := range binaries {
+		// Combine arm64 & amd64 binaries into universal binaries.
+		cmd := exec.Command("lipo", "-create", "-output",
+			filepath.Join(b.builddirUniversal, bin),
+			filepath.Join(b.builddirAmd64, bin),
+			filepath.Join(b.builddirArm64, bin),
+		)
 
-// UniversalTarballBuilderOpt is a functional option for configuring the UniversalTarballBuilder.
-type UniversalTarballBuilderOpt func(*UniversalTarballBuilder) error
-
-// NewUniversalTarballBuilder initializes a new UniversalTarballBuilder.
-// It returns an error if the builder cannot be initialized.
-func NewUniversalTarballBuilder(opts ...UniversalTarballBuilderOpt) (*UniversalTarballBuilder, error) {
-	b := &UniversalTarballBuilder{
-		log: slog.Default(),
-	}
-
-	for _, o := range opts {
-		if err := o(b); err != nil {
-			return nil, fmt.Errorf("applying option: %w", err)
+		if b.dryRun {
+			b.log.Info("Dry run: would execute command", "command", cmd.String())
+			continue
 		}
+		return errors.New("not implemented yet")
 	}
 
-	return b, nil
-}
-
-// Build creates a universal tarball for macOS that contains binaries for both Intel and Apple Silicon architectures.
-func (b *UniversalTarballBuilder) Build() error {
-	return errors.New("building universal tarball for darwin is not implemented yet")
-}
-
-// WithLogger sets the logger for the UniversalTarballBuilder.
-func (b *UniversalTarballBuilder) WithLogger(log *slog.Logger) UniversalTarballBuilderOpt {
-	return func(b *UniversalTarballBuilder) error {
-		if log == nil {
-			return errors.New("logger cannot be nil")
-		}
-		b.log = log
-		return nil
-	}
+	return nil
 }
