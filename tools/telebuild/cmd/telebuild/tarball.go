@@ -28,6 +28,8 @@ func (cmd *TarballCmd) Run(cli *CLI) error {
 func (cmd *TarballCmd) buildDarwinUniversalTarball(cli *CLI) error {
 	opts := []darwin.BuilderOpt{
 		darwin.WithLogger(slog.Default().With("task", "darwin-universal-tarball")),
+		darwin.WithBuildDir(cli.BuildDir),
+		darwin.WithOutputDir(cli.OutputDir),
 	}
 
 	if cli.DryRun {
