@@ -61,7 +61,7 @@ func New(ctx context.Context, token string) (*Client, error) {
 func NewForApp(ctx context.Context, appID int64, installationID int64, privateKey []byte) (*Client, error) {
 	appTr, err := newAppTransport(ctx, appID, installationID, privateKey)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("creating client transport: %w", err)
 	}
 	httpClient := &http.Client{
 		Transport: appTr,

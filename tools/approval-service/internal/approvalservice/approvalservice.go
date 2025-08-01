@@ -97,11 +97,7 @@ func NewFromConfig(ctx context.Context, cfg config.Root, opts ...Opt) (*Service,
 		return nil, fmt.Errorf("creating new teleport client from config: %w", err)
 	}
 
-	processor, err := service.NewReleaseService(
-		cfg,
-		tele,
-		service.WithLogger(a.log),
-	)
+	processor, err := service.NewReleaseService(cfg, tele, service.WithLogger(a.log))
 	if err != nil {
 		return nil, fmt.Errorf("creating event processor: %w", err)
 	}

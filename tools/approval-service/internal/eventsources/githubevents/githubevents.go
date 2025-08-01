@@ -42,9 +42,6 @@ type Source struct {
 type GitHubEventProcessor interface {
 	// HandleDeploymentReviewEventReceived processes a deployment review event.
 	HandleDeploymentReviewEventReceived(ctx context.Context, event DeploymentReviewEvent) error
-
-	// HandleWorkflowDispatchEventReceived processes a workflow dispatch event.
-	HandleWorkflowDispatchEventReceived(ctx context.Context, event WorkflowDispatchEvent) error
 }
 
 // DeploymentReviewEvent is an event that is sent when a deployment review is requested.

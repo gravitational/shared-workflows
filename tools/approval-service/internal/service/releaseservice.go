@@ -56,10 +56,10 @@ type ReleaseService struct {
 	log *slog.Logger
 }
 
-// ReleaseServiceOpts is a functional option for configuring the WorkflowEventsProcessor.
+// ReleaseServiceOpts is a functional option for configuring the ReleaseService.
 type ReleaseServiceOpts func(d *ReleaseService) error
 
-// NewReleaseService creates a new WorkflowEventsProcessor instance.
+// NewReleaseService creates a new ReleaseService instance.
 func NewReleaseService(cfg config.Root, teleClient *teleportclient.Client, opts ...ReleaseServiceOpts) (*ReleaseService, error) {
 	approver, err := newGitHubWorkflowApprover(context.Background(), cfg.EventSources.GitHub, slog.Default())
 	if err != nil {
@@ -91,7 +91,7 @@ func NewReleaseService(cfg config.Root, teleClient *teleportclient.Client, opts 
 	return d, nil
 }
 
-// Run starts the WorkflowEventsProcessor and begins listening for events.
+// Run starts the ReleaseService and begins listening for events.
 // This method fans-in events from multiple sources and asynchronously fans-out to the appropriate processors.
 // It blocks until the context is cancelled.
 func (w *ReleaseService) Run(ctx context.Context) error {
@@ -112,12 +112,6 @@ func (w *ReleaseService) Run(ctx context.Context) error {
 func (w *ReleaseService) HandleDeploymentReviewEventReceived(ctx context.Context, e githubevents.DeploymentReviewEvent) error {
 	w.deploymentReviewEventChan <- e
 	return nil
-}
-
-// HandleWorkflowDispatchEventReceived is a placeholder for processing workflow dispatch events.
-func (w *ReleaseService) HandleWorkflowDispatchEventReceived(ctx context.Context, e githubevents.WorkflowDispatchEvent) error {
-	// This is not implemented yet.
-	return fmt.Errorf("workflow_dispatch event processing is not implemented")
 }
 
 // HandleAccessRequestReviewed will handle updates to the state of a Teleport Access Request.
@@ -282,7 +276,7 @@ func (w *ReleaseService) onAccessRequestReviewed(ctx context.Context, req types.
 	w.log.Info("Handled access request reviewed", "access_request_name", req.GetName(), "org", info.Org, "repo", info.Repo)
 }
 
-// WithLogger sets the logger for the WorkflowEventsProcessor.
+// WithLogger sets the logger for the ReleaseService.
 func WithLogger(logger *slog.Logger) ReleaseServiceOpts {
 	return func(d *ReleaseService) error {
 		if logger == nil {

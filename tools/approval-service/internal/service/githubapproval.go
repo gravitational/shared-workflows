@@ -37,6 +37,11 @@ type gitHubWorkflowApprover struct {
 	org      string
 	repo     string
 
+	// envToRole maps GitHub environment names to Teleport roles.
+	// This is used to determine which Teleport role to request when an Access Request is created.
+	//
+	// For example, we can have an environment "build-staging" that maps to the Teleport role "gha-env-build-staging".
+	// When a workflow run requests "build-staging" environment, we will create an Access Request for the "gha-env-build-staging" role.
 	envToRole map[string]string
 	log       *slog.Logger
 }
@@ -81,12 +86,9 @@ func (h *gitHubWorkflowApprover) teleportRoleForEnvironment(env string) (string,
 // handleDecisionForAccessRequestReviewed processes the decision for an access request that has been reviewed.
 // It will either approve or reject the deployment protection rule based on the state of the access request
 func (h *gitHubWorkflowApprover) handleDecisionForAccessRequestReviewed(ctx context.Context, status types.RequestState, env string, workflowID int64) error {
-	var decision github.PendingDeploymentApprovalState
-	switch status {
-	case types.RequestState_APPROVED:
+	decision := github.PendingDeploymentApprovalStateRejected
+	if status == types.RequestState_APPROVED {
 		decision = github.PendingDeploymentApprovalStateApproved
-	default:
-		decision = github.PendingDeploymentApprovalStateRejected
 	}
 
 	err := h.ghClient.ReviewDeploymentProtectionRule(ctx, h.org, h.repo,
