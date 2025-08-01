@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/gravitational/shared-workflows/libs/github"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/config"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/eventsources/githubevents"
 	teleportclient "github.com/gravitational/teleport/api/client"
@@ -40,7 +41,7 @@ type ReleaseService struct {
 	// Required for creating new Access Requests.
 	teleportUser    string
 	requestTTLHours time.Duration
-	teleClient      *teleportclient.Client
+	teleClient      teleClient
 
 	ghApprover *gitHubWorkflowApprover
 
@@ -56,12 +57,19 @@ type ReleaseService struct {
 	log *slog.Logger
 }
 
+// teleClient is an interface that abstracts the Teleport client to allow for testing.
+// This allows us to have a stub implementation without having to make real API calls.
+type teleClient interface {
+	GetAccessRequests(ctx context.Context, filter types.AccessRequestFilter) ([]types.AccessRequest, error)
+	CreateAccessRequestV2(ctx context.Context, req types.AccessRequest) (types.AccessRequest, error)
+}
+
 // ReleaseServiceOpts is a functional option for configuring the ReleaseService.
 type ReleaseServiceOpts func(d *ReleaseService) error
 
 // NewReleaseService creates a new ReleaseService instance.
-func NewReleaseService(cfg config.Root, teleClient *teleportclient.Client, opts ...ReleaseServiceOpts) (*ReleaseService, error) {
-	approver, err := newGitHubWorkflowApprover(context.Background(), cfg.EventSources.GitHub, slog.Default())
+func NewReleaseService(cfg config.Root, teleClient *teleportclient.Client, ghClient *github.Client, opts ...ReleaseServiceOpts) (*ReleaseService, error) {
+	approver, err := newGitHubWorkflowApprover(context.Background(), cfg.EventSources.GitHub, ghClient, slog.Default())
 	if err != nil {
 		return nil, fmt.Errorf("creating GitHub workflow approver: %w", err)
 	}

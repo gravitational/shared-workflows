@@ -21,7 +21,9 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 
+	"github.com/gravitational/shared-workflows/libs/github"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/config"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/eventsources"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/eventsources/accessrequest"
@@ -91,13 +93,19 @@ func NewFromConfig(ctx context.Context, cfg config.Root, opts ...Opt) (*Service,
 	}
 	a.log.Info("Initializing approval service")
 
-	// Teleport client is common to event source and processor
+	// Teleport client is common to sources and release service
 	tele, err := newTeleportClientFromConfig(ctx, cfg.ApprovalService.Teleport)
 	if err != nil {
 		return nil, fmt.Errorf("creating new teleport client from config: %w", err)
 	}
 
-	processor, err := service.NewReleaseService(cfg, tele, service.WithLogger(a.log))
+	// Initialize GitHub client for release service
+	ghClient, err := newGitHubClientFromConfig(ctx, cfg.EventSources.GitHub)
+	if err != nil {
+		return nil, fmt.Errorf("creating new GitHub client from config: %w", err)
+	}
+
+	processor, err := service.NewReleaseService(cfg, tele, ghClient, service.WithLogger(a.log))
 	if err != nil {
 		return nil, fmt.Errorf("creating event processor: %w", err)
 	}
@@ -170,6 +178,19 @@ func newTeleportClientFromConfig(ctx context.Context, cfg config.Teleport) (*tel
 		return nil, fmt.Errorf("initializing teleport client: %w", err)
 	}
 
+	return client, nil
+}
+
+func newGitHubClientFromConfig(ctx context.Context, cfg config.GitHubSource) (*github.Client, error) {
+	key, err := os.ReadFile(cfg.Authentication.App.PrivateKeyPath)
+	if err != nil {
+		return nil, fmt.Errorf("reading private key file %q: %w", cfg.Authentication.App.PrivateKeyPath, err)
+	}
+
+	client, err := github.NewForApp(ctx, cfg.Authentication.App.AppID, cfg.Authentication.App.InstallationID, key)
+	if err != nil {
+		return nil, fmt.Errorf("initializing GitHub client for app: %w", err)
+	}
 	return client, nil
 }
 

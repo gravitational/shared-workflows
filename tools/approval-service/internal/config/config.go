@@ -81,8 +81,8 @@ type GitHubAppAuthentication struct {
 	AppID int64 `yaml:"app_id"`
 	// InstallationID is the ID of the GitHub App installation.
 	InstallationID int64 `yaml:"installation_id"`
-	// PrivateKey is the base64 encoded private key for the GitHub App.
-	PrivateKey string `yaml:"private_key"`
+	// PrivateKeyPath is the base64 encoded private key for the GitHub App.
+	PrivateKeyPath string `yaml:"private_key_path"`
 }
 
 type Teleport struct {
@@ -179,8 +179,9 @@ func (c *GitHubAppAuthentication) Validate() error {
 	if c.InstallationID == 0 {
 		missing = append(missing, "installation_id")
 	}
-	if c.PrivateKey == "" {
-		missing = append(missing, "private_key")
+
+	if c.PrivateKeyPath == "" {
+		missing = append(missing, "private_key_path")
 	}
 
 	if len(missing) > 0 {

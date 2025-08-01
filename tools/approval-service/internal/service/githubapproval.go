@@ -19,7 +19,6 @@ package service
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"fmt"
 	"log/slog"
 	"text/template"
@@ -33,7 +32,7 @@ import (
 // based on the reviewed Access Requests. This is per-repo, and contains the logic to handle the
 // decision-making process for deployment protection rules.
 type gitHubWorkflowApprover struct {
-	ghClient *github.Client
+	ghClient ghClient
 	org      string
 	repo     string
 
@@ -46,19 +45,16 @@ type gitHubWorkflowApprover struct {
 	log       *slog.Logger
 }
 
+// ghClient is an interface that abstracts the GitHub client to allow for testing.
+// This allows us to have a stub implementation without having to make real API calls.
+type ghClient interface {
+	GetWorkflowRunInfo(ctx context.Context, org, repo string, runID int64) (github.WorkflowRunInfo, error)
+	ReviewDeploymentProtectionRule(ctx context.Context, org, repo string, info github.ReviewDeploymentProtectionRuleInfo) error
+}
+
 // newGitHubWorkflowApprover creates a new GitHub deployment approval handler for deployment protection rules
 // in a given GitHub organization and repository.
-func newGitHubWorkflowApprover(ctx context.Context, cfg config.GitHubSource, log *slog.Logger) (*gitHubWorkflowApprover, error) {
-	key, err := base64.StdEncoding.DecodeString(cfg.Authentication.App.PrivateKey)
-	if err != nil {
-		return nil, fmt.Errorf("decoding private key %q: %w", cfg.Authentication.App.PrivateKey, err)
-	}
-
-	client, err := github.NewForApp(ctx, cfg.Authentication.App.AppID, cfg.Authentication.App.InstallationID, key)
-	if err != nil {
-		return nil, fmt.Errorf("creating GitHub client for app: %w", err)
-	}
-
+func newGitHubWorkflowApprover(ctx context.Context, cfg config.GitHubSource, client *github.Client, log *slog.Logger) (*gitHubWorkflowApprover, error) {
 	h := &gitHubWorkflowApprover{
 		log:       log,
 		org:       cfg.Org,
