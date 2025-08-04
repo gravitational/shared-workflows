@@ -206,12 +206,13 @@ func TestReleaseService(t *testing.T) {
 				})
 
 				// Check that the GitHub client was called to review the deployment protection rule
+				// It is handled asynchronously, so we need to wait for it to complete
 				waitFunc := func() bool {
 					approved, err := ghClient.isRunApproved("test-org", "test-repo", tc.workflowID)
 					require.NoError(t, err, "Expected to check if workflow run is approved without error")
 					return approved == (tc.initialAccessRequestState == types.RequestState_APPROVED)
 				}
-				assert.Eventually(t, waitFunc, 1*time.Second, 100*time.Millisecond)
+				assert.Eventually(t, waitFunc, 200*time.Millisecond, 20*time.Millisecond)
 			})
 		}
 	})
