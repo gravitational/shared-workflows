@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 
 	"github.com/alecthomas/kong"
@@ -30,8 +31,26 @@ import (
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/config"
 )
 
+// CLI a kong struct that acts as the entry point for the Approval Service CLI.
 type CLI struct {
+	// Start is the command to start the approval service.
+	Start StartCmd `cmd:"" help:"Start the approval service."`
+}
+
+// StartCmd is a kong struct that contains flags and methods for starting the approval service.
+// It allows configuration of the service via a YAML file and optional environment variables for GitHub App authentication.
+type StartCmd struct {
+	// ConfigFilePath is the path to the configuration file.
 	ConfigFilePath string `name:"config" short:"c" type:"existingfile" env:"APPROVAL_SERVICE_CONFIG_FILE" default:"/etc/approval-service/config.yaml" help:"Path to the configuration file."`
+
+	// WebhookSecret is the secret used to verify webhook requests. This is used to ensure that the requests are coming from a trusted source.
+	WebhookSecret string `name:"webhook-secret" env:"APPROVAL_SERVICE_WEBHOOK_SECRET" help:"Secret for verifying webhook requests. Overrides the value in the config file."`
+	// AppID is the ID of the GitHub App used for webhook events.
+	AppID string `name:"app-id" env:"APPROVAL_SERVICE_APP_ID" help:"ID of the GitHub App used for webhook events. Overrides the value in the config file."`
+	// InstallationID is the ID of the GitHub App installation.
+	InstallationID string `name:"installation-id" env:"APPROVAL_SERVICE_INSTALLATION_ID" help:"Installation ID of the GitHub App used for webhook events. Overrides the value in the config file."`
+	// PrivateKeyPath is the path to the private key file for the GitHub App. This is used to authenticate the GitHub App with the GitHub API.
+	PrivateKeyPath string `name:"private-key-path" env:"APPROVAL_SERVICE_PRIVATE_KEY_PATH" type:"existingfile" help:"Path to the private key file for the GitHub App. Overrides the value in the config file."`
 }
 
 func main() {
@@ -41,8 +60,8 @@ func main() {
 	kctx.FatalIfErrorf(err)
 }
 
-func (cli *CLI) Run() error {
-	cfg, err := parseConfig(cli.ConfigFilePath)
+func (cmd *StartCmd) Run() error {
+	cfg, err := cmd.loadConfig(cmd.ConfigFilePath)
 	if err != nil {
 		return fmt.Errorf("parsing config: %w", err)
 	}
@@ -65,13 +84,41 @@ func (cli *CLI) Run() error {
 	return nil
 }
 
-func parseConfig(path string) (cfg config.Root, err error) {
+func (cmd *StartCmd) loadConfig(path string) (cfg config.Root, err error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return cfg, fmt.Errorf("reading config file %q: %w", path, err)
 	}
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return cfg, fmt.Errorf("unmarshalling config file %q: %w", path, err)
+	}
+
+	if cmd.WebhookSecret != "" {
+		cfg.EventSources.GitHub.Secret = cmd.WebhookSecret
+	}
+
+	if cmd.AppID != "" {
+		appIDInt, err := strconv.ParseInt(cmd.AppID, 10, 64)
+		if err != nil {
+			return cfg, fmt.Errorf("parsing app ID: %w", err)
+		}
+		cfg.EventSources.GitHub.Authentication.App.AppID = appIDInt
+	}
+
+	if cmd.InstallationID != "" {
+		installationIDInt, err := strconv.ParseInt(cmd.InstallationID, 10, 64)
+		if err != nil {
+			return cfg, fmt.Errorf("parsing installation ID: %w", err)
+		}
+		cfg.EventSources.GitHub.Authentication.App.InstallationID = installationIDInt
+	}
+
+	if cmd.PrivateKeyPath != "" {
+		privateKeyData, err := os.ReadFile(cmd.PrivateKeyPath)
+		if err != nil {
+			return cfg, fmt.Errorf("reading private key file %q: %w", cmd.PrivateKeyPath, err)
+		}
+		cfg.EventSources.GitHub.Authentication.App.PrivateKey = privateKeyData
 	}
 
 	if err := cfg.Validate(); err != nil {

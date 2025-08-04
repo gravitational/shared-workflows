@@ -66,7 +66,8 @@ func (c *Client) ReviewDeploymentProtectionRule(ctx context.Context, org, repo s
 }
 
 // PendingDeploymentInfo contains information about a pending deployment that is waiting for approval.
-// It contains environment name and some other metadata that isn't so useful such as how long the deployment has been pending.
+// The API returns environment information for the pending deployment as well as other metadata.
+// Only the environment name is currently useful, so this is a simplified version of the data returned by the API.
 type PendingDeploymentInfo struct {
 	// Environment is the name of the environment that the workflow run is waiting for approval on.
 	Environment string

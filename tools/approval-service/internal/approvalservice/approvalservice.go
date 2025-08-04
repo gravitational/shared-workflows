@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"os"
 
 	"github.com/gravitational/shared-workflows/libs/github"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/config"
@@ -123,7 +122,7 @@ func NewFromConfig(ctx context.Context, cfg config.Root, opts ...Opt) (*Service,
 	accessPlugin, err := accessrequest.NewEventWatcher(
 		tele,
 		processor,
-		accessrequest.WithRequesterFilter(cfg.ApprovalService.Teleport.User),
+		accessrequest.WithUserFilter(cfg.ApprovalService.Teleport.User),
 		accessrequest.WithLogger(a.log),
 	)
 	if err != nil {
@@ -182,12 +181,7 @@ func newTeleportClientFromConfig(ctx context.Context, cfg config.Teleport) (*tel
 }
 
 func newGitHubClientFromConfig(ctx context.Context, cfg config.GitHubSource) (*github.Client, error) {
-	key, err := os.ReadFile(cfg.Authentication.App.PrivateKeyPath)
-	if err != nil {
-		return nil, fmt.Errorf("reading private key file %q: %w", cfg.Authentication.App.PrivateKeyPath, err)
-	}
-
-	client, err := github.NewForApp(ctx, cfg.Authentication.App.AppID, cfg.Authentication.App.InstallationID, key)
+	client, err := github.NewForApp(ctx, cfg.Authentication.App.AppID, cfg.Authentication.App.InstallationID, cfg.Authentication.App.PrivateKey)
 	if err != nil {
 		return nil, fmt.Errorf("initializing GitHub client for app: %w", err)
 	}

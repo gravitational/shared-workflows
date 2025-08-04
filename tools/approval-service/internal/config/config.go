@@ -17,7 +17,6 @@
 package config
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 )
@@ -81,8 +80,8 @@ type GitHubAppAuthentication struct {
 	AppID int64 `yaml:"app_id"`
 	// InstallationID is the ID of the GitHub App installation.
 	InstallationID int64 `yaml:"installation_id"`
-	// PrivateKeyPath is the base64 encoded private key for the GitHub App.
-	PrivateKeyPath string `yaml:"private_key_path"`
+	// PrivateKey is the base64 encoded private key for the GitHub App.
+	PrivateKey []byte `yaml:"private_key"`
 }
 
 type Teleport struct {
@@ -162,9 +161,6 @@ func (c *GitHubEnvironment) Validate() error {
 }
 
 func (c *GitHubAuthentication) Validate() error {
-	if c.App == (GitHubAppAuthentication{}) {
-		return errors.New("github app authentication is required")
-	}
 	if err := c.App.Validate(); err != nil {
 		return fmt.Errorf("github app: %w", err)
 	}
@@ -180,8 +176,8 @@ func (c *GitHubAppAuthentication) Validate() error {
 		missing = append(missing, "installation_id")
 	}
 
-	if c.PrivateKeyPath == "" {
-		missing = append(missing, "private_key_path")
+	if len(c.PrivateKey) == 0 {
+		missing = append(missing, "private_key")
 	}
 
 	if len(missing) > 0 {

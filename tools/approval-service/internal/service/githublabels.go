@@ -111,6 +111,8 @@ func setWorkflowLabels(req types.AccessRequest, info githubWorkflowLabels) error
 	return nil
 }
 
+// validateInputString checks if the input string is valid UTF-8 and does not exceed the maximum length.
+// This is used to ensure that the labels we set on the Access Request are valid and do not cause issues with the Teleport API.
 func validateInputString(s string, maxLength int) error {
 	if !utf8.ValidString(s) {
 		return fmt.Errorf("string %q is not valid UTF-8", s)

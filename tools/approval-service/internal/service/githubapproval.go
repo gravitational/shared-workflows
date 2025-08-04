@@ -54,7 +54,7 @@ type ghClient interface {
 
 // newGitHubWorkflowApprover creates a new GitHub deployment approval handler for deployment protection rules
 // in a given GitHub organization and repository.
-func newGitHubWorkflowApprover(ctx context.Context, cfg config.GitHubSource, client *github.Client, log *slog.Logger) (*gitHubWorkflowApprover, error) {
+func newGitHubWorkflowApprover(ctx context.Context, cfg config.GitHubSource, client ghClient, log *slog.Logger) (*gitHubWorkflowApprover, error) {
 	h := &gitHubWorkflowApprover{
 		log:       log,
 		org:       cfg.Org,

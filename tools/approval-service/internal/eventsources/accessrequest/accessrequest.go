@@ -34,7 +34,7 @@ type EventWatcher struct {
 	AccessRequestReviewedHandler AccessRequestReviewedHandler
 	watch                        types.Watcher
 
-	requesterFilter string
+	userFilter string
 
 	log *slog.Logger
 }
@@ -60,14 +60,14 @@ func WithLogger(logger *slog.Logger) Opt {
 	}
 }
 
-// WithRequesterFilter sets a filter for the requester of Access Requests.
+// WithUserFilter sets a filter for the requester of Access Requests.
 // This allows the plugin to only process requests from a specific user.
-func WithRequesterFilter(requester string) Opt {
+func WithUserFilter(user string) Opt {
 	return func(w *EventWatcher) error {
-		if requester == "" {
+		if user == "" {
 			return fmt.Errorf("requester filter cannot be empty")
 		}
-		w.requesterFilter = requester
+		w.userFilter = user
 		return nil
 	}
 }
@@ -172,11 +172,11 @@ func (w *EventWatcher) handleEvent(ctx context.Context, event types.Event) error
 }
 
 // buildAccessRequestFilter builds a filter for Access Requests based on the requester.
+// Not all filters are supported by the client library, so take care to only use supported fields.
+// You can see the supported fields by checking the implementation of [types.AccessRequestFilter.FromMap].
 func (w *EventWatcher) buildAccessRequestFilter() map[string]string {
-	m := map[string]string{}
-	if w.requesterFilter != "" {
-		m["requester"] = w.requesterFilter
+	filter := types.AccessRequestFilter{
+		User: w.userFilter,
 	}
-
-	return m
+	return filter.IntoMap()
 }
