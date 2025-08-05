@@ -118,7 +118,7 @@ func (cmd *StartCmd) loadConfig(path string) (cfg config.Root, err error) {
 		if err != nil {
 			return cfg, fmt.Errorf("reading private key file %q: %w", cmd.PrivateKeyPath, err)
 		}
-		cfg.EventSources.GitHub.Authentication.App.PrivateKey = privateKeyData
+		cfg.EventSources.GitHub.Authentication.App.PrivateKey = string(privateKeyData)
 	}
 
 	if err := cfg.Validate(); err != nil {

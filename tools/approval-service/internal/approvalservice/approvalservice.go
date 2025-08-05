@@ -181,7 +181,7 @@ func newTeleportClientFromConfig(ctx context.Context, cfg config.Teleport) (*tel
 }
 
 func newGitHubClientFromConfig(ctx context.Context, cfg config.GitHubSource) (*github.Client, error) {
-	client, err := github.NewForApp(ctx, cfg.Authentication.App.AppID, cfg.Authentication.App.InstallationID, cfg.Authentication.App.PrivateKey)
+	client, err := github.NewForApp(ctx, cfg.Authentication.App.AppID, cfg.Authentication.App.InstallationID, []byte(cfg.Authentication.App.PrivateKey))
 	if err != nil {
 		return nil, fmt.Errorf("initializing GitHub client for app: %w", err)
 	}

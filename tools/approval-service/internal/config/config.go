@@ -80,8 +80,10 @@ type GitHubAppAuthentication struct {
 	AppID int64 `yaml:"app_id"`
 	// InstallationID is the ID of the GitHub App installation.
 	InstallationID int64 `yaml:"installation_id"`
-	// PrivateKey is the base64 encoded private key for the GitHub App.
-	PrivateKey []byte `yaml:"private_key"`
+	// PrivateKey is the private key of the GitHub App.
+	// Normal usage this is populated from a filepath in the CLI using the `--private-key-path` flag.
+	// This can be passed as a base64 encoded string in YAML using `!! binary ${key}` or just as a non-encoded string.
+	PrivateKey string `yaml:"private_key"`
 }
 
 type Teleport struct {
