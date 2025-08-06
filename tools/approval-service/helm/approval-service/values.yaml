@@ -1,0 +1,69 @@
+image:
+  repository: approval-service
+  pullPolicy: Always
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: ""
+
+# Teleport Tbot configuration for the approval service.
+# This configures IAM authentication for the Teleport service and sets up tbot to use it.
+tbot:
+  clusterName: "test.teleport.sh"
+  teleportProxyAddress: "test.teleport.sh:443"
+  token: "my-token"
+  defaultOutput:
+    secretName: "identity-output"
+  # Defaults for the Teleport join method.
+  # joinMethod set to iam to use IAM authentication for Teleport.
+  annotations:
+    serviceAccount:
+      eks.amazonaws.com/role-arn: "arn:aws:iam::123456789012:role/my-role"
+  joinMethod: "iam"
+  
+
+appConfig:
+  approval_service:
+    teleport:
+      proxy_addrs:
+      - proxy.example.com:3080
+      identity_file: /path/to/identity/file
+      user: teleport-user
+    request_ttl_hours: 168
+    listen_addr: :8080
+  event_sources:
+    github:
+      path: /webhook
+      org: gravitational
+      repo: teleport
+      environments:
+      - name: staging
+        teleport_role: staging-role
+      - name: prod
+        teleport_role: prod-role
+
+appSecrets:
+  webhookSecret: "webhook-secret"
+  installationId: 1234567890 # Should be a numeric value.
+  appId: 1234567890 # Should be a numeric value.
+  # Base64 encoded private key for the GitHub App.
+  # This helps to preserve formatting of the private key.
+  privateKey: "YmFzZTY0LWVuY29kZWQtcHJpdmF0ZS1rZXkK"
+
+service:
+  type: ClusterIP
+  port: 8080
+
+ingress:
+  enabled: false
+  hostname: approval-service.teleport.dev
+
+# Extra configurations for the Deployment
+nodeSelector: {}
+tolerations: []
+affinity: {}
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+podAnnotations: {}
+podLabels: {}
+podSecurityContext: {}
+securityContext: {}

@@ -1,0 +1,11 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: approval-service
+  namespace: {{ .Release.Namespace }}
+data:
+  config.yaml: |
+    {{- $config := .Values.appConfig | deepCopy -}}
+    {{- $_ := set $config.approval_service.teleport "identity_file" "/etc/identity-output/identity" -}}
+    {{- $config | toYaml | nindent 4 }}

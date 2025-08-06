@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "approval-service.fullname" . }}
+  labels:
+    {{- include "approval-service.labels" . | nindent 4 }}
+spec:
+  replicas: 1 # Set to 1 for a simpler implementation
+  selector:
+    matchLabels:
+      {{- include "approval-service.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "approval-service.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          command: ["/bin/tool"]
+          args: ["start", "--config", "/etc/approval-service/config.yaml"]
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          envFrom:
+            - secretRef:
+                name: approval-service-envvars
+          env:
+            - name: APPROVAL_SERVICE_PRIVATE_KEY_PATH
+              value: "/etc/approval-service-secrets/github-app-private-key.pem"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+          volumeMounts:
+            - name: approval-service-config
+              mountPath: /etc/approval-service
+              readOnly: true
+            - name: approval-service-secret-files
+              mountPath: /etc/approval-service-secrets/
+              readOnly: true
+            - name: identity-output
+              mountPath: /etc/identity-output
+              readOnly: true
+      volumes:
+        - name: approval-service-config
+          configMap:
+            name: approval-service
+        - name: approval-service-secret-files
+          secret:
+            secretName: approval-service-files
+        - name: identity-output
+          secret:
+            secretName: dev-tbot-out
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
