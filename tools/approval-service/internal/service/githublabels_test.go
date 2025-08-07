@@ -160,7 +160,7 @@ func FuzzStoreWorkflowInfo(f *testing.F) {
 		}
 
 		var missingLabelErr *MissingLabelError
-		_, err = getWorkflowLabels(req)
+		_, err = GetWorkflowLabels(req)
 		assert.ErrorAs(t, err, &missingLabelErr)
 	})
 }

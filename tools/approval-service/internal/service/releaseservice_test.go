@@ -84,7 +84,7 @@ func TestReleaseService(t *testing.T) {
 		require.NoError(t, err)
 		assert.Len(t, reqs, 3) // We expect three Access Requests, one for each workflow ID
 		for _, req := range reqs {
-			info, err := getWorkflowLabels(req)
+			info, err := GetWorkflowLabels(req)
 			require.NoError(t, err, "Expected to get workflow labels without error")
 
 			assert.Equal(t, "gha-env-build-staging", req.GetRoles()[0], "Expected role to be gha-env-build-staging")
