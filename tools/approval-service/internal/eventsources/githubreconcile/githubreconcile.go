@@ -18,8 +18,8 @@ import (
 // To recover from this, the reconciler will periodically check the state of the deployment protection rules and the state of the access requests.
 // If it detects a mismatch, it will fire an event to update the state of the access request.
 type Reconciler struct {
-	deployReviewEventProcessor githubevents.GitHubEventProcessor
-	reviewHandler              accessrequest.AccessRequestReviewedHandler
+	deploymentReviewEventProcessor githubevents.GitHubEventProcessor
+	accessRequestReviewHandler     accessrequest.AccessRequestReviewedHandler
 
 	org  string
 	repo string
@@ -32,7 +32,7 @@ type Reconciler struct {
 	log *slog.Logger
 }
 
-// Small interface to allow for easier testing of the Teleport client.
+// teleportClient is a small interface to allow for easier testing of the Teleport client.
 // This is a subset of the teleport.Client interface that we need for our purposes.
 // It is not intended to be a complete representation of the Teleport API or the teleport.Client implementation.
 type teleClient interface {
@@ -53,15 +53,15 @@ func WithLogger(logger *slog.Logger) Opt {
 	}
 }
 
-func NewReconciler(ghClient github.Client, teleClient teleClient, org, repo string, reviewHandler accessrequest.AccessRequestReviewedHandler, deployProcessor githubevents.GitHubEventProcessor, opts ...Opt) (*Reconciler, error) {
+func NewReconciler(ghClient github.Client, teleClient teleClient, org, repo string, accessRequestReviewHandler accessrequest.AccessRequestReviewedHandler, deploymentReviewEventProcessor githubevents.GitHubEventProcessor, opts ...Opt) (*Reconciler, error) {
 	r := &Reconciler{
-		deployReviewEventProcessor: deployProcessor,
-		reviewHandler:              reviewHandler,
-		org:                        org,
-		repo:                       repo,
-		ghClient:                   ghClient,
-		teleClient:                 teleClient,
-		log:                        slog.Default().With("component", "github-reconciler"),
+		deploymentReviewEventProcessor: deploymentReviewEventProcessor,
+		accessRequestReviewHandler:     accessRequestReviewHandler,
+		org:                            org,
+		repo:                           repo,
+		ghClient:                       ghClient,
+		teleClient:                     teleClient,
+		log:                            slog.Default().With("component", "github-reconciler"),
 	}
 
 	for _, opt := range opts {
@@ -89,12 +89,12 @@ func (r *Reconciler) Run(ctx context.Context) error {
 func (r *Reconciler) reconcile(ctx context.Context) error {
 	// Reconciler is driven by the state of GitHub workflow pendingWorkflows
 	// If there are pending workflow pendingWorkflows, we need to investigate the state of their corresponding Access Request.
-	pendingWorkflows, err := r.ghClient.ListWaitingWorkflowRuns(ctx, r.org, r.repo)
+	pendingWorkflowRuns, err := r.ghClient.ListWaitingWorkflowRuns(ctx, r.org, r.repo)
 	if err != nil {
 		return fmt.Errorf("failed to list pending deployment protection rules: %w", err)
 	}
 
-	if len(pendingWorkflows) == 0 {
+	if len(pendingWorkflowRuns) == 0 {
 		// No pending deployment protection rules, nothing to reconcile.
 		return nil
 	}
@@ -107,41 +107,41 @@ func (r *Reconciler) reconcile(ctx context.Context) error {
 		return fmt.Errorf("failed to get access requests: %w", err)
 	}
 
-	accessRequestsByWorkflowRun := r.buildWorkflowRunToAccessRequestMap(accessRequests)
+	accessRequestsByWorkflowRunID := r.indexAccessRequestsByWorkflowRunID(accessRequests)
 
-	for _, pendingWork := range pendingWorkflows {
-		if req, ok := accessRequestsByWorkflowRun[pendingWork.WorkflowID]; ok {
+	for _, workflowRun := range pendingWorkflowRuns {
+		if accessRequest, exists := accessRequestsByWorkflowRunID[workflowRun.WorkflowID]; exists {
 			// Access request exists for this workflow run, check its state.
-			if req.GetState() == types.RequestState_PENDING {
+			if accessRequest.GetState() == types.RequestState_PENDING {
 				continue // Access request is still pending, nothing to do.
 			}
 
 			// Access request is not pending, and we have a pending workflow run.
 			// This means we need to refire the event to update the GitHub deployment protection rule.
-			r.log.Info("detected access request state change, refiring event", "workflow_run_id", pendingWork.WorkflowID, "workflow_name", pendingWork.Name, "org", pendingWork.Organization, "repo", pendingWork.Repository)
-			if err := r.reviewHandler.HandleAccessRequestReviewed(ctx, req); err != nil {
+			r.log.Info("detected access request state change, refiring event", "workflow_run_id", workflowRun.WorkflowID, "workflow_name", workflowRun.Name, "org", workflowRun.Organization, "repo", workflowRun.Repository)
+			if err := r.accessRequestReviewHandler.HandleAccessRequestReviewed(ctx, accessRequest); err != nil {
 				r.log.Error("failed to handle review", "error", err)
 			}
 			continue
 		}
 
 		// No access request for this workflow run, refire the event to create one.
-		r.log.Info("detected missing access request, refiring event", "workflow_run_id", pendingWork.WorkflowID, "workflow_name", pendingWork.Name, "org", pendingWork.Organization, "repo", pendingWork.Repository)
-		pendingDeploys, err := r.ghClient.GetPendingDeployments(ctx, pendingWork.Organization, pendingWork.Repository, pendingWork.WorkflowID)
+		r.log.Info("detected missing access request, refiring event", "workflow_run_id", workflowRun.WorkflowID, "workflow_name", workflowRun.Name, "org", workflowRun.Organization, "repo", workflowRun.Repository)
+		pendingDeployments, err := r.ghClient.GetPendingDeployments(ctx, workflowRun.Organization, workflowRun.Repository, workflowRun.WorkflowID)
 		if err != nil {
-			return fmt.Errorf("failed to get pending deployments for workflow run %d: %w", pendingWork.WorkflowID, err)
+			return fmt.Errorf("failed to get pending deployments for workflow run %d: %w", workflowRun.WorkflowID, err)
 		}
 
-		for _, deployment := range pendingDeploys {
-			err := r.deployReviewEventProcessor.HandleDeploymentReviewEventReceived(ctx, githubevents.DeploymentReviewEvent{
-				WorkflowID:   pendingWork.WorkflowID,
-				Requester:    pendingWork.Requester,
-				Organization: pendingWork.Organization,
-				Repository:   pendingWork.Repository,
+		for _, deployment := range pendingDeployments {
+			err := r.deploymentReviewEventProcessor.HandleDeploymentReviewEventReceived(ctx, githubevents.DeploymentReviewEvent{
+				WorkflowID:   workflowRun.WorkflowID,
+				Requester:    workflowRun.Requester,
+				Organization: workflowRun.Organization,
+				Repository:   workflowRun.Repository,
 				Environment:  deployment.Environment,
 			})
 			if err != nil {
-				r.log.Error("failed to process deployment review event", "error", err, "workflow_run_id", pendingWork.WorkflowID, "environment", deployment.Environment)
+				r.log.Error("failed to process deployment review event", "error", err, "workflow_run_id", workflowRun.WorkflowID, "environment", deployment.Environment)
 				continue
 			}
 		}
@@ -150,17 +150,17 @@ func (r *Reconciler) reconcile(ctx context.Context) error {
 	return nil
 }
 
-// buildWorkflowRunToAccessRequestMap returns a map of access requests indexed by their workflow run IDs.
-func (r *Reconciler) buildWorkflowRunToAccessRequestMap(accessRequests []types.AccessRequest) map[int64]types.AccessRequest {
-	stateMap := map[int64]types.AccessRequest{}
-	for _, req := range accessRequests {
-		workflowInfo, err := service.GetWorkflowLabels(req)
+// indexAccessRequestsByWorkflowRunID returns a map of access requests indexed by their workflow run IDs.
+func (r *Reconciler) indexAccessRequestsByWorkflowRunID(accessRequests []types.AccessRequest) map[int64]types.AccessRequest {
+	accessRequestIndex := map[int64]types.AccessRequest{}
+	for _, accessRequest := range accessRequests {
+		workflowInfo, err := service.GetWorkflowLabels(accessRequest)
 		if err != nil {
-			r.log.Warn("failed to get workflow labels from access request", "error", err, "access_request_id", req.GetName())
+			r.log.Warn("failed to get workflow labels from access request", "error", err, "access_request_id", accessRequest.GetName())
 			continue
 		}
 
-		stateMap[workflowInfo.WorkflowRunID] = req
+		accessRequestIndex[workflowInfo.WorkflowRunID] = accessRequest
 	}
-	return stateMap
+	return accessRequestIndex
 }
