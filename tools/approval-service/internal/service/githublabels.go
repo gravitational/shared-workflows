@@ -123,13 +123,13 @@ func validateInputString(s string, maxLength int) error {
 	return nil
 }
 
-// getWorkflowLabels extracts the GitHub workflow labels from the access request.
+// GetWorkflowLabels extracts the GitHub workflow labels from the access request.
 // The labels are expected to be set by the `setWorkflowLabels` function and will contains information
 // to tie to a specific GitHub workflow run and environment.
 //
 // When an Access Request is approved or denied, these labels will be used to determine the appropriate
 // GitHub deployment protection rule to approve or reject.
-func getWorkflowLabels(req types.AccessRequest) (githubWorkflowLabels, error) {
+func GetWorkflowLabels(req types.AccessRequest) (githubWorkflowLabels, error) {
 	missingLabels := []string{}
 	labels := req.GetStaticLabels()
 

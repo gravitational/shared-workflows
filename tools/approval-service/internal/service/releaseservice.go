@@ -187,7 +187,7 @@ func (w *ReleaseService) findExistingAccessRequest(ctx context.Context, e github
 	}
 
 	for _, req := range list {
-		info, err := getWorkflowLabels(req)
+		info, err := GetWorkflowLabels(req)
 		if err != nil {
 			w.log.Debug("failed to get workflow info for access request", "access_request_name", req.GetName(), "error", err)
 			// Not all Access Requests will have workflow info, so we can ignore this error.
@@ -267,7 +267,7 @@ func (w *ReleaseService) finishEventProcessing(eventID string) {
 
 // onAccessRequestReviewed processes the Access Request review event.
 func (w *ReleaseService) onAccessRequestReviewed(ctx context.Context, req types.AccessRequest) {
-	info, err := getWorkflowLabels(req)
+	info, err := GetWorkflowLabels(req)
 	if err != nil {
 		// If we cannot find the workflow info, we cannot process the request.
 		// This is likely due to the access request not having the required labels.
