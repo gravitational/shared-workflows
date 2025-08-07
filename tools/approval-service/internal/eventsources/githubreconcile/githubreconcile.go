@@ -22,7 +22,6 @@ import (
 
 	"github.com/gravitational/shared-workflows/libs/github"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/eventsources/accessrequest"
-	"github.com/gravitational/shared-workflows/tools/approval-service/internal/eventsources/githubevents"
 	"github.com/gravitational/teleport/api/types"
 )
 
@@ -33,8 +32,7 @@ import (
 // To recover from this, the reconciler will periodically check the state of the deployment protection rules and the state of the access requests.
 // If it detects a mismatch, it will fire an event to update the state of the access request.
 type Reconciler struct {
-	deployReviewEventProcessor githubevents.GitHubEventProcessor
-	reviewHandler              accessrequest.ReviewHandler
+	AccessRequestReviewedHandler accessrequest.AccessRequestReviewedHandler
 }
 
 // Small interface to allow for easier testing of the Teleport client.
@@ -66,5 +64,5 @@ func (r *Reconciler) reconcile(ctx context.Context) {
 	// For each pending deployment protection rule, we need to check if there is a corresponding access request in Teleport.
 	// If there is, we need to check if the state of the access request matches the state of the deployment protection rule.
 	// If there is no corresponding access request, we need to "refire" the event and handle with deployReviewEventProcessor
-	// If there is a corresponding access request that is not pending, we "refire" the event and handle with reviewHandler
+	// If there is a corresponding access request that is not pending, we "refire" the event and handle with AccessRequestReviewedHandler
 }

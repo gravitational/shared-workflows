@@ -40,11 +40,8 @@ type Source struct {
 
 // GitHubEventProcessor is an interface for processing deployment review events.
 type GitHubEventProcessor interface {
-	// ProcessDeploymentReviewEvent processes a deployment review event.
-	ProcessDeploymentReviewEvent(ctx context.Context, event DeploymentReviewEvent) error
-
-	// ProcessWorkflowDispatchEvent processes a workflow dispatch event.
-	ProcessWorkflowDispatchEvent(ctx context.Context, event WorkflowDispatchEvent) error
+	// HandleDeploymentReviewEventReceived processes a deployment review event.
+	HandleDeploymentReviewEventReceived(ctx context.Context, event DeploymentReviewEvent) error
 }
 
 // DeploymentReviewEvent is an event that is sent when a deployment review is requested.
@@ -139,7 +136,7 @@ var _ webhook.EventHandler = (*Source)(nil)
 func (ghes *Source) HandleEvent(ctx context.Context, event any) error {
 	switch event := event.(type) {
 	case *github.DeploymentProtectionRuleEvent:
-		return ghes.processDeploymentReviewEvent(ctx, event)
+		return ghes.HandleDeploymentReviewEventReceived(ctx, event)
 	case *github.WorkflowDispatchEvent:
 		return errors.New("workflow_dispatch not implemented")
 	default:
@@ -150,7 +147,7 @@ func (ghes *Source) HandleEvent(ctx context.Context, event any) error {
 
 // Process a deployment review event.
 // This is where most of the business logic will go.
-func (ghes *Source) processDeploymentReviewEvent(ctx context.Context, payload *github.DeploymentProtectionRuleEvent) error {
+func (ghes *Source) HandleDeploymentReviewEventReceived(ctx context.Context, payload *github.DeploymentProtectionRuleEvent) error {
 	workflowID, err := payload.GetRunID()
 	if err != nil {
 		return fmt.Errorf("error extracting workflow ID from callback URL: %w", err)
@@ -166,7 +163,7 @@ func (ghes *Source) processDeploymentReviewEvent(ctx context.Context, payload *g
 	ghes.log.Info("received event", "event", event)
 
 	// Process the event
-	return ghes.processor.ProcessDeploymentReviewEvent(ctx, event)
+	return ghes.processor.HandleDeploymentReviewEventReceived(ctx, event)
 }
 
 // LogValue represents the DeploymentReviewEvent in a structured log format.

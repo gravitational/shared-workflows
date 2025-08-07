@@ -30,20 +30,20 @@ import (
 // This is an implementation of a Teleport Access Request plugin.
 // The underlying watcher polls the Teleport API for changes to Access Requests and generates an event stream.
 type EventWatcher struct {
-	teleportClient *teleportclient.Client
-	reviewHandler  ReviewHandler
-	watch          types.Watcher
+	teleportClient               *teleportclient.Client
+	AccessRequestReviewedHandler AccessRequestReviewedHandler
+	watch                        types.Watcher
 
-	requesterFilter string
+	userFilter string
 
 	log *slog.Logger
 }
 
-// ReviewHandler is an interface for handling approval and rejection events.
-// When an Access Request is approved or denied, the plugin will call the HandleReview method.
+// AccessRequestReviewedHandler is an interface for handling approval and rejection events.
+// When an Access Request is approved or denied, the plugin will call the HandleAccessRequestReviewed method.
 // The handler should implement the logic to process the review, such as sending notifications or updating records.
-type ReviewHandler interface {
-	HandleReview(ctx context.Context, req types.AccessRequest) error
+type AccessRequestReviewedHandler interface {
+	HandleAccessRequestReviewed(ctx context.Context, req types.AccessRequest) error
 }
 
 // Opt is an option for the Access Request plugin.
@@ -60,20 +60,20 @@ func WithLogger(logger *slog.Logger) Opt {
 	}
 }
 
-// WithRequesterFilter sets a filter for the requester of Access Requests.
+// WithUserFilter sets a filter for the requester of Access Requests.
 // This allows the plugin to only process requests from a specific user.
-func WithRequesterFilter(requester string) Opt {
+func WithUserFilter(user string) Opt {
 	return func(w *EventWatcher) error {
-		if requester == "" {
+		if user == "" {
 			return fmt.Errorf("requester filter cannot be empty")
 		}
-		w.requesterFilter = requester
+		w.userFilter = user
 		return nil
 	}
 }
 
 // NewEventWatcher creates a new Access Request plugin.
-func NewEventWatcher(client *teleportclient.Client, handler ReviewHandler, opts ...Opt) (*EventWatcher, error) {
+func NewEventWatcher(client *teleportclient.Client, handler AccessRequestReviewedHandler, opts ...Opt) (*EventWatcher, error) {
 	if client == nil {
 		return nil, errors.New("teleport client cannot be nil")
 	}
@@ -82,9 +82,9 @@ func NewEventWatcher(client *teleportclient.Client, handler ReviewHandler, opts 
 	}
 
 	p := &EventWatcher{
-		teleportClient: client,
-		reviewHandler:  handler,
-		log:            slog.Default(),
+		teleportClient:               client,
+		AccessRequestReviewedHandler: handler,
+		log:                          slog.Default(),
 	}
 
 	for _, o := range opts {
@@ -161,9 +161,9 @@ func (w *EventWatcher) handleEvent(ctx context.Context, event types.Event) error
 	case types.RequestState_PENDING:
 		w.log.Info("Received a new access request", "access_request_name", req.GetName())
 	case types.RequestState_APPROVED:
-		return w.reviewHandler.HandleReview(ctx, req)
+		return w.AccessRequestReviewedHandler.HandleAccessRequestReviewed(ctx, req)
 	case types.RequestState_DENIED:
-		return w.reviewHandler.HandleReview(ctx, req)
+		return w.AccessRequestReviewedHandler.HandleAccessRequestReviewed(ctx, req)
 	default:
 		w.log.Warn("Unknown access request state, skipping", "access_request_name", req.GetName(), "state", req.GetState())
 	}
@@ -172,11 +172,11 @@ func (w *EventWatcher) handleEvent(ctx context.Context, event types.Event) error
 }
 
 // buildAccessRequestFilter builds a filter for Access Requests based on the requester.
+// Not all filters are supported by the client library, so take care to only use supported fields.
+// You can see the supported fields by checking the implementation of [types.AccessRequestFilter.FromMap].
 func (w *EventWatcher) buildAccessRequestFilter() map[string]string {
-	m := map[string]string{}
-	if w.requesterFilter != "" {
-		m["requester"] = w.requesterFilter
+	filter := types.AccessRequestFilter{
+		User: w.userFilter,
 	}
-
-	return m
+	return filter.IntoMap()
 }

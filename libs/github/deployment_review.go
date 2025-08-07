@@ -1,3 +1,19 @@
+/*
+ *  Copyright 2025 Gravitational, Inc
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ */
+
 package github
 
 import (
@@ -47,4 +63,29 @@ func (c *Client) ReviewDeploymentProtectionRule(ctx context.Context, org, repo s
 	}
 
 	return nil
+}
+
+// PendingDeploymentInfo contains information about a pending deployment that is waiting for approval.
+// The API returns environment information for the pending deployment as well as other metadata.
+// Only the environment name is currently useful, so this is a simplified version of the data returned by the API.
+type PendingDeploymentInfo struct {
+	// Environment is the name of the environment that the workflow run is waiting for approval on.
+	Environment string
+}
+
+// GetPendingDeployments retrieves all pending deployments for a given workflow run.
+func (c *Client) GetPendingDeployments(ctx context.Context, org, repo string, runID int64) ([]PendingDeploymentInfo, error) {
+	data, _, err := c.client.Actions.GetPendingDeployments(ctx, org, repo, runID)
+	if err != nil {
+		return nil, fmt.Errorf("getting pending deployments: %w", err)
+	}
+
+	pending := []PendingDeploymentInfo{}
+	for _, deployment := range data {
+		pending = append(pending, PendingDeploymentInfo{
+			Environment: deployment.GetEnvironment().GetName(),
+		})
+	}
+
+	return pending, nil
 }

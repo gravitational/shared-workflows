@@ -17,7 +17,6 @@
 package config
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 )
@@ -42,22 +41,31 @@ type ApprovalService struct {
 type EventSources struct {
 	// GitHub is the configuration for the GitHub App and webhook.
 	// This is used to listen for events from GitHub and to respond to approvals.
-	GitHub []GitHubSource `yaml:"github,omitempty"`
+	GitHub GitHubSource `yaml:"github,omitempty"`
 }
 
 // GitHubSource represents the per-repo configuration for webhook events and API authentication.
 type GitHubSource struct {
+	// Path is the URL path that the webhook will be sent to.
 	Path string `yaml:"path,omitempty"`
 	// Org is the organization that the event must be from.
 	Org string `yaml:"org,omitempty"`
 	// Repo is the repository that the event must be from.
 	Repo string `yaml:"repo,omitempty"`
 	// Environments is a list of environments that the event must be for.
-	Environments []string `yaml:"environments,omitempty"`
+	Environments []GitHubEnvironment `yaml:"environments,omitempty"`
 	// Secret is the secret token used to verify the webhook events.
 	Secret string `yaml:"secret,omitempty"`
 	// Authentication configuration for the GitHub REST API
 	Authentication GitHubAuthentication `yaml:"authentication,omitempty"`
+}
+
+// GitHubEnvironment configures the environment and the associated Teleport Role to request for that environment.
+type GitHubEnvironment struct {
+	// Name is the name of the environment.
+	Name string `yaml:"name"`
+	// TeleportRole is the Teleport role to request for this environment.
+	TeleportRole string `yaml:"teleport_role"`
 }
 
 // GitHubAuthentication is the configuration for the GitHub App authentication.
@@ -72,8 +80,10 @@ type GitHubAppAuthentication struct {
 	AppID int64 `yaml:"app_id"`
 	// InstallationID is the ID of the GitHub App installation.
 	InstallationID int64 `yaml:"installation_id"`
-	// PrivateKeyPath is the path to the private key for the GitHub App.
-	PrivateKeyPath string `yaml:"private_key_path"`
+	// PrivateKey is the private key of the GitHub App.
+	// Normal usage this is populated from a filepath in the CLI using the `--private-key-path` flag.
+	// This can be passed as a base64 encoded string in YAML using `!! binary ${key}` or just as a non-encoded string.
+	PrivateKey string `yaml:"private_key"`
 }
 
 type Teleport struct {
@@ -83,8 +93,6 @@ type Teleport struct {
 	IdentityFile string `yaml:"identity_file"`
 	// User is the Teleport user to use for creating the access request.
 	User string `yaml:"user"`
-	// RoleToRequest is the Teleport role to request for the access request.
-	RoleToRequest string `yaml:"role_to_request"`
 	// RequestTTLHours is used to determine the expiry.
 	// By default this is 7*24 hours (7 days).
 	RequestTTLHours int64 `yaml:"request_ttl_hours"`
@@ -105,15 +113,7 @@ func (c *ApprovalService) Validate() error {
 }
 
 func (c *EventSources) Validate() error {
-	if len(c.GitHub) == 0 {
-		return errors.New("at least one event source is required")
-	}
-	for _, gh := range c.GitHub {
-		if err := gh.Validate(); err != nil {
-			return fmt.Errorf("github: %w", err)
-		}
-	}
-	return nil
+	return c.GitHub.Validate()
 }
 
 func (c *GitHubSource) Validate() error {
@@ -131,6 +131,31 @@ func (c *GitHubSource) Validate() error {
 		missing = append(missing, "environments")
 	}
 
+	for _, env := range c.Environments {
+		if err := env.Validate(); err != nil {
+			return fmt.Errorf("environment %s: %w", env.Name, err)
+		}
+	}
+
+	if c.Secret == "" {
+		missing = append(missing, "secret")
+	}
+
+	if len(missing) > 0 {
+		return fmt.Errorf("missing required fields: %s", strings.Join(missing, ", "))
+	}
+	return nil
+}
+
+func (c *GitHubEnvironment) Validate() error {
+	missing := []string{}
+	if c.Name == "" {
+		missing = append(missing, "name")
+	}
+	if c.TeleportRole == "" {
+		missing = append(missing, "teleport_role")
+	}
+
 	if len(missing) > 0 {
 		return fmt.Errorf("missing required fields: %s", strings.Join(missing, ", "))
 	}
@@ -138,9 +163,6 @@ func (c *GitHubSource) Validate() error {
 }
 
 func (c *GitHubAuthentication) Validate() error {
-	if c.App == (GitHubAppAuthentication{}) {
-		return errors.New("github app authentication is required")
-	}
 	if err := c.App.Validate(); err != nil {
 		return fmt.Errorf("github app: %w", err)
 	}
@@ -155,8 +177,9 @@ func (c *GitHubAppAuthentication) Validate() error {
 	if c.InstallationID == 0 {
 		missing = append(missing, "installation_id")
 	}
-	if c.PrivateKeyPath == "" {
-		missing = append(missing, "private_key_path")
+
+	if len(c.PrivateKey) == 0 {
+		missing = append(missing, "private_key")
 	}
 
 	if len(missing) > 0 {
@@ -175,9 +198,6 @@ func (c *Teleport) Validate() error {
 	}
 	if c.User == "" {
 		missing = append(missing, "user")
-	}
-	if c.RoleToRequest == "" {
-		missing = append(missing, "role_to_request")
 	}
 
 	if len(missing) > 0 {
