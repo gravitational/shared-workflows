@@ -110,17 +110,14 @@ func (r *Reconciler) reconcile(ctx context.Context) error {
 	accessRequestsByWorkflowRunID := r.indexAccessRequestsByWorkflowRunID(accessRequests)
 
 	for _, workflowRun := range pendingWorkflowRuns {
-		if accessRequest, exists := accessRequestsByWorkflowRunID[workflowRun.WorkflowID]; exists {
-			// Access request exists for this workflow run, check its state.
-			if accessRequest.GetState() == types.RequestState_PENDING {
-				continue // Access request is still pending, nothing to do.
-			}
-
-			// Access request is not pending, and we have a pending workflow run.
-			// This means we need to refire the event to update the GitHub deployment protection rule.
-			r.log.Info("detected access request state change, refiring event", "workflow_run_id", workflowRun.WorkflowID, "workflow_name", workflowRun.Name, "org", workflowRun.Organization, "repo", workflowRun.Repository)
-			if err := r.accessRequestReviewHandler.HandleAccessRequestReviewed(ctx, accessRequest); err != nil {
-				r.log.Error("failed to handle review", "error", err)
+		if accessRequest, ok := accessRequestsByWorkflowRunID[workflowRun.WorkflowID]; ok {
+			if accessRequest.GetState() == types.RequestState_APPROVED || accessRequest.GetState() == types.RequestState_DENIED {
+				// Access request is approved or denied, but we have a pending workflow run that hasn't had a decision made yet.
+				// This means we need to "refire" the event and have the Access Request reviewed again.
+				r.log.Info("detected access request state change, refiring event", "workflow_run_id", workflowRun.WorkflowID, "workflow_name", workflowRun.Name, "org", workflowRun.Organization, "repo", workflowRun.Repository)
+				if err := r.accessRequestReviewHandler.HandleAccessRequestReviewed(ctx, accessRequest); err != nil {
+					r.log.Error("failed to handle review", "error", err)
+				}
 			}
 			continue
 		}
