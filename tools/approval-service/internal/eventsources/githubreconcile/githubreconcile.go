@@ -24,6 +24,7 @@ type WorkflowStateReconciler struct {
 	org                    string
 	repo                   string
 	reconciliationInterval time.Duration
+	teleportUser           string
 
 	// External dependencies
 	ghClient   github.Client
@@ -76,10 +77,10 @@ type Config struct {
 // validate checks that all required configuration fields are set.
 func (c Config) validate() error {
 	if c.Org == "" {
-		return fmt.Errorf("Org is required")
+		return fmt.Errorf("org is required")
 	}
 	if c.Repo == "" {
-		return fmt.Errorf("Repo is required")
+		return fmt.Errorf("repo is required")
 	}
 	if c.TeleportClient == nil {
 		return fmt.Errorf("TeleportClient is required")
@@ -148,7 +149,9 @@ func (r *WorkflowStateReconciler) reconcile(ctx context.Context) error {
 
 	r.log.Info("found waiting workflow runs", "count", len(waitingWorkflowRuns))
 
-	accessRequests, err := r.teleClient.GetAccessRequests(ctx, types.AccessRequestFilter{})
+	accessRequests, err := r.teleClient.GetAccessRequests(ctx, types.AccessRequestFilter{
+		User: r.teleportUser,
+	})
 	if err != nil {
 		return fmt.Errorf("getting access requests: %w", err)
 	}
@@ -158,37 +161,66 @@ func (r *WorkflowStateReconciler) reconcile(ctx context.Context) error {
 	for _, workflowRun := range waitingWorkflowRuns {
 		// Check for an existing Access Request for this workflow run.
 		if accessRequest, ok := accessRequestsByWorkflowRunID[workflowRun.WorkflowID]; ok {
-			if accessRequest.GetState() == types.RequestState_APPROVED || accessRequest.GetState() == types.RequestState_DENIED {
+			switch accessRequest.GetState() {
+			case types.RequestState_PENDING:
+				r.log.Info("waiting workflow run already has a pending access request, no action needed",
+					"workflow_run", workflowRun, "access_request_id", accessRequest.GetName())
+			case types.RequestState_APPROVED, types.RequestState_DENIED:
 				// Access request is approved or denied, but we have a pending workflow run that hasn't had a decision made yet.
-				// This means we need to "refire" the event and have the Access Request reviewed again.
-				r.log.Info("detected access request state change, refiring event", "workflow_run_id", workflowRun.WorkflowID, "workflow_name", workflowRun.Name, "org", workflowRun.Organization, "repo", workflowRun.Repository)
 				if err := r.accessRequestReviewHandler.HandleAccessRequestReviewed(ctx, accessRequest); err != nil {
 					r.log.Error("failed to handle review", "error", err)
 				}
+			default:
+				r.log.Error("unexpected access request state",
+					"state", accessRequest.GetState(), "access_request_id", accessRequest.GetName(), "workflow_run", workflowRun)
 			}
 			continue
 		}
 
 		// No access request for this workflow run, refire the event to create one.
-		r.log.Info("detected missing access request, refiring event", "workflow_run_id", workflowRun.WorkflowID, "workflow_name", workflowRun.Name, "org", workflowRun.Organization, "repo", workflowRun.Repository)
-		pendingDeployments, err := r.ghClient.GetPendingDeployments(ctx, workflowRun.Organization, workflowRun.Repository, workflowRun.WorkflowID)
-		if err != nil {
-			return fmt.Errorf("failed to get pending deployments for workflow run %d: %w", workflowRun.WorkflowID, err)
+		if err := r.handleMissingAccessRequest(ctx, workflowRun); err != nil {
+			r.log.Error("failed to handle missing access request", "error", err, "workflow_run", workflowRun)
+			continue
+		}
+	}
+
+	return nil
+}
+
+// handleMissingAccessRequest will construct a new DeploymentReviewEvent for the given workflow run and will forward it to the underlying event handler.
+func (r *WorkflowStateReconciler) handleMissingAccessRequest(ctx context.Context, workflowRun github.WorkflowRunInfo) error {
+	// For a waiting workflow run, we need to make an extra call to determine the environment name that's being requested.
+	pendingDeployments, err := r.ghClient.GetPendingDeployments(ctx, workflowRun.Organization, workflowRun.Repository, workflowRun.WorkflowID)
+	if err != nil {
+		return fmt.Errorf("getting pending deployments for workflow run %d: %w", workflowRun.WorkflowID, err)
+	}
+
+	// Prevent duplicate processing of environments.
+	// GitHub is a bit weird in that it can have multiple pending deployments for the same environment.
+	// However only one API call is needed to approve/reject ALL deployments for that environment.
+	handledEnvironments := map[string]struct{}{}
+
+	for _, deployment := range pendingDeployments {
+		if _, ok := handledEnvironments[deployment.Environment]; ok {
+			r.log.Debug("skipping duplicate deployment for environment", "environment", deployment.Environment, "workflow_run", workflowRun)
+			continue
 		}
 
-		for _, deployment := range pendingDeployments {
-			err := r.deploymentReviewEventProcessor.HandleDeploymentReviewEventReceived(ctx, githubevents.DeploymentReviewEvent{
+		err := r.deploymentReviewEventProcessor.HandleDeploymentReviewEventReceived(ctx,
+			githubevents.DeploymentReviewEvent{
 				WorkflowID:   workflowRun.WorkflowID,
 				Requester:    workflowRun.Requester,
 				Organization: workflowRun.Organization,
 				Repository:   workflowRun.Repository,
 				Environment:  deployment.Environment,
-			})
-			if err != nil {
-				r.log.Error("failed to process deployment review event", "error", err, "workflow_run_id", workflowRun.WorkflowID, "environment", deployment.Environment)
-				continue
-			}
+			},
+		)
+
+		if err != nil {
+			r.log.Error("failed to process deployment review event", "workflow_run", workflowRun, "environment", deployment.Environment, "error", err)
+			continue
 		}
+		handledEnvironments[deployment.Environment] = struct{}{}
 	}
 
 	return nil
