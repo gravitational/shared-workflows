@@ -110,7 +110,7 @@ func TestWaitingWorkflowReconciler(t *testing.T) {
 				for runID, state := range tc.accessRequestsState {
 					newReq, err := types.NewAccessRequest(uuid.NewString(), testTeleportUser, testTeleportRole)
 					require.NoError(t, err, "Failed to create access request")
-					newReq.SetState(state)
+					require.NoError(t, newReq.SetState(state))
 
 					err = service.SetWorkflowLabels(newReq, service.GithubWorkflowLabels{
 						Org:           testOrg,
