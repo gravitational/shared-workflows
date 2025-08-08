@@ -13,11 +13,13 @@ import (
 	"github.com/gravitational/teleport/api/types"
 )
 
-// Reconciler is a service that reconciles the state of GitHub deployment protection rules with the state of Teleport access requests.
-// Events are ephemeral and failures to process results in a loss of data. This serves as a redundancy for such cases.
-// To recover from this, the reconciler will periodically check the state of the deployment protection rules and the state of the access requests.
-// If it detects a mismatch, it will fire an event to update the state of the access request.
-type Reconciler struct {
+// WorkflowStateReconciler runs a loop that periodically checks the state of GitHub Deployment Protection Rules and Teleport access requests.
+// It is responsible for ensuring that the state of Access Requests reflects the state of GitHub Deployment Protection Rules.
+//
+// The main motivation for this is that events are ephemeral and failures to process results in a loss of data.
+// To provide fault-tolerance without extra infrastructure, we will periodically check the state of GitHub workflows and Teleport access requests.
+// If it detects a mismatch, it will fire an event to update the state of the GitHub Deployment Protection Rule.
+type WorkflowStateReconciler struct {
 	deploymentReviewEventProcessor githubevents.GitHubEventProcessor
 	accessRequestReviewHandler     accessrequest.AccessRequestReviewedHandler
 
@@ -28,6 +30,9 @@ type Reconciler struct {
 	ghClient github.Client
 	// teleClient is the Teleport client used to interact with the Teleport API.
 	teleClient teleClient
+
+	// reconciliationInterval is the time between reconciliation runs
+	reconciliationInterval time.Duration
 
 	log *slog.Logger
 }
@@ -40,11 +45,11 @@ type teleClient interface {
 }
 
 // Opt is a functional option for configuring the Reconciler.
-type Opt func(*Reconciler) error
+type Opt func(*WorkflowStateReconciler) error
 
 // WithLogger sets the logger for the Reconciler.
 func WithLogger(logger *slog.Logger) Opt {
-	return func(r *Reconciler) error {
+	return func(r *WorkflowStateReconciler) error {
 		if logger == nil {
 			return fmt.Errorf("logger cannot be nil")
 		}
@@ -53,15 +58,38 @@ func WithLogger(logger *slog.Logger) Opt {
 	}
 }
 
-func NewReconciler(ghClient github.Client, teleClient teleClient, org, repo string, accessRequestReviewHandler accessrequest.AccessRequestReviewedHandler, deploymentReviewEventProcessor githubevents.GitHubEventProcessor, opts ...Opt) (*Reconciler, error) {
-	r := &Reconciler{
-		deploymentReviewEventProcessor: deploymentReviewEventProcessor,
-		accessRequestReviewHandler:     accessRequestReviewHandler,
-		org:                            org,
-		repo:                           repo,
-		ghClient:                       ghClient,
-		teleClient:                     teleClient,
-		log:                            slog.Default().With("component", "github-reconciler"),
+// Config is the required configuration for the WorkflowStateReconciler.
+type Config struct {
+	// Org is the GitHub organization name to watch.
+	Org string
+	// Repo is the GitHub repository name to watch.
+	Repo string
+	// GitHubClient is the GitHub client used to interact with the GitHub API.
+	GitHubClient github.Client
+
+	// TeleportUser is the Teleport user that the Approval Service will use to interact with Teleport.
+	// This is used to filter Access Requests to relevant ones for the GitHub workflows.
+	TeleportUser string
+	// TeleportClient is the Teleport client used to interact with the Teleport API.
+	TeleportClient teleClient
+
+	// AccessRequestReviewHandler is the handler for Access Request reviewed events.
+	AccessRequestReviewHandler accessrequest.AccessRequestReviewedHandler
+	// DeploymentReviewEventProcessor is the event processor for GitHub deployment review events.
+	DeploymentReviewEventProcessor githubevents.GitHubEventProcessor
+}
+
+func NewReconciler(config Config, opts ...Opt) (*WorkflowStateReconciler, error) {
+	r := &WorkflowStateReconciler{
+		deploymentReviewEventProcessor: config.DeploymentReviewEventProcessor,
+		accessRequestReviewHandler:     config.AccessRequestReviewHandler,
+		org:                            config.Org,
+		repo:                           config.Repo,
+		ghClient:                       config.GitHubClient,
+		teleClient:                     config.TeleportClient,
+		reconciliationInterval:         time.Second * 30, // Default to 30 seconds
+
+		log: slog.Default().With("component", "github-reconciler"),
 	}
 
 	for _, opt := range opts {
@@ -73,12 +101,14 @@ func NewReconciler(ghClient github.Client, teleClient teleClient, org, repo stri
 	return r, nil
 }
 
-func (r *Reconciler) Run(ctx context.Context) error {
+// Run starts the reconciliation loop.
+// It will run indefinitely until the context is cancelled.
+func (r *WorkflowStateReconciler) Run(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(30 * time.Second):
+		case <-time.After(r.reconciliationInterval):
 			if err := r.reconcile(ctx); err != nil {
 				r.log.Error("failed to reconcile GitHub deployment protection rules", "error", err)
 			}
@@ -86,30 +116,30 @@ func (r *Reconciler) Run(ctx context.Context) error {
 	}
 }
 
-func (r *Reconciler) reconcile(ctx context.Context) error {
-	// Reconciler is driven by the state of GitHub workflow pendingWorkflows
-	// If there are pending workflow pendingWorkflows, we need to investigate the state of their corresponding Access Request.
-	pendingWorkflowRuns, err := r.ghClient.ListWaitingWorkflowRuns(ctx, r.org, r.repo)
+// reconcile contains the main logic for reconciling the state of GitHub deployment protection rules with Teleport access requests.
+// It is driven by the state of waiting GitHub Workflow Runs, which may be waiting due to pending Deployment Protection Rules.
+// If there is a waiting workflow run, it will attempt to reconcile the state of the Deployment Protection Rule with the state of the Access Request.
+func (r *WorkflowStateReconciler) reconcile(ctx context.Context) error {
+	waitingWorkflowRuns, err := r.ghClient.ListWaitingWorkflowRuns(ctx, r.org, r.repo)
 	if err != nil {
-		return fmt.Errorf("failed to list pending deployment protection rules: %w", err)
+		return fmt.Errorf("listing waiting workflow runs: %w", err)
 	}
 
-	if len(pendingWorkflowRuns) == 0 {
-		// No pending deployment protection rules, nothing to reconcile.
+	if len(waitingWorkflowRuns) == 0 {
+		// No waiting deployment protection rules, nothing to reconcile.
 		return nil
 	}
 
 	// Gather Access Requests that are relevant to the workflow runs.
-	accessRequests, err := r.teleClient.GetAccessRequests(ctx, types.AccessRequestFilter{
-		// TODO: Figure out filtering for Access Requests
-	})
+	accessRequests, err := r.teleClient.GetAccessRequests(ctx, types.AccessRequestFilter{})
 	if err != nil {
-		return fmt.Errorf("failed to get access requests: %w", err)
+		return fmt.Errorf("getting access requests: %w", err)
 	}
 
 	accessRequestsByWorkflowRunID := r.indexAccessRequestsByWorkflowRunID(accessRequests)
 
-	for _, workflowRun := range pendingWorkflowRuns {
+	for _, workflowRun := range waitingWorkflowRuns {
+		// Check for an existing Access Request for this workflow run.
 		if accessRequest, ok := accessRequestsByWorkflowRunID[workflowRun.WorkflowID]; ok {
 			if accessRequest.GetState() == types.RequestState_APPROVED || accessRequest.GetState() == types.RequestState_DENIED {
 				// Access request is approved or denied, but we have a pending workflow run that hasn't had a decision made yet.
@@ -148,7 +178,7 @@ func (r *Reconciler) reconcile(ctx context.Context) error {
 }
 
 // indexAccessRequestsByWorkflowRunID returns a map of access requests indexed by their workflow run IDs.
-func (r *Reconciler) indexAccessRequestsByWorkflowRunID(accessRequests []types.AccessRequest) map[int64]types.AccessRequest {
+func (r *WorkflowStateReconciler) indexAccessRequestsByWorkflowRunID(accessRequests []types.AccessRequest) map[int64]types.AccessRequest {
 	accessRequestIndex := map[int64]types.AccessRequest{}
 	for _, accessRequest := range accessRequests {
 		workflowInfo, err := service.GetWorkflowLabels(accessRequest)
