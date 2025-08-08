@@ -1094,6 +1094,7 @@ func TestCheckInternal(t *testing.T) {
 			repository: "teleport",
 			author:     "1",
 			reviews: []github.Review{
+				{Author: "7", State: Approved},
 				{Author: "14", State: Approved},
 			},
 			files: []github.PullRequestFile{
@@ -1167,6 +1168,125 @@ func TestCheckInternal(t *testing.T) {
 
 			if test.singleApproval {
 				changes.ApproverCount = 1
+			}
+
+			err := r.CheckInternal(e, test.reviews, changes, test.files)
+			if test.result {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+			}
+		})
+	}
+}
+
+// TestCheckInternalDocsOnly verifies a few scenarios for docs-only PR reviews.
+func TestCheckInternalDocsOnly(t *testing.T) {
+	r := &Assignments{
+		c: &Config{
+			CoreReviewers: map[string]Reviewer{
+				"tim":   {Owner: true, PreferredReviewerFor: []string{"docs/pages/server-access"}},
+				"steve": {Owner: true, PreferredReviewerFor: []string{"docs/pages/database-access"}},
+				"alice": {Owner: true},
+				"bob":   {Owner: false},
+			},
+			DocsReviewers: map[string]Reviewer{
+				"paul":  {Owner: true},
+				"marie": {Owner: true},
+				"roman": {Owner: true},
+				"zac":   {Owner: true},
+			},
+			Admins: []string{
+				"tim",
+				"roman",
+				"zac",
+			},
+		},
+	}
+	tests := []struct {
+		desc       string
+		author     string
+		repository string
+		reviews    []github.Review
+		result     bool
+		files      []github.PullRequestFile
+	}{
+		{
+			desc:       "no-reviews-fail",
+			repository: "teleport",
+			author:     "marie",
+			reviews:    []github.Review{},
+			result:     false,
+		},
+		{
+			desc:       "one-approval-non-admin-fail",
+			repository: "teleport",
+			author:     "marie",
+			reviews: []github.Review{
+				{Author: "alice", State: Approved},
+			},
+			result: false,
+		},
+		{
+			desc:       "one-approval-admin-success",
+			repository: "teleport",
+			author:     "marie",
+			reviews: []github.Review{
+				{Author: "zac", State: Approved},
+			},
+			result: true,
+		},
+		{
+			desc:       "no-primary-approval-fail",
+			repository: "teleport",
+			author:     "marie",
+			reviews: []github.Review{
+				{Author: "marek", State: Approved},
+				{Author: "steve", State: Approved},
+			},
+			result: false,
+		},
+		{
+			desc:       "no-preferred-approval-fail",
+			repository: "teleport",
+			author:     "marie",
+			reviews: []github.Review{
+				{Author: "paul", State: Approved},
+				{Author: "alice", State: Approved},
+			},
+			files: []github.PullRequestFile{
+				{
+					Name: "docs/pages/database-access/get-started.mdx",
+				},
+			},
+			result: false,
+		},
+		{
+			desc:       "primary-and-preferred-approval-success",
+			repository: "teleport",
+			author:     "marie",
+			reviews: []github.Review{
+				{Author: "paul", State: Approved},
+				{Author: "steve", State: Approved},
+			},
+			files: []github.PullRequestFile{
+				{
+					Name: "docs/pages/database-access/get-started.mdx",
+				},
+			},
+			result: true,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			e := &env.Environment{
+				Repository: test.repository,
+				Author:     test.author,
+			}
+
+			changes := env.Changes{
+				Docs:          true,
+				ApproverCount: env.DefaultApproverCount,
 			}
 
 			err := r.CheckInternal(e, test.reviews, changes, test.files)

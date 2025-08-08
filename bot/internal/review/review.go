@@ -250,24 +250,30 @@ func (r *Assignments) getReleaseReviewers() []string {
 	return r.c.ReleaseReviewers
 }
 
-func (r *Assignments) getDocsReviewers(e *env.Environment, files []github.PullRequestFile) []string {
+func (r *Assignments) getDocsReviewersSets(e *env.Environment, files []github.PullRequestFile) (primary, preferred []string) {
 	// See if any code reviewers are designated preferred reviewers for one of
 	// the changed docs files. If so, add them as docs reviewers.
 	repoReviewers := r.repoReviewers(e)
 	a, b := getReviewerSets(e.Author, repoReviewers, r.c.CodeReviewersOmit)
-	preferredCodeReviewers := r.getAllPreferredReviewers(repoReviewers, append(a, b...), files)
+	preferredReviewers := r.getAllPreferredReviewers(repoReviewers, append(a, b...), files)
 
 	// Get the docs reviewer pool, which does not depend on the files
 	// changed by a pull request.
 	docsA, docsB := getReviewerSets(e.Author, r.c.DocsReviewers, r.c.DocsReviewersOmit)
-	reviewers := append(preferredCodeReviewers, append(docsA, docsB...)...)
+	primaryReviewers := append(docsA, docsB...)
 
 	// If no docs reviewers were assigned, assign admin reviews.
-	if len(reviewers) == 0 {
+	if len(primaryReviewers)+len(preferredReviewers) == 0 {
 		log.Println("No docs reviewers found. Assigning admin reviewers.")
-		return r.getAdminReviewers(e.Author)
+		return r.getAdminReviewers(e.Author), []string{}
 	}
-	return reviewers
+
+	return primaryReviewers, preferredReviewers
+}
+
+func (r *Assignments) getDocsReviewers(e *env.Environment, files []github.PullRequestFile) []string {
+	primary, preferred := r.getDocsReviewersSets(e, files)
+	return append(primary, preferred...)
 }
 
 func (r *Assignments) getCodeReviewers(e *env.Environment, files []github.PullRequestFile) []string {
@@ -435,6 +441,14 @@ func (r *Assignments) CheckInternal(e *env.Environment, reviews []github.Review,
 		return nil
 	}
 
+	if changes.Docs && !changes.Code {
+		log.Println("Check: Detected docs only PR.")
+		if err := r.checkDocsReviews(e, reviews, files); err != nil {
+			return trace.Wrap(err)
+		}
+		return nil
+	}
+
 	// Strange state, an empty commit? Check admins.
 	if !changes.Docs && !changes.Code {
 		log.Printf("Check: Found no docs or code changes, requiring admin approvals")
@@ -457,6 +471,34 @@ func (r *Assignments) checkInternalReleaseReviews(reviews []github.Review) error
 	}
 
 	return trace.BadParameter("requires at least one approval from %v", reviewers)
+}
+
+// checkDocsReviewers checks if all necessary approvals are in place for a docs
+// only PR.
+func (r *Assignments) checkDocsReviews(e *env.Environment, reviews []github.Review, files []github.PullRequestFile) error {
+	primary, preferred := r.getDocsReviewersSets(e, files)
+
+	// Require at least one approval from the primary reviewers list (docs team plus ELT).
+	a := checkN(primary, reviews)
+	if a == 0 {
+		return trace.BadParameter("missing approval from primary docs reviewers: %v", primary)
+	}
+
+	// If there are preferred reviewers, require at least one approval from them as well.
+	if len(preferred) > 0 {
+		b := checkN(preferred, reviews)
+		if b == 0 {
+			return trace.BadParameter("missing approval from preferred docs reviewers: %v", preferred)
+		}
+		return nil
+	}
+
+	// Otherwise require an approval from an admin.
+	if check(r.GetAdminCheckers(e.Author), reviews) {
+		return nil
+	}
+
+	return trace.BadParameter("no preferred reviewers and missing approval from admin: %v", r.GetAdminCheckers(e.Author))
 }
 
 // checkInternalReviews checks whether review requirements are satisfied
