@@ -21,6 +21,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"text/template"
 
 	"github.com/gravitational/shared-workflows/libs/github"
@@ -81,25 +82,34 @@ func (h *gitHubWorkflowApprover) teleportRoleForEnvironment(env string) (string,
 
 // handleDecisionForAccessRequestReviewed processes the decision for an access request that has been reviewed.
 // It will either approve or reject the deployment protection rule based on the state of the access request
-func (h *gitHubWorkflowApprover) handleDecisionForAccessRequestReviewed(ctx context.Context, status types.RequestState, env string, workflowID int64) error {
+func (h *gitHubWorkflowApprover) handleDecisionForAccessRequestReviewed(ctx context.Context, req types.AccessRequest, info githubWorkflowLabels) error {
 	decision := github.PendingDeploymentApprovalStateRejected
-	if status == types.RequestState_APPROVED {
+	if req.GetState() == types.RequestState_APPROVED {
 		decision = github.PendingDeploymentApprovalStateApproved
 	}
 
+	// build comment for the deployment protection rule review
+	authors := []string{}
+	for _, reviews := range req.GetReviews() {
+		authors = append(authors, reviews.Author)
+	}
+	comment := fmt.Sprintf("Access Request %q was %s by %s. This decision was made by the approval service based on Access Request state.",
+		req.GetName(), decision, strings.Join(authors, ", "))
+
+	// review the deployment protection rule with the decision and comment
 	err := h.ghClient.ReviewDeploymentProtectionRule(ctx, h.org, h.repo,
 		github.ReviewDeploymentProtectionRuleInfo{
-			RunID:           workflowID,
+			RunID:           info.WorkflowRunID,
 			State:           decision,
-			EnvironmentName: env,
-			Comment:         "Decision made by the approval service based on Access Request state",
+			EnvironmentName: info.Env,
+			Comment:         comment,
 		},
 	)
 	if err != nil {
 		return fmt.Errorf("reviewing deployment protection rule: %w", err)
 	}
 
-	h.log.Info("Handled decision for access request reviewed", "org", h.org, "repo", h.repo, "env", env, "workflow_run_id", workflowID, "decision", decision)
+	h.log.Info("Handled decision for access request reviewed", "org", h.org, "repo", h.repo, "env", info.Env, "workflow_run_id", info.WorkflowRunID, "decision", decision)
 	return nil
 }
 
