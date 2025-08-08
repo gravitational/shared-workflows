@@ -31,12 +31,16 @@ func TestWaitingWorkflowReconciler(t *testing.T) {
 
 		tt := []struct {
 			name                   string
+			waitingWorkflows       []int64
 			accessRequestsState    map[int64]types.RequestState
 			expectHandledWorkflows []int64
 			expectHandledRequests  []int64
 		}{
 			{
 				name: "With pending Access Requests",
+				// All workflows are waiting, and we have pending Access Requests for all of them.
+				// This is the most common case where we have workflows that are waiting for approval.
+				waitingWorkflows: []int64{workflowA, workflowB, workflowC},
 				accessRequestsState: map[int64]types.RequestState{
 					workflowA: types.RequestState_PENDING,
 					workflowB: types.RequestState_PENDING,
@@ -47,6 +51,9 @@ func TestWaitingWorkflowReconciler(t *testing.T) {
 			},
 			{
 				name: "With approved/denied Access Requests",
+				// Some workflows are waiting, but we have Access Requests that are already approved or denied.
+				// In this case, the Access Requests weren't handled successfully previously, so we will handle them now.
+				waitingWorkflows: []int64{workflowA, workflowB, workflowC},
 				accessRequestsState: map[int64]types.RequestState{
 					workflowA: types.RequestState_APPROVED,
 					workflowB: types.RequestState_DENIED,
@@ -56,9 +63,24 @@ func TestWaitingWorkflowReconciler(t *testing.T) {
 				expectHandledRequests:  []int64{workflowA, workflowB},
 			},
 			{
-				name:                   "With no Access Requests",
+				name: "With no Access Requests",
+				// All workflows are waiting, but we have no Access Requests for them.
+				// In this case, the Deployment Event was not handled successfully previously, so we will handle them now.
+				waitingWorkflows:       []int64{workflowA, workflowB, workflowC},
 				accessRequestsState:    map[int64]types.RequestState{},
 				expectHandledWorkflows: []int64{workflowA, workflowB, workflowC},
+				expectHandledRequests:  []int64{},
+			},
+			{
+				name: "No waiting workflows",
+				// No workflows are waiting, so we don't expect anything to be handled.
+				waitingWorkflows: []int64{},
+				accessRequestsState: map[int64]types.RequestState{
+					workflowA: types.RequestState_APPROVED,
+					workflowB: types.RequestState_DENIED,
+					workflowC: types.RequestState_PENDING,
+				},
+				expectHandledWorkflows: []int64{},
 				expectHandledRequests:  []int64{},
 			},
 		}
@@ -99,7 +121,7 @@ func TestWaitingWorkflowReconciler(t *testing.T) {
 					Config{
 						Org:            testOrg,
 						Repo:           testRepo,
-						GitHubClient:   newFakeGitHubClient(workflowA, workflowB, workflowC),
+						GitHubClient:   newFakeGitHubClient(tc.waitingWorkflows...),
 						TeleportUser:   testTeleportUser,
 						TeleportClient: newFakeTeleportClient(reqs),
 						AccessRequestReviewHandler: fakeAccessRequestReviewHandler(func(ctx context.Context, req types.AccessRequest) error {
