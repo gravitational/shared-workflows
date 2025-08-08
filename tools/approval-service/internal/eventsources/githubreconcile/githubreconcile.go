@@ -13,13 +13,12 @@ import (
 	"github.com/gravitational/teleport/api/types"
 )
 
-// WorkflowStateReconciler runs a loop that periodically checks the state of GitHub Deployment Protection Rules and Teleport access requests.
-// It is responsible for ensuring that the state of Access Requests reflects the state of GitHub Deployment Protection Rules.
+// WaitingWorkflowsReconciler runs a loop that periodically checks for waiting Workflow Runs and attempts to reconcile if needed.
+// It will find pending Deployment Protection Rules that are causing the Workflow Runs to wait, and will attempt to sync the
+// state of Access Requests with the state of GitHub Deployment Protection Rules.
 //
-// The main motivation for this is that events are ephemeral and failures to process results in a loss of data.
-// To provide fault-tolerance without extra infrastructure, we will periodically check the state of GitHub workflows and Teleport access requests.
-// If it detects a mismatch, it will fire an event to update the state of the GitHub Deployment Protection Rule.
-type WorkflowStateReconciler struct {
+// The main motivation is to provide fault-tolerance since the events are ephemeral and failures to process results in a loss of data.
+type WaitingWorkflowsReconciler struct {
 	// Configuration fields
 	org                    string
 	repo                   string
@@ -27,7 +26,7 @@ type WorkflowStateReconciler struct {
 	teleportUser           string
 
 	// External dependencies
-	ghClient   github.Client
+	ghClient   ghClient
 	teleClient teleClient
 
 	// Event handlers
@@ -44,12 +43,19 @@ type teleClient interface {
 	GetAccessRequests(ctx context.Context, filter types.AccessRequestFilter) ([]types.AccessRequest, error)
 }
 
+// ghClient is a subset of the GitHub client interface needed for reconciliation.
+// This interface allows for easier testing by providing a minimal surface area.
+type ghClient interface {
+	ListWaitingWorkflowRuns(ctx context.Context, org, repo string) ([]github.WorkflowRunInfo, error)
+	GetPendingDeployments(ctx context.Context, org, repo string, runID int64) ([]github.PendingDeploymentInfo, error)
+}
+
 // Opt is a functional option for configuring the Reconciler.
-type Opt func(*WorkflowStateReconciler) error
+type Opt func(*WaitingWorkflowsReconciler) error
 
 // WithLogger sets the logger for the Reconciler.
 func WithLogger(logger *slog.Logger) Opt {
-	return func(r *WorkflowStateReconciler) error {
+	return func(r *WaitingWorkflowsReconciler) error {
 		if logger == nil {
 			return fmt.Errorf("logger cannot be nil")
 		}
@@ -63,7 +69,7 @@ type Config struct {
 	// GitHub configuration
 	Org          string
 	Repo         string
-	GitHubClient github.Client
+	GitHubClient ghClient
 
 	// Teleport configuration
 	TeleportUser   string
@@ -82,6 +88,12 @@ func (c Config) validate() error {
 	if c.Repo == "" {
 		return fmt.Errorf("repo is required")
 	}
+	if c.GitHubClient == nil {
+		return fmt.Errorf("GitHubClient is required")
+	}
+	if c.TeleportUser == "" {
+		return fmt.Errorf("teleportUser is required")
+	}
 	if c.TeleportClient == nil {
 		return fmt.Errorf("TeleportClient is required")
 	}
@@ -94,13 +106,13 @@ func (c Config) validate() error {
 	return nil
 }
 
-// NewReconciler creates a new WorkflowStateReconciler with the provided configuration.
-func NewReconciler(config Config, opts ...Opt) (*WorkflowStateReconciler, error) {
+// NewWaitingWorkflowReconciler creates a new WorkflowStateReconciler with the provided configuration.
+func NewWaitingWorkflowReconciler(config Config, opts ...Opt) (*WaitingWorkflowsReconciler, error) {
 	if err := config.validate(); err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
 
-	r := &WorkflowStateReconciler{
+	r := &WaitingWorkflowsReconciler{
 		org:                            config.Org,
 		repo:                           config.Repo,
 		reconciliationInterval:         time.Second * 30, // Default to 30 seconds if not set
@@ -122,7 +134,7 @@ func NewReconciler(config Config, opts ...Opt) (*WorkflowStateReconciler, error)
 
 // Run starts the reconciliation loop.
 // It will run indefinitely until the context is cancelled.
-func (r *WorkflowStateReconciler) Run(ctx context.Context) error {
+func (r *WaitingWorkflowsReconciler) Run(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
@@ -136,7 +148,7 @@ func (r *WorkflowStateReconciler) Run(ctx context.Context) error {
 }
 
 // reconcile performs a single reconciliation pass, checking for workflow/access request mismatches.
-func (r *WorkflowStateReconciler) reconcile(ctx context.Context) error {
+func (r *WaitingWorkflowsReconciler) reconcile(ctx context.Context) error {
 	waitingWorkflowRuns, err := r.ghClient.ListWaitingWorkflowRuns(ctx, r.org, r.repo)
 	if err != nil {
 		return fmt.Errorf("listing waiting workflow runs: %w", err)
@@ -180,7 +192,6 @@ func (r *WorkflowStateReconciler) reconcile(ctx context.Context) error {
 		// No access request for this workflow run, refire the event to create one.
 		if err := r.handleMissingAccessRequest(ctx, workflowRun); err != nil {
 			r.log.Error("failed to handle missing access request", "error", err, "workflow_run", workflowRun)
-			continue
 		}
 	}
 
@@ -188,7 +199,7 @@ func (r *WorkflowStateReconciler) reconcile(ctx context.Context) error {
 }
 
 // handleMissingAccessRequest will construct a new DeploymentReviewEvent for the given workflow run and will forward it to the underlying event handler.
-func (r *WorkflowStateReconciler) handleMissingAccessRequest(ctx context.Context, workflowRun github.WorkflowRunInfo) error {
+func (r *WaitingWorkflowsReconciler) handleMissingAccessRequest(ctx context.Context, workflowRun github.WorkflowRunInfo) error {
 	// For a waiting workflow run, we need to make an extra call to determine the environment name that's being requested.
 	pendingDeployments, err := r.ghClient.GetPendingDeployments(ctx, workflowRun.Organization, workflowRun.Repository, workflowRun.WorkflowID)
 	if err != nil {
@@ -227,7 +238,7 @@ func (r *WorkflowStateReconciler) handleMissingAccessRequest(ctx context.Context
 }
 
 // indexAccessRequestsByWorkflowRunID creates a map of access requests indexed by workflow run ID.
-func (r *WorkflowStateReconciler) indexAccessRequestsByWorkflowRunID(accessRequests []types.AccessRequest) map[int64]types.AccessRequest {
+func (r *WaitingWorkflowsReconciler) indexAccessRequestsByWorkflowRunID(accessRequests []types.AccessRequest) map[int64]types.AccessRequest {
 	index := make(map[int64]types.AccessRequest, len(accessRequests))
 
 	for _, accessRequest := range accessRequests {

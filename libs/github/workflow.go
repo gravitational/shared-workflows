@@ -19,6 +19,7 @@ package github
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	go_github "github.com/google/go-github/v71/github"
 )
@@ -82,4 +83,13 @@ func (c *Client) ListWaitingWorkflowRuns(ctx context.Context, org, repo string) 
 	}
 
 	return allRuns, nil
+}
+
+// LogValue implements [slog.LogValuer] for WorkflowRunInfo to provide structured logging.
+func (w WorkflowRunInfo) LogValue() slog.Value {
+	return slog.GroupValue(
+		slog.String("organization", w.Organization),
+		slog.String("repository", w.Repository),
+		slog.Int64("workflow_id", w.WorkflowID),
+	)
 }
