@@ -20,26 +20,25 @@ import (
 // To provide fault-tolerance without extra infrastructure, we will periodically check the state of GitHub workflows and Teleport access requests.
 // If it detects a mismatch, it will fire an event to update the state of the GitHub Deployment Protection Rule.
 type WorkflowStateReconciler struct {
+	// Configuration fields
+	org                    string
+	repo                   string
+	reconciliationInterval time.Duration
+
+	// External dependencies
+	ghClient   github.Client
+	teleClient teleClient
+
+	// Event handlers
 	deploymentReviewEventProcessor githubevents.GitHubEventProcessor
 	accessRequestReviewHandler     accessrequest.AccessRequestReviewedHandler
 
-	org  string
-	repo string
-
-	// ghClient is the GitHub client used to interact with the GitHub API.
-	ghClient github.Client
-	// teleClient is the Teleport client used to interact with the Teleport API.
-	teleClient teleClient
-
-	// reconciliationInterval is the time between reconciliation runs
-	reconciliationInterval time.Duration
-
+	// Infrastructure
 	log *slog.Logger
 }
 
-// teleportClient is a small interface to allow for easier testing of the Teleport client.
-// This is a subset of the teleport.Client interface that we need for our purposes.
-// It is not intended to be a complete representation of the Teleport API or the teleport.Client implementation.
+// teleClient is a subset of the Teleport client interface needed for reconciliation.
+// This interface allows for easier testing by providing a minimal surface area.
 type teleClient interface {
 	GetAccessRequests(ctx context.Context, filter types.AccessRequestFilter) ([]types.AccessRequest, error)
 }
@@ -58,38 +57,57 @@ func WithLogger(logger *slog.Logger) Opt {
 	}
 }
 
-// Config is the required configuration for the WorkflowStateReconciler.
+// Config contains the configuration required to create a WorkflowStateReconciler.
 type Config struct {
-	// Org is the GitHub organization name to watch.
-	Org string
-	// Repo is the GitHub repository name to watch.
-	Repo string
-	// GitHubClient is the GitHub client used to interact with the GitHub API.
+	// GitHub configuration
+	Org          string
+	Repo         string
 	GitHubClient github.Client
 
-	// TeleportUser is the Teleport user that the Approval Service will use to interact with Teleport.
-	// This is used to filter Access Requests to relevant ones for the GitHub workflows.
-	TeleportUser string
-	// TeleportClient is the Teleport client used to interact with the Teleport API.
+	// Teleport configuration
+	TeleportUser   string
 	TeleportClient teleClient
 
-	// AccessRequestReviewHandler is the handler for Access Request reviewed events.
-	AccessRequestReviewHandler accessrequest.AccessRequestReviewedHandler
-	// DeploymentReviewEventProcessor is the event processor for GitHub deployment review events.
+	// Event handlers
+	AccessRequestReviewHandler     accessrequest.AccessRequestReviewedHandler
 	DeploymentReviewEventProcessor githubevents.GitHubEventProcessor
 }
 
+// validate checks that all required configuration fields are set.
+func (c Config) validate() error {
+	if c.Org == "" {
+		return fmt.Errorf("Org is required")
+	}
+	if c.Repo == "" {
+		return fmt.Errorf("Repo is required")
+	}
+	if c.TeleportClient == nil {
+		return fmt.Errorf("TeleportClient is required")
+	}
+	if c.AccessRequestReviewHandler == nil {
+		return fmt.Errorf("AccessRequestReviewHandler is required")
+	}
+	if c.DeploymentReviewEventProcessor == nil {
+		return fmt.Errorf("DeploymentReviewEventProcessor is required")
+	}
+	return nil
+}
+
+// NewReconciler creates a new WorkflowStateReconciler with the provided configuration.
 func NewReconciler(config Config, opts ...Opt) (*WorkflowStateReconciler, error) {
+	if err := config.validate(); err != nil {
+		return nil, fmt.Errorf("invalid configuration: %w", err)
+	}
+
 	r := &WorkflowStateReconciler{
-		deploymentReviewEventProcessor: config.DeploymentReviewEventProcessor,
-		accessRequestReviewHandler:     config.AccessRequestReviewHandler,
 		org:                            config.Org,
 		repo:                           config.Repo,
+		reconciliationInterval:         time.Second * 30, // Default to 30 seconds if not set
 		ghClient:                       config.GitHubClient,
 		teleClient:                     config.TeleportClient,
-		reconciliationInterval:         time.Second * 30, // Default to 30 seconds
-
-		log: slog.Default().With("component", "github-reconciler"),
+		deploymentReviewEventProcessor: config.DeploymentReviewEventProcessor,
+		accessRequestReviewHandler:     config.AccessRequestReviewHandler,
+		log:                            slog.Default().With("component", "github-reconcile"),
 	}
 
 	for _, opt := range opts {
@@ -116,9 +134,7 @@ func (r *WorkflowStateReconciler) Run(ctx context.Context) error {
 	}
 }
 
-// reconcile contains the main logic for reconciling the state of GitHub deployment protection rules with Teleport access requests.
-// It is driven by the state of waiting GitHub Workflow Runs, which may be waiting due to pending Deployment Protection Rules.
-// If there is a waiting workflow run, it will attempt to reconcile the state of the Deployment Protection Rule with the state of the Access Request.
+// reconcile performs a single reconciliation pass, checking for workflow/access request mismatches.
 func (r *WorkflowStateReconciler) reconcile(ctx context.Context) error {
 	waitingWorkflowRuns, err := r.ghClient.ListWaitingWorkflowRuns(ctx, r.org, r.repo)
 	if err != nil {
@@ -126,11 +142,12 @@ func (r *WorkflowStateReconciler) reconcile(ctx context.Context) error {
 	}
 
 	if len(waitingWorkflowRuns) == 0 {
-		// No waiting deployment protection rules, nothing to reconcile.
+		r.log.Debug("no waiting workflow runs found")
 		return nil
 	}
 
-	// Gather Access Requests that are relevant to the workflow runs.
+	r.log.Info("found waiting workflow runs", "count", len(waitingWorkflowRuns))
+
 	accessRequests, err := r.teleClient.GetAccessRequests(ctx, types.AccessRequestFilter{})
 	if err != nil {
 		return fmt.Errorf("getting access requests: %w", err)
@@ -177,17 +194,21 @@ func (r *WorkflowStateReconciler) reconcile(ctx context.Context) error {
 	return nil
 }
 
-// indexAccessRequestsByWorkflowRunID returns a map of access requests indexed by their workflow run IDs.
+// indexAccessRequestsByWorkflowRunID creates a map of access requests indexed by workflow run ID.
 func (r *WorkflowStateReconciler) indexAccessRequestsByWorkflowRunID(accessRequests []types.AccessRequest) map[int64]types.AccessRequest {
-	accessRequestIndex := map[int64]types.AccessRequest{}
+	index := make(map[int64]types.AccessRequest, len(accessRequests))
+
 	for _, accessRequest := range accessRequests {
 		workflowInfo, err := service.GetWorkflowLabels(accessRequest)
 		if err != nil {
-			r.log.Warn("failed to get workflow labels from access request", "error", err, "access_request_id", accessRequest.GetName())
-			continue
+			r.log.Warn("skipping access request with invalid workflow labels",
+				"access_request_id", accessRequest.GetName(),
+				"error", err)
+		} else {
+			index[workflowInfo.WorkflowRunID] = accessRequest
 		}
-
-		accessRequestIndex[workflowInfo.WorkflowRunID] = accessRequest
 	}
-	return accessRequestIndex
+
+	r.log.Debug("indexed access requests by workflow run ID", "count", len(index))
+	return index
 }
