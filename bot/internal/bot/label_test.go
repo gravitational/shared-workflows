@@ -119,7 +119,7 @@ func TestLabel(t *testing.T) {
 					Additions: 1,
 				},
 			},
-			labels: []string{"device-trust", "application-access", string(small)},
+			labels: []string{"devicetrust", "application-access", string(small)},
 		},
 		{
 			desc:   "labels for repo don't exist",
