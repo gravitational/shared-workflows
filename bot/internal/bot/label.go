@@ -131,7 +131,7 @@ var prefixes = map[string]map[string][]string{
 	},
 	env.TeleportERepo: {
 		"rfd/":             {"rfd"},
-		"lib/devicetrust/": {"device-trust"},
+		"lib/devicetrust/": {"devicetrust"},
 		"lib/idp/saml":     {"application-access", "idp"},
 		"lib/loginrule/":   {"login-rules"},
 		"lib/okta/":        {"application-access"},
