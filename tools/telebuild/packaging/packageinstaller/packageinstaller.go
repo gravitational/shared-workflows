@@ -22,8 +22,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/gravitational/shared-workflows/tools/mac-distribution/internal/exec"
-	"github.com/gravitational/shared-workflows/tools/mac-distribution/notarize"
+	"github.com/gravitational/shared-workflows/tools/telebuild/internal/exec"
+	"github.com/gravitational/shared-workflows/tools/telebuild/notarize"
 )
 
 // Packager creates a package installer (.pkg) for distribution.

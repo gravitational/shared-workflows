@@ -21,7 +21,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/gravitational/shared-workflows/tools/mac-distribution/internal/exec"
+	"github.com/gravitational/shared-workflows/tools/telebuild/internal/exec"
 	"github.com/stretchr/testify/require"
 )
 

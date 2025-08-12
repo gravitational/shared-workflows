@@ -52,8 +52,7 @@ func (t *Tool) Submit(pathToPackage string) (id string, err error) {
 		"notarytool",
 		"submit", pathToPackage,
 		"--team-id", t.Creds.TeamID,
-		"--apple-id", t.Creds.AppleUsername,
-		"--password", t.Creds.ApplePassword,
+		"--keychain-profile", t.Creds.SigningIdentity,
 		"--output-format", "json",
 	}
 
@@ -89,8 +88,7 @@ func (t *Tool) WaitForSubmission(id string) error {
 		"notarytool",
 		"wait", id,
 		"--team-id", t.Creds.TeamID,
-		"--apple-id", t.Creds.AppleUsername,
-		"--password", t.Creds.ApplePassword,
+		"--keychain-profile", t.Creds.KeychainProfile,
 		"--output-format", "json",
 	}
 	t.log.Info("waiting for submission to finish processing", "id", id)

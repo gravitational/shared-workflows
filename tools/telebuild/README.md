@@ -6,7 +6,7 @@
 
 App Bundle (.app)
 ```shell
-mac-distribution package-app tsh tsh.app/
+telebuild package-app tsh tsh.app/
 ```
 
 Package Installer (.pkg)
@@ -17,14 +17,14 @@ mkdir "${STAGING_PKG}"
 cp "file1" "file2" "${STAGING_PKG}"
 
 # Package
-mac-distribution package-pkg --install-location /usr/local/bin "${STAGING_PKG}" "my-app.pkg"
+telebuild package-pkg --install-location /usr/local/bin "${STAGING_PKG}" "my-app.pkg"
 ```
 
 ### Notarization
 
 By default, notarization is disabled and will output dryrun logs. To enable it you must either set the following options:
 ```shell
-mac-distribution --apple-username="" --apple-password="" --signing-identity="" --bundle-id="" ...
+telebuild --apple-username="" --apple-password="" --signing-identity="" --bundle-id="" ...
 ```
 
 These flags can also be set through the environment.

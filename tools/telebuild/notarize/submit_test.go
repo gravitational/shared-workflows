@@ -62,8 +62,7 @@ func TestSubmit_retries(t *testing.T) {
 			}
 			tool, err := NewTool(
 				Creds{
-					AppleUsername:   "FAKE_USERNAME",
-					ApplePassword:   "FAKE_PASSWORD",
+					KeychainProfile: "FAKE_PROFILE",
 					SigningIdentity: "FAKE_IDENTITY",
 					TeamID:          "FAKE_TEAM_ID",
 				},

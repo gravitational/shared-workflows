@@ -24,8 +24,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/gravitational/shared-workflows/tools/mac-distribution/internal/fileutil"
-	"github.com/gravitational/shared-workflows/tools/mac-distribution/notarize"
+	"github.com/gravitational/shared-workflows/tools/telebuild/internal/fileutil"
+	"github.com/gravitational/shared-workflows/tools/telebuild/notarize"
 )
 
 // Packager creates an app bundle (.app) for distribution.

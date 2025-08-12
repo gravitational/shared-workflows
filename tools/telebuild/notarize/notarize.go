@@ -25,8 +25,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/gravitational/shared-workflows/tools/mac-distribution/internal/exec"
-	"github.com/gravitational/shared-workflows/tools/mac-distribution/internal/zipper"
+	"github.com/gravitational/shared-workflows/tools/telebuild/internal/exec"
+	"github.com/gravitational/shared-workflows/tools/telebuild/internal/zipper"
 )
 
 // Tool is a wrapper around the MacOS codesigning/notarizing utilities.
@@ -43,13 +43,11 @@ type Tool struct {
 
 // Creds contains the credentials needed to authenticate with the Apple Notary Service.
 type Creds struct {
-	// Credentials for authenticating with Apple Notary Service
-	AppleUsername string
-	ApplePassword string
+	// KeychainProfile is the name of the keychain profile to use for notarization.
+	KeychainProfile string
 	// SigningIdentity is the identity used to sign the package.
 	// This is typically the Developer ID Application identity.
 	SigningIdentity string
-
 	// TeamID is the team identifier for the Apple Developer account.
 	TeamID string
 }
@@ -80,19 +78,16 @@ func DryRun() Opt {
 	}
 }
 
-var defaultOpts = []Opt{
-	WithLogger(slog.Default()),
-	MaxRetries(3),
-}
-
 func NewTool(creds Creds, opts ...Opt) (*Tool, error) {
-	t := &Tool{
-		Creds: creds,
+	if err := creds.validate(); err != nil {
+		return nil, fmt.Errorf("validating credentials: %w", err)
 	}
-	for _, opt := range defaultOpts {
-		if err := opt(t); err != nil {
-			return nil, fmt.Errorf("applying default option: %w", err)
-		}
+
+	t := &Tool{
+		Creds:      creds,
+		maxRetries: 3, // Default max retries
+		cmdRunner:  exec.NewDefaultCommandRunner(),
+		log:        slog.Default(),
 	}
 
 	for _, opt := range opts {
@@ -101,18 +96,11 @@ func NewTool(creds Creds, opts ...Opt) (*Tool, error) {
 		}
 	}
 
-	t.cmdRunner = exec.NewDefaultCommandRunner()
-
 	if t.dryRun {
 		t.cmdRunner = exec.NewDryRunner(t.log)
-		t.Creds.AppleUsername = "dryrun"
-		t.Creds.ApplePassword = "dryrun"
+		t.Creds.KeychainProfile = "dryrun"
 		t.Creds.SigningIdentity = "dryrun"
 		t.Creds.TeamID = "dryrun"
-	}
-
-	if err := t.validate(); err != nil {
-		return nil, err
 	}
 
 	return t, nil
@@ -298,19 +286,16 @@ func (t *Tool) staple(path string) error {
 	return err
 }
 
-func (t *Tool) validate() error {
+func (c *Creds) validate() error {
 	missing := []string{}
 
-	if t.Creds.AppleUsername == "" {
-		missing = append(missing, "AppleUsername")
+	if c.KeychainProfile == "" {
+		missing = append(missing, "KeychainProfile")
 	}
-	if t.Creds.ApplePassword == "" {
-		missing = append(missing, "ApplePassword")
-	}
-	if t.Creds.SigningIdentity == "" {
+	if c.SigningIdentity == "" {
 		missing = append(missing, "SigningIdentity")
 	}
-	if t.Creds.TeamID == "" {
+	if c.TeamID == "" {
 		missing = append(missing, "TeamID")
 	}
 

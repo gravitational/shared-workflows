@@ -1,10 +1,10 @@
-module github.com/gravitational/shared-workflows/tools/mac-distribution
+module github.com/gravitational/shared-workflows/tools/telebuild
 
 go 1.24.0
 
 require (
-	github.com/alecthomas/kong v1.8.1
-	github.com/stretchr/testify v1.8.3
+	github.com/alecthomas/kong v1.12.1
+	github.com/stretchr/testify v1.10.0
 )
 
 require (
