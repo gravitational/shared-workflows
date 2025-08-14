@@ -1,6 +1,6 @@
 TOOL_NAME = approval-service
 PACKAGE_PATH = ./cmd/approval-service.go
-VERSION = v0.0.1-dev.gus-3
+VERSION = v0.0.1-dev.gus-4
 
 
 include ../repo-release-tooling/tooling.mk
