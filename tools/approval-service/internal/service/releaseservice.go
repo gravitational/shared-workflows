@@ -275,7 +275,7 @@ func (w *ReleaseService) onAccessRequestReviewed(ctx context.Context, req types.
 		return
 	}
 
-	if err := w.ghApprover.handleDecisionForAccessRequestReviewed(ctx, req.GetState(), info.Env, info.WorkflowRunID); err != nil {
+	if err := w.ghApprover.handleDecisionForAccessRequestReviewed(ctx, req, info); err != nil {
 		w.log.Error("Error handling access request reviewed", "access_request_name", req.GetName(), "error", err)
 		return
 	}
