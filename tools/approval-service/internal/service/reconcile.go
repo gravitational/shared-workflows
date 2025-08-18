@@ -68,6 +68,8 @@ func (r *ReleaseService) findReconciliationWork(ctx context.Context) ([]githubev
 	}
 
 	accessRequests, err := r.teleClient.GetAccessRequests(ctx, types.AccessRequestFilter{
+		// Filter by the bot user to get only the access requests that are relevant to the bot.
+		// This helps to avoid processing unrelated access requests, we can assume that bot created Access Requests will conform to the expected structure.
 		User: r.teleportUser,
 	})
 	if err != nil {
@@ -82,7 +84,9 @@ func (r *ReleaseService) findReconciliationWork(ctx context.Context) ([]githubev
 		// Check for an existing Access Request for this workflow run.
 		accessRequest, hasAccessRequest := accessRequestsByWorkflowRunID[workflowRun.WorkflowID]
 		if !hasAccessRequest {
-			// No access request exists, create new deployment review events
+			// We have a waiting workflow run, but no Access Request exists for it.
+			// This is likely due to a GitHub Deployment Review Event that was dropped or not processed.
+			// We can construct a similar event from the workflow run information and then handle it as if it were a new event.
 			newEvents, err := r.constructNewEventsForWorkflow(ctx, workflowRun)
 			if err != nil {
 				return nil, nil, fmt.Errorf("constructing new events for workflow run %d: %w", workflowRun.WorkflowID, err)
@@ -91,12 +95,15 @@ func (r *ReleaseService) findReconciliationWork(ctx context.Context) ([]githubev
 			continue
 		}
 
-		// Handle existing access request based on its state
+		// We have an Access Request for this workflow run, but it might be out of sync with the workflow run state.
+		// Will check its state and reconcile if necessary.
 		switch accessRequest.GetState() {
 		case types.RequestState_PENDING:
-			// Nothing to do for pending requests
+			// The Access Request is pending, which is expected for a waiting workflow run.
+			// A decision hasn't been made yet, so we don't need to do anything.
 		case types.RequestState_APPROVED, types.RequestState_DENIED:
 			// Access request is approved or denied, but we have a pending workflow run that hasn't had a decision made yet.
+			// That suggests the Access Request hasn't be handled properly.
 			unhandledAccessRequests = append(unhandledAccessRequests, accessRequest)
 		default:
 			r.log.Error("unexpected access request state",
