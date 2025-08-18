@@ -35,7 +35,7 @@ func TestGitHubService(t *testing.T) {
 			req, err := types.NewAccessRequest(uuid.NewString(), "test-user", "test-role")
 			require.NoError(t, err, "failed to create access request")
 
-			err = SetWorkflowLabels(req, info)
+			err = setWorkflowLabels(req, info)
 			if wantErr {
 				assert.Error(t, err, "expected error but got none")
 				return
@@ -154,13 +154,13 @@ func FuzzStoreWorkflowInfo(f *testing.F) {
 			WorkflowRunID: runID,
 		}
 
-		err = SetWorkflowLabels(req, info)
+		err = setWorkflowLabels(req, info)
 		if err == nil {
 			return
 		}
 
 		var missingLabelErr *MissingLabelError
-		_, err = GetWorkflowLabels(req)
+		_, err = getWorkflowLabels(req)
 		assert.ErrorAs(t, err, &missingLabelErr)
 	})
 }

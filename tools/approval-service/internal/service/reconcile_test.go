@@ -101,7 +101,7 @@ func TestWaitingWorkflowReconciler(t *testing.T) {
 					require.NoError(t, err, "Failed to create access request")
 					require.NoError(t, newReq.SetState(state))
 
-					err = SetWorkflowLabels(newReq, GithubWorkflowLabels{
+					err = setWorkflowLabels(newReq, GithubWorkflowLabels{
 						Org:           testOrg,
 						Repo:          testRepo,
 						Env:           testEnv,
@@ -139,7 +139,7 @@ func TestWaitingWorkflowReconciler(t *testing.T) {
 					}
 				}
 				for _, req := range accessRequests {
-					githubLabels, err := GetWorkflowLabels(req)
+					githubLabels, err := getWorkflowLabels(req)
 					require.NoError(t, err, "Failed to get workflow labels from access request")
 					if _, ok := checkHandledRequests[githubLabels.WorkflowRunID]; ok {
 						checkHandledRequests[githubLabels.WorkflowRunID] = true

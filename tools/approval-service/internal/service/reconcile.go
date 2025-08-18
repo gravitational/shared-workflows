@@ -141,7 +141,7 @@ func (r *ReleaseService) indexAccessRequestsByWorkflowRunID(accessRequests []typ
 	index := make(map[int64]types.AccessRequest, len(accessRequests))
 
 	for _, accessRequest := range accessRequests {
-		workflowInfo, err := GetWorkflowLabels(accessRequest)
+		workflowInfo, err := getWorkflowLabels(accessRequest)
 		if err != nil {
 			r.log.Warn("skipping access request with invalid workflow labels",
 				"access_request_id", accessRequest.GetName(),

@@ -63,13 +63,13 @@ const (
 	environmentLabel  = "environment"
 )
 
-// SetWorkflowLabels sets the GitHub workflow labels on the access request.
+// setWorkflowLabels sets the GitHub workflow labels on the access request.
 // This will serialize the GitHub workflow information into the Access Request labels as additional metadata.
 // This is used to tie the access request to the specific workflow run and environment in GitHub.
 //
 // It also performs validation on the labels to ensure they are valid and within reasonable limits to
 // prevent abuse of the Teleport API.
-func SetWorkflowLabels(req types.AccessRequest, info GithubWorkflowLabels) error {
+func setWorkflowLabels(req types.AccessRequest, info GithubWorkflowLabels) error {
 	if info.Org == "" {
 		return errors.New("GitHub organization cannot be empty")
 	}
@@ -123,13 +123,13 @@ func validateInputString(s string, maxLength int) error {
 	return nil
 }
 
-// GetWorkflowLabels extracts the GitHub workflow labels from the access request.
+// getWorkflowLabels extracts the GitHub workflow labels from the access request.
 // The labels are expected to be set by the `setWorkflowLabels` function and will contains information
 // to tie to a specific GitHub workflow run and environment.
 //
 // When an Access Request is approved or denied, these labels will be used to determine the appropriate
 // GitHub deployment protection rule to approve or reject.
-func GetWorkflowLabels(req types.AccessRequest) (GithubWorkflowLabels, error) {
+func getWorkflowLabels(req types.AccessRequest) (GithubWorkflowLabels, error) {
 	missingLabels := []string{}
 	labels := req.GetStaticLabels()
 

@@ -92,7 +92,7 @@ func TestReleaseService(t *testing.T) {
 		require.NoError(t, err)
 		assert.Len(t, reqs, 3) // We expect three Access Requests, one for each workflow ID
 		for _, req := range reqs {
-			info, err := GetWorkflowLabels(req)
+			info, err := getWorkflowLabels(req)
 			require.NoError(t, err, "Expected to get workflow labels without error")
 
 			assert.Equal(t, "gha-env-build-staging", req.GetRoles()[0], "Expected role to be gha-env-build-staging")
@@ -141,7 +141,7 @@ func TestReleaseService(t *testing.T) {
 				require.NoError(t, err, "Expected to create new Access Request without error")
 				require.NoError(t, req.SetState(tc.status))
 
-				err = SetWorkflowLabels(req, GithubWorkflowLabels{
+				err = setWorkflowLabels(req, GithubWorkflowLabels{
 					WorkflowRunID: tc.workflowID,
 					Org:           "test-org",
 					Repo:          "test-repo",
@@ -188,7 +188,7 @@ func TestReleaseService(t *testing.T) {
 				req, err := types.NewAccessRequest(uuid.NewString(), "test-tele-user", "gha-env-build-staging")
 				require.NoError(t, err, "Expected to create new Access Request without error")
 				require.NoError(t, req.SetState(tc.initialAccessRequestState), "Expected to set initial access request state without error")
-				err = SetWorkflowLabels(req, GithubWorkflowLabels{
+				err = setWorkflowLabels(req, GithubWorkflowLabels{
 					WorkflowRunID: tc.workflowID,
 					Org:           "test-org",
 					Repo:          "test-repo",
