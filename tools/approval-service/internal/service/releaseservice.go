@@ -274,6 +274,14 @@ func (w *ReleaseService) finishEventProcessing(eventID string) {
 	delete(w.currentlyProcessing, eventID)
 }
 
+// eventIsBeingProcessed checks if an event is currently being processed.
+func (w *ReleaseService) eventIsBeingProcessed(eventID string) bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	_, exists := w.currentlyProcessing[eventID]
+	return exists
+}
+
 // onAccessRequestReviewed processes the Access Request review event.
 func (w *ReleaseService) onAccessRequestReviewed(ctx context.Context, req types.AccessRequest) {
 	info, err := getWorkflowLabels(req)

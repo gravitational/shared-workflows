@@ -130,6 +130,10 @@ func (r *ReleaseService) constructNewEventsForWorkflow(ctx context.Context, work
 			Environment:  deployment.Environment,
 		})
 
+		if r.eventIsBeingProcessed(fmt.Sprintf("%s/%s/%d/%s", workflowRun.Organization, workflowRun.Repository, workflowRun.WorkflowID, deployment.Environment)) {
+			continue
+		}
+
 		handledEnvironments[deployment.Environment] = struct{}{}
 	}
 
