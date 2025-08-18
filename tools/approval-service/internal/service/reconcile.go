@@ -80,24 +80,28 @@ func (r *ReleaseService) findReconciliationWork(ctx context.Context) ([]githubev
 	unhandledAccessRequests := make([]types.AccessRequest, 0, len(accessRequestsByWorkflowRunID))
 	for _, workflowRun := range waitingWorkflowRuns {
 		// Check for an existing Access Request for this workflow run.
-		if accessRequest, ok := accessRequestsByWorkflowRunID[workflowRun.WorkflowID]; ok {
-			switch accessRequest.GetState() {
-			case types.RequestState_PENDING:
-			case types.RequestState_APPROVED, types.RequestState_DENIED:
-				// Access request is approved or denied, but we have a pending workflow run that hasn't had a decision made yet.
-				unhandledAccessRequests = append(unhandledAccessRequests, accessRequest)
-			default:
-				r.log.Error("unexpected access request state",
-					"state", accessRequest.GetState(), "access_request_id", accessRequest.GetName(), "workflow_run", workflowRun)
+		accessRequest, hasAccessRequest := accessRequestsByWorkflowRunID[workflowRun.WorkflowID]
+		if !hasAccessRequest {
+			// No access request exists, create new deployment review events
+			newEvents, err := r.constructNewEventsForWorkflow(ctx, workflowRun)
+			if err != nil {
+				return nil, nil, fmt.Errorf("constructing new events for workflow run %d: %w", workflowRun.WorkflowID, err)
 			}
+			unhandledDeploymentProtectionRule = append(unhandledDeploymentProtectionRule, newEvents...)
 			continue
 		}
 
-		newEvents, err := r.constructNewEventsForWorkflow(ctx, workflowRun)
-		if err != nil {
-			return nil, nil, fmt.Errorf("constructing new events for workflow run %d: %w", workflowRun.WorkflowID, err)
+		// Handle existing access request based on its state
+		switch accessRequest.GetState() {
+		case types.RequestState_PENDING:
+			// Nothing to do for pending requests
+		case types.RequestState_APPROVED, types.RequestState_DENIED:
+			// Access request is approved or denied, but we have a pending workflow run that hasn't had a decision made yet.
+			unhandledAccessRequests = append(unhandledAccessRequests, accessRequest)
+		default:
+			r.log.Error("unexpected access request state",
+				"state", accessRequest.GetState(), "access_request_id", accessRequest.GetName(), "workflow_run", workflowRun)
 		}
-		unhandledDeploymentProtectionRule = append(unhandledDeploymentProtectionRule, newEvents...)
 	}
 
 	return unhandledDeploymentProtectionRule, unhandledAccessRequests, nil

@@ -284,6 +284,14 @@ func (w *ReleaseService) eventIsBeingProcessed(eventID string) bool {
 
 // onAccessRequestReviewed processes the Access Request review event.
 func (w *ReleaseService) onAccessRequestReviewed(ctx context.Context, req types.AccessRequest) {
+	eventID := req.GetName()
+	if !w.tryStartEventProcessing(eventID) {
+		// Already processing this event, skip it.
+		w.log.Debug("Skipping already processed access request", "access_request_name", req.GetName())
+		return
+	}
+	defer w.finishEventProcessing(eventID)
+
 	info, err := getWorkflowLabels(req)
 	if err != nil {
 		// If we cannot find the workflow info, we cannot process the request.
