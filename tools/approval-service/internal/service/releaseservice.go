@@ -225,7 +225,7 @@ func (w *ReleaseService) createAccessRequest(ctx context.Context, e githubevents
 		return nil, fmt.Errorf("generating new access request: %w", err)
 	}
 	newReq.SetExpiry(time.Now().Add(w.requestTTLHours))
-	err = setWorkflowLabels(newReq, GithubWorkflowLabels{
+	err = setWorkflowLabels(newReq, githubWorkflowLabels{
 		Org:           e.Organization,
 		Repo:          e.Repository,
 		Env:           e.Environment,

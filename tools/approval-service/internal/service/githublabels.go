@@ -27,10 +27,10 @@ import (
 	"github.com/gravitational/teleport/api/types"
 )
 
-// GithubWorkflowLabels holds information about a GitHub workflow run that is waiting for approval.
+// githubWorkflowLabels holds information about a GitHub workflow run that is waiting for approval.
 // These labels will be added as additional metadata to the Access Request created for the workflow run.
 // This can be used to tie the Access Request to the specific workflow run and environment in GitHub.
-type GithubWorkflowLabels struct {
+type githubWorkflowLabels struct {
 	// Org is the GitHub organization name.
 	Org string
 	// Repo is the GitHub repository name.
@@ -69,7 +69,7 @@ const (
 //
 // It also performs validation on the labels to ensure they are valid and within reasonable limits to
 // prevent abuse of the Teleport API.
-func setWorkflowLabels(req types.AccessRequest, info GithubWorkflowLabels) error {
+func setWorkflowLabels(req types.AccessRequest, info githubWorkflowLabels) error {
 	if info.Org == "" {
 		return errors.New("GitHub organization cannot be empty")
 	}
@@ -129,7 +129,7 @@ func validateInputString(s string, maxLength int) error {
 //
 // When an Access Request is approved or denied, these labels will be used to determine the appropriate
 // GitHub deployment protection rule to approve or reject.
-func getWorkflowLabels(req types.AccessRequest) (GithubWorkflowLabels, error) {
+func getWorkflowLabels(req types.AccessRequest) (githubWorkflowLabels, error) {
 	missingLabels := []string{}
 	labels := req.GetStaticLabels()
 
@@ -154,15 +154,15 @@ func getWorkflowLabels(req types.AccessRequest) (GithubWorkflowLabels, error) {
 	}
 
 	if len(missingLabels) > 0 {
-		return GithubWorkflowLabels{}, newMissingLabelError(req, missingLabels...)
+		return githubWorkflowLabels{}, newMissingLabelError(req, missingLabels...)
 	}
 
 	runIDInt, err := strconv.Atoi(runID)
 	if err != nil {
-		return GithubWorkflowLabels{}, fmt.Errorf("parsing workflow run ID: %w", err)
+		return githubWorkflowLabels{}, fmt.Errorf("parsing workflow run ID: %w", err)
 	}
 
-	return GithubWorkflowLabels{
+	return githubWorkflowLabels{
 		Org:           org,
 		Repo:          repo,
 		Env:           env,
@@ -172,7 +172,7 @@ func getWorkflowLabels(req types.AccessRequest) (GithubWorkflowLabels, error) {
 
 // matchesEvent is a helper function to check if the GitHub workflow labels match a given deployment review event.
 // This can be used to determine is a received event already has a corresponding Access Request created for it.
-func (l GithubWorkflowLabels) matchesEvent(e githubevents.DeploymentReviewEvent) bool {
+func (l githubWorkflowLabels) matchesEvent(e githubevents.DeploymentReviewEvent) bool {
 	return l.Org == e.Organization && l.Repo == e.Repository && l.Env == e.Environment && l.WorkflowRunID == e.WorkflowID
 }
 

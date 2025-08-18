@@ -101,7 +101,7 @@ func TestWaitingWorkflowReconciler(t *testing.T) {
 					require.NoError(t, err, "Failed to create access request")
 					require.NoError(t, newReq.SetState(state))
 
-					err = setWorkflowLabels(newReq, GithubWorkflowLabels{
+					err = setWorkflowLabels(newReq, githubWorkflowLabels{
 						Org:           testOrg,
 						Repo:          testRepo,
 						Env:           testEnv,

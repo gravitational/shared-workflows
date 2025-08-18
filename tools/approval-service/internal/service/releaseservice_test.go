@@ -141,7 +141,7 @@ func TestReleaseService(t *testing.T) {
 				require.NoError(t, err, "Expected to create new Access Request without error")
 				require.NoError(t, req.SetState(tc.status))
 
-				err = setWorkflowLabels(req, GithubWorkflowLabels{
+				err = setWorkflowLabels(req, githubWorkflowLabels{
 					WorkflowRunID: tc.workflowID,
 					Org:           "test-org",
 					Repo:          "test-repo",
@@ -188,7 +188,7 @@ func TestReleaseService(t *testing.T) {
 				req, err := types.NewAccessRequest(uuid.NewString(), "test-tele-user", "gha-env-build-staging")
 				require.NoError(t, err, "Expected to create new Access Request without error")
 				require.NoError(t, req.SetState(tc.initialAccessRequestState), "Expected to set initial access request state without error")
-				err = setWorkflowLabels(req, GithubWorkflowLabels{
+				err = setWorkflowLabels(req, githubWorkflowLabels{
 					WorkflowRunID: tc.workflowID,
 					Org:           "test-org",
 					Repo:          "test-repo",

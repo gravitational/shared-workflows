@@ -31,7 +31,7 @@ import (
 func TestGitHubService(t *testing.T) {
 
 	t.Run("StoreWorkflowRunInfo", func(t *testing.T) {
-		storeWorkflowRunInfoTestFunc := func(t *testing.T, info GithubWorkflowLabels, wantErr bool) {
+		storeWorkflowRunInfoTestFunc := func(t *testing.T, info githubWorkflowLabels, wantErr bool) {
 			req, err := types.NewAccessRequest(uuid.NewString(), "test-user", "test-role")
 			require.NoError(t, err, "failed to create access request")
 
@@ -50,7 +50,7 @@ func TestGitHubService(t *testing.T) {
 		}
 
 		t.Run("Sanity Check", func(t *testing.T) {
-			storeWorkflowRunInfoTestFunc(t, GithubWorkflowLabels{
+			storeWorkflowRunInfoTestFunc(t, githubWorkflowLabels{
 				Org:           "test-org",
 				Repo:          "test-repo",
 				Env:           "test-env",
@@ -86,7 +86,7 @@ func TestGitHubService(t *testing.T) {
 
 type missingLabelTestCases struct {
 	name string
-	info GithubWorkflowLabels
+	info githubWorkflowLabels
 }
 
 // genMissingWorkflowInfo generates test cases for all combinations of missing labels in GitHubWorkflowInfo.
@@ -105,7 +105,7 @@ func genMissingWorkflowInfo() []missingLabelTestCases {
 	)
 
 	for i := int64(15); i > 0; i-- {
-		info := GithubWorkflowLabels{
+		info := githubWorkflowLabels{
 			Org:           "test-org",
 			Repo:          "test-repo",
 			Env:           "test-env",
@@ -147,7 +147,7 @@ func FuzzStoreWorkflowInfo(f *testing.F) {
 		req, err := types.NewAccessRequest(uuid.NewString(), "test-user", "test-role")
 		require.NoError(t, err, "failed to create access request")
 
-		info := GithubWorkflowLabels{
+		info := githubWorkflowLabels{
 			Org:           org,
 			Repo:          repo,
 			Env:           env,
