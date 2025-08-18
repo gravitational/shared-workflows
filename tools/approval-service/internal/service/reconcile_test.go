@@ -14,28 +14,17 @@
  *  limitations under the License.
  */
 
-package githubreconcile
+package service
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/gravitational/shared-workflows/libs/github"
-	"github.com/gravitational/shared-workflows/tools/approval-service/internal/eventsources/githubevents"
-	"github.com/gravitational/shared-workflows/tools/approval-service/internal/service"
+	"github.com/gravitational/shared-workflows/tools/approval-service/internal/config"
 	"github.com/gravitational/teleport/api/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-)
-
-const (
-	testRepo         string = "test-repo"
-	testOrg          string = "test-org"
-	testEnv          string = "test-env"
-	testTeleportUser string = "test-teleport-user"
-	testTeleportRole string = "test-teleport-role"
 )
 
 func TestWaitingWorkflowReconciler(t *testing.T) {
@@ -112,7 +101,7 @@ func TestWaitingWorkflowReconciler(t *testing.T) {
 					require.NoError(t, err, "Failed to create access request")
 					require.NoError(t, newReq.SetState(state))
 
-					err = service.SetWorkflowLabels(newReq, service.GithubWorkflowLabels{
+					err = SetWorkflowLabels(newReq, GithubWorkflowLabels{
 						Org:           testOrg,
 						Repo:          testRepo,
 						Env:           testEnv,
@@ -133,106 +122,37 @@ func TestWaitingWorkflowReconciler(t *testing.T) {
 					checkHandledRequests[runID] = false
 				}
 
-				reconciler, err := NewWaitingWorkflowReconciler(
-					Config{
-						Org:            testOrg,
-						Repo:           testRepo,
-						GitHubClient:   newFakeGitHubClient(tc.waitingWorkflows...),
-						TeleportUser:   testTeleportUser,
-						TeleportClient: newFakeTeleportClient(reqs),
-						AccessRequestReviewHandler: fakeAccessRequestReviewHandler(func(ctx context.Context, req types.AccessRequest) error {
-							labels, err := service.GetWorkflowLabels(req)
-							require.NoError(t, err, "Failed to get workflow run ID from labels")
-							if _, ok := checkHandledRequests[labels.WorkflowRunID]; !ok {
-								t.Errorf("unexpected workflow run ID %d in access request: %v", labels.WorkflowRunID, req)
-								return errors.New("test failure")
-							}
-							checkHandledRequests[labels.WorkflowRunID] = true
-							return nil
-						}),
-						DeploymentReviewEventProcessor: fakeGitHubEventProcessor(func(ctx context.Context, event githubevents.DeploymentReviewEvent) error {
-							checkHandledWorkflows[event.WorkflowID] = true
-							if _, ok := checkHandledWorkflows[event.WorkflowID]; !ok {
-								t.Errorf("unexpected workflow run ID %d in event: %v", event.WorkflowID, event)
-								return errors.New("test failure")
-							}
-							checkHandledWorkflows[event.WorkflowID] = true
-							return nil
-						}),
-					},
+				svc, err := NewReleaseService(
+					config.Root{},
+					newFakeTeleportClient(reqs),
+					newFakeGitHubClient(tc.waitingWorkflows...),
 				)
-				require.NoError(t, err, "Failed to create reconciler")
 
-				go func() {
-					err := reconciler.Run(ctx)
-					assert.ErrorIs(t, err, context.Canceled, "should only exit with context cancellation")
-				}()
+				require.NoError(t, err, "Failed to create ReleaseService")
 
-				assert.NoError(t, reconciler.reconcile(ctx))
+				deploymentRules, accessRequests, err := svc.findReconciliationWork(ctx)
+				assert.NoError(t, err, "Failed to find reconciliation work")
+
+				for _, rule := range deploymentRules {
+					if _, ok := checkHandledWorkflows[rule.WorkflowID]; ok {
+						checkHandledWorkflows[rule.WorkflowID] = true
+					}
+				}
+				for _, req := range accessRequests {
+					githubLabels, err := GetWorkflowLabels(req)
+					require.NoError(t, err, "Failed to get workflow labels from access request")
+					if _, ok := checkHandledRequests[githubLabels.WorkflowRunID]; ok {
+						checkHandledRequests[githubLabels.WorkflowRunID] = true
+					}
+				}
+
 				for runID, handled := range checkHandledWorkflows {
-					assert.True(t, handled, "workflow run %d was not handled", runID)
+					assert.True(t, handled, "Expected workflow %d to be handled but it was not", runID)
 				}
 				for runID, handled := range checkHandledRequests {
-					assert.True(t, handled, "access request for workflow run %d was not handled", runID)
+					assert.True(t, handled, "Expected access request for workflow %d to be handled but it was not", runID)
 				}
 			})
 		}
 	})
-}
-
-type fakeAccessRequestReviewHandler func(ctx context.Context, req types.AccessRequest) error
-
-func (f fakeAccessRequestReviewHandler) HandleAccessRequestReviewed(ctx context.Context, req types.AccessRequest) error {
-	return f(ctx, req)
-}
-
-type fakeGitHubEventProcessor func(ctx context.Context, event githubevents.DeploymentReviewEvent) error
-
-func (f fakeGitHubEventProcessor) HandleDeploymentReviewEventReceived(ctx context.Context, event githubevents.DeploymentReviewEvent) error {
-	return f(ctx, event)
-}
-
-// fakeTeleportClient is a stub implementation of the Teleport client for testing purposes.
-// It stores Access Requests in memory and allows for basic operations like creating and retrieving Access Requests.
-type fakeTeleportClient struct {
-	// Store Access Requests in memory for testing
-	reqs []types.AccessRequest
-}
-
-func newFakeTeleportClient(initialReqs []types.AccessRequest) *fakeTeleportClient {
-	return &fakeTeleportClient{
-		reqs: initialReqs,
-	}
-}
-
-func (f *fakeTeleportClient) GetAccessRequests(ctx context.Context, filter types.AccessRequestFilter) ([]types.AccessRequest, error) {
-	return f.reqs, nil
-}
-
-type fakeGitHubClient struct {
-	workflowIDs []int64
-}
-
-func newFakeGitHubClient(workflowIDs ...int64) *fakeGitHubClient {
-	return &fakeGitHubClient{
-		workflowIDs: workflowIDs,
-	}
-}
-
-func (f *fakeGitHubClient) ListWaitingWorkflowRuns(ctx context.Context, org, repo string) ([]github.WorkflowRunInfo, error) {
-	var workflows []github.WorkflowRunInfo
-	for _, id := range f.workflowIDs {
-		workflows = append(workflows, github.WorkflowRunInfo{
-			WorkflowID: id,
-		})
-	}
-	return workflows, nil
-}
-
-func (f *fakeGitHubClient) GetPendingDeployments(ctx context.Context, org, repo string, runID int64) ([]github.PendingDeploymentInfo, error) {
-	return []github.PendingDeploymentInfo{
-		{
-			Environment: testEnv,
-		},
-	}, nil
 }

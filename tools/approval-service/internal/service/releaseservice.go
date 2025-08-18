@@ -42,6 +42,10 @@ type ReleaseService struct {
 	teleClient      teleClient
 
 	ghApprover *gitHubWorkflowApprover
+	// github information
+	org      string
+	repo     string
+	ghClient ghClient
 
 	// Channels for asynchronous processing of events.
 	deploymentReviewEventChan chan githubevents.DeploymentReviewEvent
@@ -74,6 +78,9 @@ func NewReleaseService(cfg config.Root, teleClient teleClient, ghClient ghClient
 
 	d := &ReleaseService{
 		ghApprover:          approver,
+		ghClient:            ghClient,
+		org:                 cfg.EventSources.GitHub.Org,
+		repo:                cfg.EventSources.GitHub.Repo,
 		teleClient:          teleClient,
 		requestTTLHours:     cmp.Or(time.Duration(cfg.ApprovalService.Teleport.RequestTTLHours)*time.Hour, 7*24*time.Hour),
 		teleportUser:        cfg.ApprovalService.Teleport.User,
@@ -107,6 +114,8 @@ func (w *ReleaseService) Run(ctx context.Context) error {
 			go w.onDeploymentReviewEventReceived(ctx, deployReviewEvent)
 		case accessRequestReview := <-w.accessRequestReviewChan:
 			go w.onAccessRequestReviewed(ctx, accessRequestReview)
+		case <-time.After(30 * time.Second):
+			go w.reconcileWaitingWorkflows(ctx)
 		case <-ctx.Done():
 			return ctx.Err()
 		}

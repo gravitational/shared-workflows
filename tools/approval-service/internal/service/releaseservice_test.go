@@ -17,6 +17,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	testRepo         string = "test-repo"
+	testOrg          string = "test-org"
+	testEnv          string = "test-env"
+	testTeleportUser string = "test-teleport-user"
+	testTeleportRole string = "test-teleport-role"
+)
+
 func TestReleaseService(t *testing.T) {
 	initService := func(teleClient *fakeTeleportClient, ghClient *fakeGitHubClient) *ReleaseService {
 		svc, err := NewReleaseService(
@@ -251,11 +259,13 @@ func (f *fakeTeleportClient) CreateAccessRequestV2(ctx context.Context, req type
 
 type fakeGitHubClient struct {
 	approvedState map[string]bool // to track if a workflow run is approved
+	workflowIDs   []int64
 }
 
-func newFakeGitHubClient() *fakeGitHubClient {
+func newFakeGitHubClient(workflowIDs ...int64) *fakeGitHubClient {
 	return &fakeGitHubClient{
 		approvedState: make(map[string]bool),
+		workflowIDs:   workflowIDs,
 	}
 }
 
@@ -275,4 +285,22 @@ func (f *fakeGitHubClient) isRunApproved(org, repo string, runID int64) (bool, e
 		return false, fmt.Errorf("workflow run %d not found for org %s and repo %s", runID, org, repo)
 	}
 	return val, nil
+}
+
+func (f *fakeGitHubClient) ListWaitingWorkflowRuns(ctx context.Context, org, repo string) ([]github.WorkflowRunInfo, error) {
+	var workflows []github.WorkflowRunInfo
+	for _, id := range f.workflowIDs {
+		workflows = append(workflows, github.WorkflowRunInfo{
+			WorkflowID: id,
+		})
+	}
+	return workflows, nil
+}
+
+func (f *fakeGitHubClient) GetPendingDeployments(ctx context.Context, org, repo string, runID int64) ([]github.PendingDeploymentInfo, error) {
+	return []github.PendingDeploymentInfo{
+		{
+			Environment: testEnv,
+		},
+	}, nil
 }

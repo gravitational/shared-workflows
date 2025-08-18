@@ -51,6 +51,8 @@ type gitHubWorkflowApprover struct {
 type ghClient interface {
 	GetWorkflowRunInfo(ctx context.Context, org, repo string, runID int64) (github.WorkflowRunInfo, error)
 	ReviewDeploymentProtectionRule(ctx context.Context, org, repo string, info github.ReviewDeploymentProtectionRuleInfo) error
+	GetPendingDeployments(ctx context.Context, org, repo string, runID int64) ([]github.PendingDeploymentInfo, error)
+	ListWaitingWorkflowRuns(ctx context.Context, org, repo string) ([]github.WorkflowRunInfo, error)
 }
 
 // newGitHubWorkflowApprover creates a new GitHub deployment approval handler for deployment protection rules
