@@ -137,7 +137,7 @@ func (w *ReleaseService) HandleAccessRequestReviewed(ctx context.Context, req ty
 
 func (w *ReleaseService) onDeploymentReviewEventReceived(ctx context.Context, e githubevents.DeploymentReviewEvent) {
 	// One Access Request should be created per workflow run and environment.
-	eventID := fmt.Sprintf("%s/%s/%d/%s", e.Organization, e.Repository, e.WorkflowID, e.Environment)
+	eventID := githubEventID(e.Organization, e.Repository, e.WorkflowID, e.Environment)
 	if !w.tryStartEventProcessing(eventID) {
 		// Already processing this event, skip it.
 		w.log.Debug("Skipping already processed event", "event_id", eventID)
@@ -308,4 +308,8 @@ func WithLogger(logger *slog.Logger) ReleaseServiceOpts {
 		d.log = logger
 		return nil
 	}
+}
+
+func githubEventID(org, repo string, workflowID int64, env string) string {
+	return fmt.Sprintf("%s/%s/%d/%s", org, repo, workflowID, env)
 }
