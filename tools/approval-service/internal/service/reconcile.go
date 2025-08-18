@@ -19,6 +19,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/gravitational/shared-workflows/libs/github"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/eventsources/githubevents"
@@ -122,30 +123,34 @@ func (r *ReleaseService) constructNewEventsForWorkflow(ctx context.Context, work
 		return nil, fmt.Errorf("getting pending deployments for workflow run %d: %w", workflowRun.WorkflowID, err)
 	}
 
-	// Prevent duplicate processing of environments.
-	// GitHub is a bit weird in that it can have multiple pending deployments for the same environment.
-	// However only one API call is needed to approve/reject ALL deployments for that environment.
-	handledEnvironments := map[string]struct{}{}
-
 	newEvents := []githubevents.DeploymentReviewEvent{}
+
+	// Go through each pending deployment and create a new DeploymentReviewEvent for it.
+	// We only need to create an event for each unique environment.
+	// GitHub is a bit weird in that it can have multiple pending deployments for the same environment.
+	// However only one API call is needed to approve/reject ALL current pending deployments protection rules for that environment.
 	for _, deployment := range pendingDeployments {
-		if _, ok := handledEnvironments[deployment.Environment]; ok {
+		// Skip if we already have an event for this environment.
+		// This prevents duplicate events in the case the reconcilation process is run while related events are being received.
+		if r.eventIsBeingProcessed(githubEventID(workflowRun.Organization, workflowRun.Repository, workflowRun.WorkflowID, deployment.Environment)) {
 			continue
 		}
 
-		newEvents = append(newEvents, githubevents.DeploymentReviewEvent{
+		// Create a new DeploymentReviewEvent for the pending deployment.
+		new := githubevents.DeploymentReviewEvent{
 			WorkflowID:   workflowRun.WorkflowID,
 			Requester:    workflowRun.Requester,
 			Organization: workflowRun.Organization,
 			Repository:   workflowRun.Repository,
 			Environment:  deployment.Environment,
-		})
+		}
 
-		if r.eventIsBeingProcessed(githubEventID(workflowRun.Organization, workflowRun.Repository, workflowRun.WorkflowID, deployment.Environment)) {
+		if slices.Contains(newEvents, new) {
+			// Ensure uniqueness of the environment.
 			continue
 		}
 
-		handledEnvironments[deployment.Environment] = struct{}{}
+		newEvents = append(newEvents, new)
 	}
 
 	return newEvents, nil
