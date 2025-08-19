@@ -59,7 +59,7 @@ func (r *ReleaseService) reconcileWaitingWorkflows(ctx context.Context) {
 //
 // The main motivation is to provide fault-tolerance since the events are ephemeral and failures to process results in a loss of data.
 func (r *ReleaseService) findReconciliationWork(ctx context.Context) ([]githubevents.DeploymentReviewEvent, []types.AccessRequest, error) {
-	waitingWorkflowRuns, err := r.ghClient.ListWaitingWorkflowRuns(ctx, r.org, r.repo)
+	waitingWorkflowRuns, err := r.githubClient.ListWaitingWorkflowRuns(ctx, r.githubOrg, r.githubRepo)
 	if err != nil {
 		return nil, nil, fmt.Errorf("listing waiting workflow runs: %w", err)
 	}
@@ -118,12 +118,12 @@ func (r *ReleaseService) findReconciliationWork(ctx context.Context) ([]githubev
 // constructNewEventsForWorkflow constructs new DeploymentReviewEvent for each waiting workflow run
 func (r *ReleaseService) constructNewEventsForWorkflow(ctx context.Context, workflowRun github.WorkflowRunInfo) ([]githubevents.DeploymentReviewEvent, error) {
 	// For a waiting workflow run, we need to make an extra call to determine the environment name that's being requested.
-	pendingDeployments, err := r.ghClient.GetPendingDeployments(ctx, workflowRun.Organization, workflowRun.Repository, workflowRun.WorkflowID)
+	pendingDeployments, err := r.githubClient.GetPendingDeployments(ctx, workflowRun.Organization, workflowRun.Repository, workflowRun.WorkflowID)
 	if err != nil {
 		return nil, fmt.Errorf("getting pending deployments for workflow run %d: %w", workflowRun.WorkflowID, err)
 	}
 
-	newEvents := []githubevents.DeploymentReviewEvent{}
+	var newEvents []githubevents.DeploymentReviewEvent
 
 	// Go through each pending deployment and create a new DeploymentReviewEvent for it.
 	// We only need to create an event for each unique environment.

@@ -17,7 +17,6 @@
 package service
 
 import (
-	"context"
 	"testing"
 
 	"github.com/google/uuid"
@@ -28,131 +27,124 @@ import (
 )
 
 func TestWaitingWorkflowReconciler(t *testing.T) {
+	workflowA := int64(12345)
+	workflowB := int64(67890)
+	workflowC := int64(54321)
 
-	t.Run("Waiting Workflows", func(t *testing.T) {
-		workflowA := int64(12345)
-		workflowB := int64(67890)
-		workflowC := int64(54321)
-
-		tt := []struct {
-			name                   string
-			waitingWorkflows       []int64
-			accessRequestsState    map[int64]types.RequestState
-			expectHandledWorkflows []int64
-			expectHandledRequests  []int64
-		}{
-			{
-				name: "With pending Access Requests",
-				// All workflows are waiting, and we have pending Access Requests for all of them.
-				// This is the most common case where we have workflows that are waiting for approval.
-				waitingWorkflows: []int64{workflowA, workflowB, workflowC},
-				accessRequestsState: map[int64]types.RequestState{
-					workflowA: types.RequestState_PENDING,
-					workflowB: types.RequestState_PENDING,
-					workflowC: types.RequestState_PENDING,
-				},
-				expectHandledWorkflows: []int64{},
-				expectHandledRequests:  []int64{},
+	tt := []struct {
+		name                   string
+		waitingWorkflows       []int64
+		accessRequestsState    map[int64]types.RequestState
+		expectHandledWorkflows []int64
+		expectHandledRequests  []int64
+	}{
+		{
+			name: "With pending Access Requests",
+			// All workflows are waiting, and we have pending Access Requests for all of them.
+			// This is the most common case where we have workflows that are waiting for approval.
+			waitingWorkflows: []int64{workflowA, workflowB, workflowC},
+			accessRequestsState: map[int64]types.RequestState{
+				workflowA: types.RequestState_PENDING,
+				workflowB: types.RequestState_PENDING,
+				workflowC: types.RequestState_PENDING,
 			},
-			{
-				name: "With approved/denied Access Requests",
-				// Some workflows are waiting, but we have Access Requests that are already approved or denied.
-				// In this case, the Access Requests weren't handled successfully previously, so we will handle them now.
-				waitingWorkflows: []int64{workflowA, workflowB, workflowC},
-				accessRequestsState: map[int64]types.RequestState{
-					workflowA: types.RequestState_APPROVED,
-					workflowB: types.RequestState_DENIED,
-					workflowC: types.RequestState_PENDING,
-				},
-				expectHandledWorkflows: []int64{},
-				expectHandledRequests:  []int64{workflowA, workflowB},
+			expectHandledWorkflows: []int64{},
+			expectHandledRequests:  []int64{},
+		},
+		{
+			name: "With approved/denied Access Requests",
+			// Some workflows are waiting, but we have Access Requests that are already approved or denied.
+			// In this case, the Access Requests weren't handled successfully previously, so we will handle them now.
+			waitingWorkflows: []int64{workflowA, workflowB, workflowC},
+			accessRequestsState: map[int64]types.RequestState{
+				workflowA: types.RequestState_APPROVED,
+				workflowB: types.RequestState_DENIED,
+				workflowC: types.RequestState_PENDING,
 			},
-			{
-				name: "With no Access Requests",
-				// All workflows are waiting, but we have no Access Requests for them.
-				// In this case, the Deployment Event was not handled successfully previously, so we will handle them now.
-				waitingWorkflows:       []int64{workflowA, workflowB, workflowC},
-				accessRequestsState:    map[int64]types.RequestState{},
-				expectHandledWorkflows: []int64{workflowA, workflowB, workflowC},
-				expectHandledRequests:  []int64{},
+			expectHandledWorkflows: []int64{},
+			expectHandledRequests:  []int64{workflowA, workflowB},
+		},
+		{
+			name: "With no Access Requests",
+			// All workflows are waiting, but we have no Access Requests for them.
+			// In this case, the Deployment Event was not handled successfully previously, so we will handle them now.
+			waitingWorkflows:       []int64{workflowA, workflowB, workflowC},
+			accessRequestsState:    map[int64]types.RequestState{},
+			expectHandledWorkflows: []int64{workflowA, workflowB, workflowC},
+			expectHandledRequests:  []int64{},
+		},
+		{
+			name: "No waiting workflows",
+			// No workflows are waiting, so we don't expect anything to be handled.
+			waitingWorkflows: []int64{},
+			accessRequestsState: map[int64]types.RequestState{
+				workflowA: types.RequestState_APPROVED,
+				workflowB: types.RequestState_DENIED,
+				workflowC: types.RequestState_PENDING,
 			},
-			{
-				name: "No waiting workflows",
-				// No workflows are waiting, so we don't expect anything to be handled.
-				waitingWorkflows: []int64{},
-				accessRequestsState: map[int64]types.RequestState{
-					workflowA: types.RequestState_APPROVED,
-					workflowB: types.RequestState_DENIED,
-					workflowC: types.RequestState_PENDING,
-				},
-				expectHandledWorkflows: []int64{},
-				expectHandledRequests:  []int64{},
-			},
-		}
+			expectHandledWorkflows: []int64{},
+			expectHandledRequests:  []int64{},
+		},
+	}
 
-		for _, tc := range tt {
-			t.Run(tc.name, func(t *testing.T) {
-				ctx, cancel := context.WithCancel(context.Background())
-				t.Cleanup(cancel)
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			reqs := make([]types.AccessRequest, 0, len(tc.accessRequestsState))
+			for runID, state := range tc.accessRequestsState {
+				newReq, err := types.NewAccessRequest(uuid.NewString(), testTeleportUser, testTeleportRole)
+				require.NoError(t, err, "Failed to create access request")
+				require.NoError(t, newReq.SetState(state))
 
-				reqs := make([]types.AccessRequest, 0, len(tc.accessRequestsState))
-				for runID, state := range tc.accessRequestsState {
-					newReq, err := types.NewAccessRequest(uuid.NewString(), testTeleportUser, testTeleportRole)
-					require.NoError(t, err, "Failed to create access request")
-					require.NoError(t, newReq.SetState(state))
+				err = setWorkflowLabels(newReq, githubWorkflowLabels{
+					Org:           testOrg,
+					Repo:          testRepo,
+					Env:           testEnv,
+					WorkflowRunID: runID,
+				})
+				require.NoError(t, err, "Failed to set workflow labels on access request")
 
-					err = setWorkflowLabels(newReq, githubWorkflowLabels{
-						Org:           testOrg,
-						Repo:          testRepo,
-						Env:           testEnv,
-						WorkflowRunID: runID,
-					})
-					require.NoError(t, err, "Failed to set workflow labels on access request")
+				reqs = append(reqs, newReq)
+			}
 
-					reqs = append(reqs, newReq)
+			checkHandledWorkflows := map[int64]bool{}
+			for _, runID := range tc.expectHandledWorkflows {
+				checkHandledWorkflows[runID] = false
+			}
+
+			checkHandledRequests := map[int64]bool{}
+			for _, runID := range tc.expectHandledRequests {
+				checkHandledRequests[runID] = false
+			}
+
+			svc, err := NewReleaseService(
+				config.Root{},
+				newFakeTeleportClient(reqs),
+				newFakeGitHubClient(tc.waitingWorkflows...),
+			)
+			require.NoError(t, err, "Failed to create ReleaseService")
+
+			deploymentRules, accessRequests, err := svc.findReconciliationWork(t.Context())
+			assert.NoError(t, err, "Failed to find reconciliation work")
+
+			for _, rule := range deploymentRules {
+				if _, ok := checkHandledWorkflows[rule.WorkflowID]; ok {
+					checkHandledWorkflows[rule.WorkflowID] = true
 				}
-
-				checkHandledWorkflows := map[int64]bool{}
-				for _, runID := range tc.expectHandledWorkflows {
-					checkHandledWorkflows[runID] = false
+			}
+			for _, req := range accessRequests {
+				githubLabels, err := getWorkflowLabels(req)
+				require.NoError(t, err, "Failed to get workflow labels from access request")
+				if _, ok := checkHandledRequests[githubLabels.WorkflowRunID]; ok {
+					checkHandledRequests[githubLabels.WorkflowRunID] = true
 				}
+			}
 
-				checkHandledRequests := map[int64]bool{}
-				for _, runID := range tc.expectHandledRequests {
-					checkHandledRequests[runID] = false
-				}
-
-				svc, err := NewReleaseService(
-					config.Root{},
-					newFakeTeleportClient(reqs),
-					newFakeGitHubClient(tc.waitingWorkflows...),
-				)
-
-				require.NoError(t, err, "Failed to create ReleaseService")
-
-				deploymentRules, accessRequests, err := svc.findReconciliationWork(ctx)
-				assert.NoError(t, err, "Failed to find reconciliation work")
-
-				for _, rule := range deploymentRules {
-					if _, ok := checkHandledWorkflows[rule.WorkflowID]; ok {
-						checkHandledWorkflows[rule.WorkflowID] = true
-					}
-				}
-				for _, req := range accessRequests {
-					githubLabels, err := getWorkflowLabels(req)
-					require.NoError(t, err, "Failed to get workflow labels from access request")
-					if _, ok := checkHandledRequests[githubLabels.WorkflowRunID]; ok {
-						checkHandledRequests[githubLabels.WorkflowRunID] = true
-					}
-				}
-
-				for runID, handled := range checkHandledWorkflows {
-					assert.True(t, handled, "Expected workflow %d to be handled but it was not", runID)
-				}
-				for runID, handled := range checkHandledRequests {
-					assert.True(t, handled, "Expected access request for workflow %d to be handled but it was not", runID)
-				}
-			})
-		}
-	})
+			for runID, handled := range checkHandledWorkflows {
+				assert.True(t, handled, "Expected workflow %d to be handled but it was not", runID)
+			}
+			for runID, handled := range checkHandledRequests {
+				assert.True(t, handled, "Expected access request for workflow %d to be handled but it was not", runID)
+			}
+		})
+	}
 }
