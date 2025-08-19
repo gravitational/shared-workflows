@@ -123,13 +123,16 @@ func (r *ReleaseService) constructNewEventsForWorkflow(ctx context.Context, work
 		return nil, fmt.Errorf("getting pending deployments for workflow run %d: %w", workflowRun.WorkflowID, err)
 	}
 
-	var newEvents []githubevents.DeploymentReviewEvent
-
-	// Go through each pending deployment and create a new DeploymentReviewEvent for it.
 	// We only need to create an event for each unique environment.
 	// GitHub is a bit weird in that it can have multiple pending deployments for the same environment.
 	// However only one API call is needed to approve/reject ALL current pending deployments protection rules for that environment.
-	for _, deployment := range pendingDeployments {
+	uniqueEnvironments := slices.CompactFunc(pendingDeployments, func(x, y github.PendingDeploymentInfo) bool {
+		return x.Environment == y.Environment
+	})
+
+	// Go through each pending deployment and create a new DeploymentReviewEvent for it.
+	var newEvents []githubevents.DeploymentReviewEvent
+	for _, deployment := range uniqueEnvironments {
 		// Skip if we already have an event for this environment.
 		// This prevents duplicate events in the case the reconcilation process is run while related events are being received.
 		if r.eventIsBeingProcessed(githubEventID(workflowRun.Organization, workflowRun.Repository, workflowRun.WorkflowID, deployment.Environment)) {
@@ -143,11 +146,6 @@ func (r *ReleaseService) constructNewEventsForWorkflow(ctx context.Context, work
 			Organization: workflowRun.Organization,
 			Repository:   workflowRun.Repository,
 			Environment:  deployment.Environment,
-		}
-
-		if slices.Contains(newEvents, new) {
-			// Ensure uniqueness of the environment.
-			continue
 		}
 
 		newEvents = append(newEvents, new)
