@@ -28,6 +28,11 @@ import (
 
 // reconcileWaitingWorkflows performs a single reconciliation pass for all waiting workflows.
 func (r *ReleaseService) reconcileWaitingWorkflows(ctx context.Context) {
+	// Use a context with a timeout to ensure we don't block indefinitely.
+	// Set to 75% of the configured reconcile interval to prevent overlapping reconciliations.
+	ctx, cancel := context.WithTimeout(ctx, r.reconcileInterval*3/4)
+	defer cancel()
+
 	unhandledDeploymentProtectionRule, unhandledAccessRequest, err := r.findReconciliationWork(ctx)
 	if err != nil {
 		r.log.Error("failed to find waiting workflows needing reconcile", "error", err)

@@ -56,6 +56,8 @@ type ReleaseService struct {
 	mu                  sync.Mutex
 	currentlyProcessing map[string]struct{} // tracks currently processing events by their IDs
 
+	reconcileInterval time.Duration
+
 	log *slog.Logger
 }
 
@@ -85,6 +87,7 @@ func NewReleaseService(cfg config.Root, teleClient teleClient, ghClient ghClient
 		requestTTLHours:     cmp.Or(time.Duration(cfg.ApprovalService.Teleport.RequestTTLHours)*time.Hour, 7*24*time.Hour),
 		teleportUser:        cfg.ApprovalService.Teleport.User,
 		currentlyProcessing: make(map[string]struct{}),
+		reconcileInterval:   cmp.Or(cfg.ApprovalService.ReconcileInterval, time.Minute),
 		log:                 slog.Default(),
 		// Channels for asynchronous processing of events.
 		// Setting buffer size to 1 to allow for non-blocking sends but still allow for some backpressure.
@@ -114,7 +117,7 @@ func (w *ReleaseService) Run(ctx context.Context) error {
 			go w.onDeploymentReviewEventReceived(ctx, deployReviewEvent)
 		case accessRequestReview := <-w.accessRequestReviewChan:
 			go w.onAccessRequestReviewed(ctx, accessRequestReview)
-		case <-time.After(30 * time.Second):
+		case <-time.After(w.reconcileInterval):
 			go w.reconcileWaitingWorkflows(ctx)
 		case <-ctx.Done():
 			return ctx.Err()
