@@ -117,7 +117,7 @@ func (h *gitHubWorkflowApprover) handleDecisionForAccessRequestReviewed(ctx cont
 		// - The workflow run has been approved or rejected outside of the approval service (e.g. manually by a user).
 		// - The workflow run has stopped executing due to cancellation, failure, or completion.
 		h.log.Warn("No pending deployments found for workflow run",
-			"org", h.org, "repo", h.repo, "env", env, "workflow_run_id", workflowID, "decision", decision)
+			"org", h.org, "repo", h.repo, "env", info.Env, "workflow_run_id", info.WorkflowRunID, "decision", decision)
 		return nil
 	}
 
