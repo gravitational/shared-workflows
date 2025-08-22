@@ -1,13 +1,13 @@
 module github.com/gravitational/shared-workflows/tools/approval-service
 
-go 1.23.7
+go 1.24
 
 require (
 	github.com/alecthomas/kong v1.9.0
 	github.com/goccy/go-yaml v1.18.0
 	github.com/google/go-github/v71 v71.0.0
 	github.com/google/uuid v1.6.0
-	github.com/gravitational/shared-workflows/libs v0.1.5-0.20250724163524-25c5c04fc6d1
+	github.com/gravitational/shared-workflows/libs v0.1.5-0.20250819222724-7ec79ee97cdd
 	github.com/gravitational/teleport/api v0.0.0-20250304181506-29a19b0f92da
 	github.com/stretchr/testify v1.10.0
 	golang.org/x/sync v0.12.0

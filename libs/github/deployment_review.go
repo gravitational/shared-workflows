@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 
 	"github.com/google/go-github/v71/github"
 )
@@ -32,6 +33,13 @@ const (
 	PendingDeploymentApprovalStateApproved PendingDeploymentApprovalState = "approved"
 	// PendingDeploymentApprovalStateRejected indicates that the deployment protection rule is rejected.
 	PendingDeploymentApprovalStateRejected PendingDeploymentApprovalState = "rejected"
+)
+
+var (
+	// ErrNoPendingDeployments is returned when there are no pending deployments for a given workflow run.
+	// This can happen if the workflow run has already been approved or rejected which clears the pending deployments.
+	// This can also happen if the workflow has stopped executing due to cancellation, failure, or completion.
+	ErrNoPendingDeployments = errors.New("no pending deployments for the given workflow run")
 )
 
 // ReviewDeploymentProtectionRuleInfo contains information about a deployment protection rule that is being reviewed.
@@ -49,6 +57,10 @@ type ReviewDeploymentProtectionRuleInfo struct {
 
 // ReviewDeploymentProtectionRule reviews a deployment protection rule.
 // This is used by GitHub Apps that are configured for environment protection rules.
+//
+// If an error occurs, this function can return sentinel errors that callers can check to handle specific error conditions gracefully.
+// For example, if there are no pending deployments for the given workflow run, it will return [ErrNoPendingDeployments].
+// In some cases this is not a fail-state, and the caller can choose to ignore it.
 func (c *Client) ReviewDeploymentProtectionRule(ctx context.Context, org, repo string, info ReviewDeploymentProtectionRuleInfo) error {
 	resp, err := c.client.Actions.ReviewCustomDeploymentProtectionRule(ctx, org, repo, info.RunID, &github.ReviewCustomDeploymentProtectionRuleRequest{
 		State:           string(info.State),
@@ -57,9 +69,14 @@ func (c *Client) ReviewDeploymentProtectionRule(ctx context.Context, org, repo s
 	})
 
 	if err != nil {
-		// Attempt to read the response body for more details on the error.
-		err = errors.Join(err, errorFromBody(resp.Body))
-		return fmt.Errorf("ReviewCustomDeploymentProtectionRule API call: %w", err)
+		errBody := errorFromBody(resp.Body)
+		switch resp.Response.StatusCode {
+		case http.StatusUnprocessableEntity:
+			// This case can occur if there are no pending deployments for the given run ID.
+			return errors.Join(ErrNoPendingDeployments, errBody)
+		default:
+			return fmt.Errorf("ReviewCustomDeploymentProtectionRule API call: %w", errors.Join(err, errBody))
+		}
 	}
 
 	return nil

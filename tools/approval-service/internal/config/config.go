@@ -19,6 +19,7 @@ package config
 import (
 	"fmt"
 	"strings"
+	"time"
 )
 
 // Root is the root configuration for the approval service.
@@ -36,6 +37,9 @@ type ApprovalService struct {
 	Teleport Teleport `yaml:"teleport,omitempty"`
 	// ListenAddr is the address the approval service will listen for events on
 	ListenAddr string `yaml:"listen_addr,omitempty"`
+	// ReconcileInterval is the interval at which the service will reconcile waiting workflows.
+	// This is used to ensure that workflows that are waiting for approval are processed in a timely manner.
+	ReconcileInterval time.Duration `yaml:"reconcile_interval,omitempty"`
 }
 
 type EventSources struct {

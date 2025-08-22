@@ -42,6 +42,10 @@ type ReleaseService struct {
 	teleClient      teleClient
 
 	ghApprover *gitHubWorkflowApprover
+	// github information
+	githubOrg    string
+	githubRepo   string
+	githubClient ghClient
 
 	// Channels for asynchronous processing of events.
 	deploymentReviewEventChan chan githubevents.DeploymentReviewEvent
@@ -51,6 +55,8 @@ type ReleaseService struct {
 	// For example, we can receive 10s-100s of deployment review events in a short period of time for the same workflow.
 	mu                  sync.Mutex
 	currentlyProcessing map[string]struct{} // tracks currently processing events by their IDs
+
+	reconcileInterval time.Duration
 
 	log *slog.Logger
 }
@@ -74,10 +80,14 @@ func NewReleaseService(cfg config.Root, teleClient teleClient, ghClient ghClient
 
 	d := &ReleaseService{
 		ghApprover:          approver,
+		githubClient:        ghClient,
+		githubOrg:           cfg.EventSources.GitHub.Org,
+		githubRepo:          cfg.EventSources.GitHub.Repo,
 		teleClient:          teleClient,
 		requestTTLHours:     cmp.Or(time.Duration(cfg.ApprovalService.Teleport.RequestTTLHours)*time.Hour, 7*24*time.Hour),
 		teleportUser:        cfg.ApprovalService.Teleport.User,
 		currentlyProcessing: make(map[string]struct{}),
+		reconcileInterval:   cmp.Or(cfg.ApprovalService.ReconcileInterval, time.Minute),
 		log:                 slog.Default(),
 		// Channels for asynchronous processing of events.
 		// Setting buffer size to 1 to allow for non-blocking sends but still allow for some backpressure.
@@ -107,6 +117,8 @@ func (w *ReleaseService) Run(ctx context.Context) error {
 			go w.onDeploymentReviewEventReceived(ctx, deployReviewEvent)
 		case accessRequestReview := <-w.accessRequestReviewChan:
 			go w.onAccessRequestReviewed(ctx, accessRequestReview)
+		case <-time.After(w.reconcileInterval):
+			go w.reconcileWaitingWorkflows(ctx)
 		case <-ctx.Done():
 			return ctx.Err()
 		}
@@ -128,7 +140,7 @@ func (w *ReleaseService) HandleAccessRequestReviewed(ctx context.Context, req ty
 
 func (w *ReleaseService) onDeploymentReviewEventReceived(ctx context.Context, e githubevents.DeploymentReviewEvent) {
 	// One Access Request should be created per workflow run and environment.
-	eventID := fmt.Sprintf("%s/%s/%d/%s", e.Organization, e.Repository, e.WorkflowID, e.Environment)
+	eventID := githubEventID(e.Organization, e.Repository, e.WorkflowID, e.Environment)
 	if !w.tryStartEventProcessing(eventID) {
 		// Already processing this event, skip it.
 		w.log.Debug("Skipping already processed event", "event_id", eventID)
@@ -265,8 +277,24 @@ func (w *ReleaseService) finishEventProcessing(eventID string) {
 	delete(w.currentlyProcessing, eventID)
 }
 
+// eventIsBeingProcessed checks if an event is currently being processed.
+func (w *ReleaseService) eventIsBeingProcessed(eventID string) bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	_, exists := w.currentlyProcessing[eventID]
+	return exists
+}
+
 // onAccessRequestReviewed processes the Access Request review event.
 func (w *ReleaseService) onAccessRequestReviewed(ctx context.Context, req types.AccessRequest) {
+	eventID := req.GetName()
+	if !w.tryStartEventProcessing(eventID) {
+		// Already processing this event, skip it.
+		w.log.Debug("Skipping already processed access request", "access_request_name", req.GetName())
+		return
+	}
+	defer w.finishEventProcessing(eventID)
+
 	info, err := getWorkflowLabels(req)
 	if err != nil {
 		// If we cannot find the workflow info, we cannot process the request.
@@ -291,4 +319,8 @@ func WithLogger(logger *slog.Logger) ReleaseServiceOpts {
 		d.log = logger
 		return nil
 	}
+}
+
+func githubEventID(org, repo string, workflowID int64, env string) string {
+	return fmt.Sprintf("%s/%s/%d/%s", org, repo, workflowID, env)
 }

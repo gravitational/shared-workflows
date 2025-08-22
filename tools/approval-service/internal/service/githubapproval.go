@@ -19,6 +19,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -51,6 +52,8 @@ type gitHubWorkflowApprover struct {
 type ghClient interface {
 	GetWorkflowRunInfo(ctx context.Context, org, repo string, runID int64) (github.WorkflowRunInfo, error)
 	ReviewDeploymentProtectionRule(ctx context.Context, org, repo string, info github.ReviewDeploymentProtectionRuleInfo) error
+	GetPendingDeployments(ctx context.Context, org, repo string, runID int64) ([]github.PendingDeploymentInfo, error)
+	ListWaitingWorkflowRuns(ctx context.Context, org, repo string) ([]github.WorkflowRunInfo, error)
 }
 
 // newGitHubWorkflowApprover creates a new GitHub deployment approval handler for deployment protection rules
@@ -105,6 +108,19 @@ func (h *gitHubWorkflowApprover) handleDecisionForAccessRequestReviewed(ctx cont
 			Comment:         comment,
 		},
 	)
+
+	if errors.Is(err, github.ErrNoPendingDeployments) {
+		// No pending deployments is not necessarily a fail-state for us.
+		// In this case, we just log a warning and return nil.
+		// This can happen when:
+		// - The event is double processed
+		// - The workflow run has been approved or rejected outside of the approval service (e.g. manually by a user).
+		// - The workflow run has stopped executing due to cancellation, failure, or completion.
+		h.log.Warn("No pending deployments found for workflow run",
+			"org", h.org, "repo", h.repo, "env", info.Env, "workflow_run_id", info.WorkflowRunID, "decision", decision)
+		return nil
+	}
+
 	if err != nil {
 		return fmt.Errorf("reviewing deployment protection rule: %w", err)
 	}
