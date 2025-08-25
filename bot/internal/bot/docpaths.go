@@ -134,9 +134,16 @@ func missingRedirectSources(conf []DocsRedirect, files github.PullRequestFiles) 
 
 		switch f.Status {
 		case "renamed":
-			p := toURLPath(f.PreviousName)
-			if _, ok := sources[p]; !ok {
-				res = append(res, p)
+			currentPath := toURLPath(f.Name)
+			prevPath := toURLPath(f.PreviousName)
+			// This can happen if a category index page was renamed
+			// to a regular page or vice versa.
+			if currentPath == prevPath {
+				continue
+			}
+
+			if _, ok := sources[prevPath]; !ok {
+				res = append(res, prevPath)
 			}
 		case "removed":
 			p := toURLPath(f.Name)
