@@ -7,7 +7,7 @@ require (
 	github.com/goccy/go-yaml v1.18.0
 	github.com/google/go-github/v71 v71.0.0
 	github.com/google/uuid v1.6.0
-	github.com/gravitational/shared-workflows/libs v0.1.5-0.20250819222724-7ec79ee97cdd
+	github.com/gravitational/shared-workflows/libs v0.1.5
 	github.com/gravitational/teleport/api v0.0.0-20250304181506-29a19b0f92da
 	github.com/stretchr/testify v1.10.0
 	golang.org/x/sync v0.12.0

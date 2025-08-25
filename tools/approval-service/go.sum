@@ -51,8 +51,8 @@ github.com/google/go-querystring v1.1.0 h1:AnCroh3fv4ZBgVIf1Iwtovgjaw/GiKJo8M8yD
 github.com/google/go-querystring v1.1.0/go.mod h1:Kcdr2DB4koayq7X8pmAG4sNG59So17icRSOU623lUBU=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
 github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
-github.com/gravitational/shared-workflows/libs v0.1.5-0.20250819222724-7ec79ee97cdd h1:h06yIN704TnrFbmcXHam1aBYeNCQ+KSOntH+j4QNmg0=
-github.com/gravitational/shared-workflows/libs v0.1.5-0.20250819222724-7ec79ee97cdd/go.mod h1:BUIXwICp0NZh5mJi7Rnh+6juyK4Rc4krXk+a1DLUFd0=
+github.com/gravitational/shared-workflows/libs v0.1.5 h1:aVFdiqAXa27KMB29GleqT4k6S+iBP53eeC49KaeubUE=
+github.com/gravitational/shared-workflows/libs v0.1.5/go.mod h1:BUIXwICp0NZh5mJi7Rnh+6juyK4Rc4krXk+a1DLUFd0=
 github.com/gravitational/teleport/api v0.0.0-20250304181506-29a19b0f92da h1:LA/8SS4tG77veki5358JuYG1WGqvhuRANxrE4GYgGPU=
 github.com/gravitational/teleport/api v0.0.0-20250304181506-29a19b0f92da/go.mod h1:2fGatohLK2Z3msb+Un43dCROyL+RRKeIt1y4u/nd7bk=
 github.com/gravitational/trace v1.5.1 h1:CdSymAjkE1VOef+lsC5x29jX9WbgI0fBtnRqeT4Fh+c=
