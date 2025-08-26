@@ -37,6 +37,11 @@ type CommonFlags struct {
 	OutputDir string `name:"output-dir" short:"o" type:"path" env:"${envPrefix}OUTPUT_DIR" default:"build/artifacts" help:"Directory to place the resulting release artifacts."`
 	// DryRun indicates whether to perform a dry run without actual building.
 	DryRun bool `name:"dry-run" short:"d" env:"${envPrefix}DRY_RUN" help:"Perform a dry run without actual building."`
+
+	// CI detects whether the build is running in a CI environment.
+	// This is currently used to disable dry-run mode in CI to fail-fast if dry-run is enabled in CI builds.
+	// This could be expanded in the future to modify other behaviors for CI environments.
+	CI bool `hidden:"" env:"CI" help:"CI mode. Disables dry-run."`
 }
 
 const (

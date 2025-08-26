@@ -27,27 +27,21 @@ import (
 // DarwinCmd is a kong struct that contains flags and methods for building darwin artifacts.
 // It is meant to be used as a subcommand of the Telebuild CLI.
 type DarwinCmd struct {
+	// Tarball is the command for building darwin tarballs.
 	Tarball DarwinTarball `cmd:"" help:"Build a tarball containing darwin binaries"`
 
-	DarwinCommonFlags
-}
+	// ----------- Common Flags -----------
+	// The following flags are common to all darwin subcommands and can be referenced by adding
+	// `darwin *DarwinCmd` to the Run method of the subcommand.
 
-// DarwinCommonFlags is a kong struct that contains flags common to all darwin commands.
-// This can be embedded in other kong structs to avoid duplication of common flags.
-type DarwinCommonFlags struct {
 	// Retry is the number of times to retry notarization in case of failure.
 	Retry int `group:"Notarization Optional Flags" help:"Retry notarization in case of failure."`
-
 	// KeychainProfile is the keychain profile to use for notarization.
 	KeychainProfile string `group:"Notarization Required Flags" env:"${envPrefix}KEYCHAIN_PROFILE" help:"Keychain profile to use for notarization. Use \"man notarytool\" for authentication options."`
 	// SigningID is the signing identity to use for codesigning.
 	SigningID string `group:"Notarization Required Flags" env:"${envPrefix}SIGNING_ID" help:"Signing Identity to use for codesigning."`
 	// TeamID is the Apple Developer Team ID.
 	TeamID string `group:"Notarization Required Flags" env:"${envPrefix}TEAM_ID" help:"Team ID is the unique identifier for the Apple Developer account."`
-
-	// CI detects whether the build is running in a CI environment.
-	// This is a common flag
-	CI bool `hidden:"" env:"CI" help:"CI mode. Disables dry-run."`
 }
 
 var (
@@ -65,15 +59,11 @@ type DarwinTarball struct {
 }
 
 // Run executes the tarball build process.
-func (cmd *DarwinTarball) Run(cli *CLI, parent *DarwinCmd) error {
+func (cmd *DarwinTarball) Run(cli *CLI, darwin *DarwinCmd) error {
 	switch cmd.Arch {
 	case ArchUniversal:
-		return cmd.buildDarwinUniversalTarball(cli)
+		return errors.New("implemented later")
 	default:
-		return fmt.Errorf("unsupported architecture for darwin: %s", cmd.Arch)
+		return fmt.Errorf("unsupported architecture for darwin tarball build: %s", cmd.Arch)
 	}
-}
-
-func (cmd *DarwinTarball) buildDarwinUniversalTarball(cli *CLI) error {
-	return errors.New("TODO")
 }
