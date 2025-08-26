@@ -1,0 +1,25 @@
+---
+name: OS package repo tool 2 CD
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - tools/oprt2
+    tags:
+      - "tools/oprt2/v[0-9]+.[0-9]+.[0-9]+**"
+  pull_request:
+    paths:
+      - tools/oprt2/workflows/cd.yaml
+      - .github/workflows/oprt2-cd.yaml
+      - .github/workflows/reusable-cd.yaml
+
+jobs:
+  release:
+    uses: ./.github/workflows/reusable-cd.yaml
+    permissions:
+      contents: write
+      packages: write
+    with:
+      tool-directory: ./tools/oprt2

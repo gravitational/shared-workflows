@@ -1,0 +1,433 @@
+{
+    "required": [
+        "attune"
+    ],
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$defs": {
+        "PEMFileCertificateProvider": {
+            "required": [
+                "privateKey",
+                "publicKeychain"
+            ],
+            "properties": {
+                "privateKey": {
+                    "type": "string"
+                },
+                "publicKeychain": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": "array",
+                    "minItems": 1
+                }
+            },
+            "type": "object"
+        },
+        "APT": {
+            "properties": {
+                "gpg": {
+                    "anyOf": [
+                        {
+                            "$ref": "#/$defs/GPGProvider",
+                            "maxProperties": 1,
+                            "minProperties": 1
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ]
+                },
+                "components": {
+                    "minProperties": 1,
+                    "type": "object"
+                },
+                "distros": {
+                    "type": "object",
+                    "minProperties": 1
+                },
+                "fileSource": {
+                    "maxProperties": 1,
+                    "minProperties": 1,
+                    "$ref": "#/$defs/FileManager"
+                }
+            },
+            "type": "object",
+            "required": [
+                "fileSource",
+                "components",
+                "distros"
+            ]
+        },
+        "FileManager": {
+            "properties": {
+                "local": {
+                    "anyOf": [
+                        {
+                            "$ref": "#/$defs/LocalFileManager"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ]
+                },
+                "s3": {
+                    "anyOf": [
+                        {
+                            "$ref": "#/$defs/S3FileManager"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ]
+                }
+            },
+            "type": "object"
+        },
+        "Authenticator": {
+            "properties": {
+                "token": {
+                    "anyOf": [
+                        {
+                            "$ref": "#/$defs/TokenAuthenticator"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ]
+                },
+                "mTLS": {
+                    "anyOf": [
+                        {
+                            "$ref": "#/$defs/MTLSAuthenticator"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ]
+                }
+            },
+            "type": "object"
+        },
+        "Logger": {
+            "properties": {
+                "format": {
+                    "default": "text",
+                    "type": "string",
+                    "enum": [
+                        "text",
+                        "json"
+                    ]
+                },
+                "level": {
+                    "type": "string",
+                    "enum": [
+                        "debug",
+                        "info",
+                        "warn",
+                        "error"
+                    ],
+                    "default": "info"
+                }
+            },
+            "type": "object"
+        },
+        "S3FileManager": {
+            "properties": {
+                "bucket": {
+                    "type": "string"
+                },
+                "prefix": {
+                    "type": "string"
+                }
+            },
+            "type": "object",
+            "required": [
+                "bucket"
+            ]
+        },
+        "GPGKeyIDProvider": {
+            "properties": {
+                "keyID": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ]
+                },
+                "gpgHomeDirectory": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ]
+                }
+            },
+            "type": "object"
+        },
+        "Attune": {
+            "properties": {
+                "parallelUploadLimit": {
+                    "type": "integer",
+                    "default": "20"
+                },
+                "authentication": {
+                    "$ref": "#/$defs/Authenticator",
+                    "maxProperties": 1,
+                    "minProperties": 1
+                }
+            },
+            "type": "object",
+            "required": [
+                "authentication"
+            ]
+        },
+        "OPRT2": {
+            "required": [
+                "attune"
+            ],
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "properties": {
+                "packageManagers": {
+                    "items": {
+                        "properties": {
+                            "apt": {
+                                "anyOf": [
+                                    {
+                                        "$ref": "#/$defs/APT"
+                                    },
+                                    {
+                                        "type": "null"
+                                    }
+                                ]
+                            }
+                        },
+                        "type": "object",
+                        "maxProperties": 1,
+                        "minProperties": 1
+                    },
+                    "type": "array"
+                },
+                "logger": {
+                    "anyOf": [
+                        {
+                            "$ref": "#/$defs/Logger"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ]
+                },
+                "attune": {
+                    "$ref": "#/$defs/Attune"
+                }
+            },
+            "type": "object"
+        },
+        "GPGArchiveProvider": {
+            "properties": {
+                "archive": {
+                    "type": "string"
+                },
+                "keyID": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ]
+                }
+            },
+            "type": "object",
+            "required": [
+                "archive"
+            ]
+        },
+        "LocalFileManager": {
+            "properties": {
+                "directory": {
+                    "type": "string"
+                }
+            },
+            "type": "object",
+            "required": [
+                "directory"
+            ]
+        },
+        "GPGProvider": {
+            "type": "object",
+            "properties": {
+                "archive": {
+                    "anyOf": [
+                        {
+                            "$ref": "#/$defs/GPGArchiveProvider"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ]
+                },
+                "keyID": {
+                    "anyOf": [
+                        {
+                            "$ref": "#/$defs/GPGKeyIDProvider"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ]
+                }
+            }
+        },
+        "MTLSAuthenticator": {
+            "properties": {
+                "endpoint": {
+                    "type": "string"
+                },
+                "certificateSource": {
+                    "$ref": "#/$defs/CertificateProvider",
+                    "maxProperties": 1,
+                    "minProperties": 1
+                }
+            },
+            "type": "object",
+            "required": [
+                "endpoint",
+                "certificateSource"
+            ]
+        },
+        "TokenAuthenticator": {
+            "required": [
+                "endpoint",
+                "token"
+            ],
+            "properties": {
+                "endpoint": {
+                    "type": "string"
+                },
+                "token": {
+                    "type": "string"
+                }
+            },
+            "type": "object"
+        },
+        "PackageManager": {
+            "type": "object",
+            "properties": {
+                "apt": {
+                    "anyOf": [
+                        {
+                            "$ref": "#/$defs/APT"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ]
+                }
+            }
+        },
+        "TeleportWorkloadIdentityCertificateProvider": {
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "ttl": {
+                    "type": "integer",
+                    "default": "15m"
+                }
+            },
+            "type": "object",
+            "required": [
+                "name"
+            ]
+        },
+        "TeleportCertificateProvider": {
+            "properties": {
+                "workloadIdentity": {
+                    "anyOf": [
+                        {
+                            "$ref": "#/$defs/TeleportWorkloadIdentityCertificateProvider"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ]
+                }
+            },
+            "type": "object",
+            "required": [
+                "workloadIdentity"
+            ]
+        },
+        "CertificateProvider": {
+            "type": "object",
+            "properties": {
+                "teleport": {
+                    "anyOf": [
+                        {
+                            "$ref": "#/$defs/TeleportCertificateProvider",
+                            "maxProperties": 1,
+                            "minProperties": 1
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ]
+                },
+                "pemFile": {
+                    "anyOf": [
+                        {
+                            "$ref": "#/$defs/PEMFileCertificateProvider"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ]
+                }
+            }
+        }
+    },
+    "properties": {
+        "logger": {
+            "anyOf": [
+                {
+                    "$ref": "#/$defs/Logger"
+                },
+                {
+                    "type": "null"
+                }
+            ]
+        },
+        "attune": {
+            "$ref": "#/$defs/Attune"
+        },
+        "packageManagers": {
+            "items": {
+                "maxProperties": 1,
+                "minProperties": 1,
+                "properties": {
+                    "apt": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/$defs/APT"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    }
+                },
+                "type": "object"
+            },
+            "type": "array"
+        }
+    },
+    "type": "object"
+}

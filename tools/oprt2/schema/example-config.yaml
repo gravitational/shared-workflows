@@ -1,0 +1,43 @@
+---
+# yaml-language-server: $schema=./config.json
+logger:
+  level: debug
+attune:
+  authentication:
+    mTLS:
+      endpoint: https://attune.ci-cd-cluster.tld
+      certificateSource:
+        teleport:
+          workloadIdentity:
+            name: workload-id
+packageManagers:
+  - apt:
+      fileSource:
+        s3:
+          bucket: some-bucket-name
+          path: teleport/tags/
+      components:
+        # NOTE: this will require updating whenever a new major branch is cut.
+        # I'm open to suggestions on making this easier... maybe templating of some kind?
+        stable/v18: &major_version_files
+          - teleport-(amd|arm)64\.deb
+        stable/cloud:
+          - teleport-amd64\.deb
+        stable/rolling: *major_version_files
+      # When adding a new supported OS, update the github.com/gravitational/teleport/blob/master/lib/web/scripts/node-join/install.sh script
+      # Otherwise, it will keep using the binary installation instead of the deb repo.
+      distros:
+        # https://wiki.ubuntu.com/Releases for details
+        ubuntu:
+          - xenial # 16.04 LTS
+          - bionic # 18.04 LTS
+          - focal # 20.04 LTS
+          - jammy # 22.04 LTS
+          - noble # 24.04 LTS
+          - plucky # 25.04
+        # See https://wiki.debian.org/DebianReleases#Production_Releases for details
+        debian:
+          - bullseye # 11
+          - bookworm # 12
+          - trixie # 13
+          - forky # 14
