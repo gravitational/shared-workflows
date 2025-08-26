@@ -27,7 +27,7 @@ test:
 binary:
 	@echo "Building for $(OS)/$(ARCH) and writing to $(BUILD_DIR)"
 	@mkdir -p "$(BUILD_DIR)"
-	@GOOS=$(OS) GOARCH=$(ARCH) go build -o "$(BUILD_DIR)/" -ldflags="-s -w" "$(PACKAGE_PATH)"
+	@CGO_ENABLED=0 GOOS=$(OS) GOARCH=$(ARCH) go build -o "$(BUILD_DIR)/" -ldflags="-s -w" "$(PACKAGE_PATH)"
 
 tarball: TARBALL_NAME = $(TOOL_NAME)-$(VERSION)-$(OS)-$(ARCH).tar.gz
 tarball: binary
