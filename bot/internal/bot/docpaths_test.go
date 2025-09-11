@@ -315,6 +315,30 @@ func TestMissingRedirectSources(t *testing.T) {
 			redirects: []DocsRedirect{},
 			expected:  []string{},
 		},
+		{
+			description: "page renamed to category index",
+			files: []github.PullRequestFile{
+				{
+					Name:         "docs/pages/installation/installation.mdx",
+					PreviousName: "docs/pages/installation.mdx",
+					Status:       "renamed",
+				},
+			},
+			redirects: []DocsRedirect{},
+			expected:  []string{},
+		},
+		{
+			description: "category index renamed to page",
+			files: []github.PullRequestFile{
+				{
+					Name:         "docs/pages/installation.mdx",
+					PreviousName: "docs/pages/installation/installation.mdx",
+					Status:       "renamed",
+				},
+			},
+			redirects: []DocsRedirect{},
+			expected:  []string{},
+		},
 	}
 
 	for _, c := range cases {
