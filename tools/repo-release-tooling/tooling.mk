@@ -30,7 +30,7 @@ generate:
 binary: generate
 	@echo "Building for $(OS)/$(ARCH) and writing to $(BUILD_DIR)"
 	@mkdir -p "$(BUILD_DIR)"
-	@CGO_ENABLED=0 GOOS=$(OS) GOARCH=$(ARCH) go build -o "$(BUILD_DIR)/$(TOOL_NAME)" -ldflags="-s -w" "$(PACKAGE_PATH)"
+	@CGO_ENABLED=0 GOOS=$(OS) GOARCH=$(ARCH) go build -o "$(BUILD_DIR)/$(BINARY_NAME)" -ldflags="-s -w" "$(PACKAGE_PATH)"
 
 tarball: TARBALL_NAME = $(TOOL_NAME)-$(VERSION)-$(OS)-$(ARCH).tar.gz
 tarball: binary
