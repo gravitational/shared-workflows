@@ -199,7 +199,9 @@ func (t2tp *TCP2TLSProxy) proxyConnection(ctx context.Context, clientConnection 
 	destinationTLSConnection := destinationConnection.(*tls.Conn)
 	deadline, ok := ctx.Deadline()
 	if ok {
-		destinationTLSConnection.SetDeadline(deadline)
+		if err := destinationTLSConnection.SetDeadline(deadline); err != nil {
+			return fmt.Errorf("failed to set TLS connection deadline: %w", err)
+		}
 	}
 
 	// Read and write until the connection is closed

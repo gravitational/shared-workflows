@@ -142,7 +142,7 @@ func (sfm *S3FileManager) GetLocalFilePath(ctx context.Context, item string) (lo
 	}
 
 	// Ensure that the lock is always released to prevent blocking other callers infinitely
-	defer sfm.itemLocker.Unlock(context.TODO(), item)
+	defer func() { _ = sfm.itemLocker.Unlock(context.TODO(), item) }()
 
 	switch _, err := sfm.workingDirectoryRoot.Stat(item); {
 	case err == nil:
