@@ -25,7 +25,7 @@ test:
 	@gotestsum $(if $(GITHUB_ACTIONS),--format github-actions) ./... -- -count 100 -shuffle on -timeout 2m -race
 
 generate:
-	@GOOS=$(OS) GOARCH=$(ARCH) go generate ./...
+	@go generate ./...
 
 binary: generate
 	@echo "Building for $(OS)/$(ARCH) and writing to $(BUILD_DIR)"
