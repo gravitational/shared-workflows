@@ -242,6 +242,48 @@ func (c *Client) ListReviewers(ctx context.Context, organization string, reposit
 	return reviewers, nil
 }
 
+// FileStatus indicates the operation that led to the current state of the file,
+// based on the value reported by the GitHub API.
+type FileStatus int
+
+const (
+	StatusUnknown FileStatus = iota
+	StatusAdded
+	StatusRemoved
+	StatusModified
+	StatusRenamed
+	StatusCopied
+	StatusChanged
+	StatusUnchanged
+)
+
+// fileStatusFromLabel retrieves the FileStatus that corresponds to the label
+// returned by the GitHub API. Status is either added, removed, modified,
+// renamed, copied, changed, unchanged.
+//
+// See response schema for the current list of statuses:
+// https://docs.github.com/en/rest/pulls/pulls?apiVersion=2022-11-28#list-pull-requests-files
+func fileStatusFromLabel(name string) FileStatus {
+	switch name {
+	case "added":
+		return StatusAdded
+	case "removed":
+		return StatusRemoved
+	case "modified":
+		return StatusModified
+	case "renamed":
+		return StatusRenamed
+	case "copied":
+		return StatusCopied
+	case "changed":
+		return StatusChanged
+	case "unchanged":
+		return StatusUnchanged
+	default:
+		return StatusUnknown
+	}
+}
+
 // PullRequestFile is a file that was modified in a pull request.
 type PullRequestFile struct {
 	// Name is the name of the file.
@@ -250,10 +292,7 @@ type PullRequestFile struct {
 	Additions int
 	// Deletions is the number of lines removed from the file
 	Deletions int
-	// Status is either added, removed, modified, renamed, copied, changed, unchanged
-	// See response schema for the current list of statuses:
-	// https://docs.github.com/en/rest/pulls/pulls?apiVersion=2022-11-28#list-pull-requests-files
-	Status string
+	Status    FileStatus
 	// PreviousName is the name of the file prior to renaming. The GitHub
 	// API only assigns this if Status is "renamed". For deleted files, the
 	// GitHub API uses Name.
@@ -419,7 +458,7 @@ func (c *Client) ListFiles(ctx context.Context, organization string, repository 
 				Name:         file.GetFilename(),
 				Additions:    file.GetAdditions(),
 				Deletions:    file.GetDeletions(),
-				Status:       file.GetStatus(),
+				Status:       fileStatusFromLabel(file.GetStatus()),
 				PreviousName: file.GetPreviousFilename(),
 			})
 		}

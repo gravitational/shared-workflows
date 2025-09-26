@@ -79,7 +79,7 @@ func (b *Bot) verifyDBMigration(ctx context.Context, pathPrefix string) error {
 
 	// don't evaluate removed files
 	prFiles = filterSlice(prFiles, func(f github.PullRequestFile) bool {
-		return f.Status != "removed"
+		return f.Status != github.StatusRemoved
 	})
 
 	// parse PR migration file ids
