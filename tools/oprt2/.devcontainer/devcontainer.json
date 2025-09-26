@@ -1,0 +1,25 @@
+// For format details, see https://aka.ms/devcontainer.json.
+{
+  "name": "oprt2",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
+      "moby": false // This must be set due to the go 1.25 container
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "github.vscode-github-actions",
+        "redhat.vscode-yaml",
+        "ms-azuretools.vscode-docker"
+      ]
+    }
+  },
+  "mounts": [
+    "type=bind,source=${localEnv:HOME}/.config/gh,target=/home/vscode/.config/gh,readonly"
+  ]
+}
