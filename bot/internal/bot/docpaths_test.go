@@ -85,7 +85,7 @@ func TestCheckDocsPathsForMissingRedirects(t *testing.T) {
 						files: []github.PullRequestFile{
 							{
 								Name:         "docs/pages/enroll-resources/database-access/get-started.mdx",
-								Status:       "renamed",
+								Status:       github.StatusRenamed,
 								PreviousName: "docs/pages/database-access/get-started.mdx",
 							},
 						},
@@ -117,7 +117,7 @@ func TestMissingRedirectSources(t *testing.T) {
 					Name:         "docs/pages/databases/protect-mysql.mdx",
 					Additions:    0,
 					Deletions:    0,
-					Status:       "renamed",
+					Status:       github.StatusRenamed,
 					PreviousName: "docs/pages/databases/mysql.mdx",
 				},
 			},
@@ -137,7 +137,7 @@ func TestMissingRedirectSources(t *testing.T) {
 					Name:         "docs/pages/databases/protect-mysql.mdx",
 					Additions:    0,
 					Deletions:    0,
-					Status:       "renamed",
+					Status:       github.StatusRenamed,
 					PreviousName: "docs/pages/databases/mysql.mdx",
 				},
 			},
@@ -151,7 +151,7 @@ func TestMissingRedirectSources(t *testing.T) {
 					Name:      "docs/pages/databases/mysql.mdx",
 					Additions: 0,
 					Deletions: 0,
-					Status:    "removed",
+					Status:    github.StatusRemoved,
 				},
 			},
 			redirects: []DocsRedirect{
@@ -169,7 +169,7 @@ func TestMissingRedirectSources(t *testing.T) {
 					Name:      "docs/pages/databases/mysql.mdx",
 					Additions: 0,
 					Deletions: 200,
-					Status:    "removed",
+					Status:    github.StatusRemoved,
 				},
 			},
 			redirects: []DocsRedirect{},
@@ -182,7 +182,7 @@ func TestMissingRedirectSources(t *testing.T) {
 					Name:      "docs/pages/databases/mysql.mdx",
 					Additions: 50,
 					Deletions: 15,
-					Status:    "modified",
+					Status:    github.StatusModified,
 				},
 			},
 			redirects: []DocsRedirect{},
@@ -195,7 +195,7 @@ func TestMissingRedirectSources(t *testing.T) {
 					Name:         "docs/pages/databases/protect-mysql.mdx",
 					Additions:    0,
 					Deletions:    0,
-					Status:       "renamed",
+					Status:       github.StatusRenamed,
 					PreviousName: "docs/pages/databases/mysql.mdx",
 				},
 			},
@@ -224,7 +224,7 @@ func TestMissingRedirectSources(t *testing.T) {
 					Name:         "docs/pages/enroll-resources/databases/databases.mdx",
 					Additions:    0,
 					Deletions:    0,
-					Status:       "renamed",
+					Status:       github.StatusRenamed,
 					PreviousName: "docs/pages/databases/databases.mdx",
 				},
 			},
@@ -244,7 +244,7 @@ func TestMissingRedirectSources(t *testing.T) {
 					Name:         "docs/pages/enroll-resources/applications/applications.mdx",
 					Additions:    0,
 					Deletions:    0,
-					Status:       "renamed",
+					Status:       github.StatusRenamed,
 					PreviousName: "docs/pages/applications/applications.mdx",
 				},
 			},
@@ -264,7 +264,7 @@ func TestMissingRedirectSources(t *testing.T) {
 					Name:         "docs/pages/includes/databases/mysql-certs.mdx",
 					Additions:    0,
 					Deletions:    0,
-					Status:       "renamed",
+					Status:       github.StatusRenamed,
 					PreviousName: "docs/pages/includes/databases/mysql.mdx",
 				},
 			},
@@ -278,7 +278,7 @@ func TestMissingRedirectSources(t *testing.T) {
 					Name:         "docs/pages/connect-your-client/includes/mysql-certs.mdx",
 					Additions:    0,
 					Deletions:    0,
-					Status:       "renamed",
+					Status:       github.StatusRenamed,
 					PreviousName: "docs/pages/connect-your-client/includes/mysql.mdx",
 				},
 			},
@@ -290,11 +290,11 @@ func TestMissingRedirectSources(t *testing.T) {
 			files: []github.PullRequestFile{
 				{
 					Name:   "docs/pages/installation.mdx",
-					Status: "removed",
+					Status: github.StatusRemoved,
 				},
 				{
 					Name:   "docs/pages/installation/installation.mdx",
-					Status: "added",
+					Status: github.StatusAdded,
 				},
 			},
 			redirects: []DocsRedirect{},
@@ -305,11 +305,11 @@ func TestMissingRedirectSources(t *testing.T) {
 			files: []github.PullRequestFile{
 				{
 					Name:   "docs/pages/installation.mdx",
-					Status: "added",
+					Status: github.StatusAdded,
 				},
 				{
 					Name:   "docs/pages/installation/installation.mdx",
-					Status: "removed",
+					Status: github.StatusRemoved,
 				},
 			},
 			redirects: []DocsRedirect{},
@@ -321,7 +321,7 @@ func TestMissingRedirectSources(t *testing.T) {
 				{
 					Name:         "docs/pages/installation/installation.mdx",
 					PreviousName: "docs/pages/installation.mdx",
-					Status:       "renamed",
+					Status:       github.StatusRenamed,
 				},
 			},
 			redirects: []DocsRedirect{},
@@ -333,11 +333,33 @@ func TestMissingRedirectSources(t *testing.T) {
 				{
 					Name:         "docs/pages/installation.mdx",
 					PreviousName: "docs/pages/installation/installation.mdx",
-					Status:       "renamed",
+					Status:       github.StatusRenamed,
 				},
 			},
 			redirects: []DocsRedirect{},
 			expected:  []string{},
+		},
+		{
+			description: "complex rename scenario",
+			files: []github.PullRequestFile{
+				{
+					Name:         "docs/pages/identity-governance/access-lists.mdx",
+					PreviousName: "docs/pages/identity-governance/access-lists/guide.mdx",
+					Status:       github.StatusRenamed,
+				},
+				{
+					Name:   "docs/pages/identity-governance/access-lists/access-lists.mdx",
+					Status: github.StatusRemoved,
+				},
+			},
+			redirects: []DocsRedirect{
+				{
+					Source:      "/identity-governance/access-lists/guide/",
+					Destination: "/identity-governance/access-lists/",
+					Permanent:   true,
+				},
+			},
+			expected: []string{},
 		},
 	}
 

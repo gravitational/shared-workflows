@@ -97,7 +97,7 @@ func TestParseMigrationFileIDs(t *testing.T) {
 }
 
 func TestVerifyCloudDBMigration(t *testing.T) {
-	const defaultStatus = "added"
+	const defaultStatus = github.StatusAdded
 
 	// load fake github with noop data
 	fgh := &fakeGithub{ref: github.Reference{Name: "foo", SHA: "abc"}}
@@ -116,7 +116,7 @@ func TestVerifyCloudDBMigration(t *testing.T) {
 	cases := []struct {
 		prFiles     []string
 		branchFiles []string
-		status      string
+		status      github.FileStatus
 		expectErr   bool
 	}{
 		{}, // 0    no migration files in branch or pr
@@ -150,7 +150,7 @@ func TestVerifyCloudDBMigration(t *testing.T) {
 			expectErr: true,
 		},
 		{ // 5 OK   filter removed files
-			status: "removed",
+			status: github.StatusRemoved,
 			prFiles: []string{
 				"db/202301031501_fake.up.sql",
 			},
@@ -171,7 +171,7 @@ func TestVerifyCloudDBMigration(t *testing.T) {
 	}
 	fghBaseline := *fgh
 	for i, test := range cases {
-		if test.status == "" {
+		if test.status == github.StatusUnknown {
 			test.status = defaultStatus
 		}
 		for _, f := range test.prFiles {
