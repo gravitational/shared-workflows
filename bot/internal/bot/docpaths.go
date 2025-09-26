@@ -111,16 +111,23 @@ func missingRedirectSources(conf []DocsRedirect, files github.PullRequestFiles) 
 		sources[s.Source] = struct{}{}
 	}
 
-	// Make a map of URL paths for added files so we can check whether a
-	// deleted file was actually changed to a category index page or vice
-	// versa.
-	addedPaths := make(map[string]struct{})
+	// Make a map of URL paths for file paths introduced by this PR, either
+	// by renames or additions. We will use this to determine whether any
+	// required redirect sources actually correspond to existing pages.
+	//
+	// We need this check because sometimes GitHub's use of the git diffing
+	// algorithm does not reflect a docs author's intended rename. For
+	// example, if we rename Page A to Page B, and incorporate content from
+	// Page C into Page B, the GitHub API may mark Page A as a deletion and
+	// Page B as a rename from Page C.
+	filenames := make(map[string]struct{})
 	for _, f := range files {
-		if f.Status == "added" {
-			addedPaths[toURLPath(f.Name)] = struct{}{}
+		if f.Status == github.StatusAdded || f.Status == github.StatusRenamed {
+			filenames[toURLPath(f.Name)] = struct{}{}
 		}
 	}
 
+	// Check all renamed or removed docs files for adequate redirects.
 	res := []string{}
 	for _, f := range files {
 		if !strings.HasPrefix(f.Name, docsPrefix) {
@@ -132,27 +139,22 @@ func missingRedirectSources(conf []DocsRedirect, files github.PullRequestFiles) 
 			continue
 		}
 
+		var pathToCheck string
 		switch f.Status {
-		case "renamed":
-			currentPath := toURLPath(f.Name)
-			prevPath := toURLPath(f.PreviousName)
-			// This can happen if a category index page was renamed
-			// to a regular page or vice versa.
-			if currentPath == prevPath {
-				continue
-			}
-
-			if _, ok := sources[prevPath]; !ok {
-				res = append(res, prevPath)
-			}
-		case "removed":
-			p := toURLPath(f.Name)
-			_, addedPath := addedPaths[p]
-			_, redirect := sources[p]
-			if !addedPath && !redirect {
-				res = append(res, p)
-			}
+		case github.StatusRenamed:
+			pathToCheck = toURLPath(f.PreviousName)
+		case github.StatusRemoved:
+			pathToCheck = toURLPath(f.Name)
+		default:
+			continue
 		}
+		if _, hasCurrentFilename := filenames[pathToCheck]; hasCurrentFilename {
+			continue
+		}
+		if _, hasSource := sources[pathToCheck]; !hasSource {
+			res = append(res, pathToCheck)
+		}
+
 	}
 	return res
 }
