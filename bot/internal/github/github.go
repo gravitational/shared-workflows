@@ -244,17 +244,17 @@ func (c *Client) ListReviewers(ctx context.Context, organization string, reposit
 
 // FileStatus indicates the operation that led to the current state of the file,
 // based on the value reported by the GitHub API.
-type FileStatus int
+type FileStatus string
 
 const (
-	StatusUnknown FileStatus = iota
-	StatusAdded
-	StatusRemoved
-	StatusModified
-	StatusRenamed
-	StatusCopied
-	StatusChanged
-	StatusUnchanged
+	StatusUnknown   FileStatus = ""
+	StatusAdded     FileStatus = "added"
+	StatusRemoved   FileStatus = "removed"
+	StatusModified  FileStatus = "modified"
+	StatusRenamed   FileStatus = "renamed"
+	StatusCopied    FileStatus = "copied"
+	StatusChanged   FileStatus = "changed"
+	StatusUnchanged FileStatus = "unchanged"
 )
 
 // fileStatusFromLabel retrieves the FileStatus that corresponds to the label
@@ -264,21 +264,11 @@ const (
 // See response schema for the current list of statuses:
 // https://docs.github.com/en/rest/pulls/pulls?apiVersion=2022-11-28#list-pull-requests-files
 func fileStatusFromLabel(name string) FileStatus {
-	switch name {
-	case "added":
-		return StatusAdded
-	case "removed":
-		return StatusRemoved
-	case "modified":
-		return StatusModified
-	case "renamed":
-		return StatusRenamed
-	case "copied":
-		return StatusCopied
-	case "changed":
-		return StatusChanged
-	case "unchanged":
-		return StatusUnchanged
+	status := FileStatus(name)
+	switch status {
+	case StatusAdded, StatusRemoved, StatusModified, StatusRenamed,
+		StatusCopied, StatusChanged, StatusUnchanged:
+		return status
 	default:
 		return StatusUnknown
 	}
