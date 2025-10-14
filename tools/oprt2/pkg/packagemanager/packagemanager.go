@@ -18,21 +18,18 @@ package packagemanager
 
 import (
 	"context"
-
-	"golang.org/x/sync/errgroup"
 )
+
+type PackagePublishingTask func(context.Context) error
 
 // PackageManager handles the publishing of all configured packages.
 type PackageManager interface {
-	// EnqueueForPublishing adds tasks to the error group for publishing packages.
-	EnqueueForPublishing(ctx context.Context, queue *errgroup.Group) error
+	// GetPackagePublishingTasks returns tasks for publishing packages.
+	GetPackagePublishingTasks(ctx context.Context) ([]PackagePublishingTask, error)
 
 	// Name is the name of the package manager.
 	Name() string
-}
 
-// ClosablePackageManager is a [PackageManager] that can be closed.
-type ClosablePackageManager interface {
-	PackageManager
+	// Close closes the package manager
 	Close(ctx context.Context) error
 }

@@ -27,7 +27,7 @@ import (
 
 	"github.com/alecthomas/kingpin/v2"
 	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/config"
-	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/logging"
+	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/packagemanager"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -62,7 +62,6 @@ func run(configFilePath string) (err error) {
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancel()
-	ctx = logging.ToCtx(ctx, logger)
 
 	authenticator, err := config.GetAttuneAuthenticator(c.Attune.Authentication)
 	if err != nil {
@@ -82,14 +81,14 @@ func run(configFilePath string) (err error) {
 		err = errors.Join(err, closerErr)
 	}()
 
-	packageManagers, closablePackageManagers, err := config.GetPackageManagers(ctx, c.PackageManagers, authenticator)
+	packageManagers, err := config.GetPackageManagers(ctx, c.PackageManagers, authenticator)
 	// Cleanup must occur for all created package managers even if an error is returned. This ensures that if some are
 	// created but some fail, the ones that were created don't leak.
 	defer func() {
 		logger.DebugContext(context.TODO(), "cleaning up package managers")
 
-		errs := make([]error, 0, len(closablePackageManagers))
-		for _, closablePackageManager := range closablePackageManagers {
+		errs := make([]error, 0, len(packageManagers))
+		for _, closablePackageManager := range packageManagers {
 			cleanupCtx, cancel := context.WithTimeout(context.Background(), time.Minute)
 			logger.DebugContext(cleanupCtx, "cleaning up package manager", "name", closablePackageManager.Name())
 
@@ -104,14 +103,24 @@ func run(configFilePath string) (err error) {
 		return fmt.Errorf("failed to load all package managers: %w", err)
 	}
 
-	// Publish with all configured package managers
+	// Collect package publishing tasks for all configured package managers
+	packagePublishingTasks := make([]packagemanager.PackagePublishingTask, 0)
+	for _, packageManager := range packageManagers {
+		tasks, err := packageManager.GetPackagePublishingTasks(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to collect publishing tasks for package manager %q: %w", packageManager.Name(), err)
+		}
+		packagePublishingTasks = append(packagePublishingTasks, tasks...)
+	}
+
+	// Run all publishing tasks
 	publishingQueue, queueContext := errgroup.WithContext(ctx)
 	publishingQueue.SetLimit(int(c.Attune.ParallelUploadLimit))
 
-	for _, packageManager := range packageManagers {
-		if err := packageManager.EnqueueForPublishing(queueContext, publishingQueue); err != nil {
-			return fmt.Errorf("failed to publish with package manager %q: %w", packageManager.Name(), err)
-		}
+	for _, task := range packagePublishingTasks {
+		publishingQueue.Go(func() error {
+			return task(queueContext)
+		})
 	}
 
 	if err := publishingQueue.Wait(); err != nil {

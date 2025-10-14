@@ -19,6 +19,7 @@ package filemanager
 import "context"
 
 // Handles storage and retrieval of items in a storage backend.
+// A storage backend is a system (e.g. filesystem, S3, etc.) responsible for storing retrieving data.
 // "Items" are pieces of data that can be stored and retrieved.
 // Paths with ".." are not allowed, and may result in unexpected behavior.
 type FileManager interface {
@@ -33,9 +34,7 @@ type FileManager interface {
 
 	// Name is the name of the file manager
 	Name() string
-}
 
-type ClosableFileManager interface {
-	FileManager
+	// Close closes the file manager.
 	Close() error
 }

@@ -24,6 +24,8 @@ import (
 	"os/exec"
 	"strings"
 
+	"log/slog"
+
 	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/logging"
 )
 
@@ -32,10 +34,7 @@ import (
 type Runner struct {
 	setupRan bool
 	hooks    []Hook
-	// setupHooks      []SetupHook
-	// preCommandHooks []PreCommandHook
-	// commandHooks    []CommandHook
-	// cleanupHooks    []CleanupHook
+	logger   *slog.Logger
 }
 
 type RunnerOption func(r *Runner)
@@ -49,8 +48,20 @@ func WithHooks(hooks ...Hook) RunnerOption {
 	}
 }
 
+// WithLogger sets the runner logger.
+func WithLogger(logger *slog.Logger) RunnerOption {
+	return func(r *Runner) {
+		if logger == nil {
+			logger = logging.DiscardLogger
+		}
+		r.logger = logger
+	}
+}
+
 func NewRunner(opts ...RunnerOption) *Runner {
-	r := &Runner{}
+	r := &Runner{
+		logger: logging.DiscardLogger,
+	}
 
 	for _, opt := range opts {
 		opt(r)
@@ -70,11 +81,9 @@ func (r *Runner) RegisterHook(h Hook) {
 // Close runs all cleanup hooks. This should always run, even if the
 // command errors.
 func (r *Runner) Close(ctx context.Context) error {
-	logger := logging.FromCtx(ctx)
-
 	errs := make([]error, 0, len(r.hooks))
 	for _, hook := range r.hooks {
-		logger.DebugContext(ctx, "running hook cleanup", "hook", hook.Name())
+		r.logger.DebugContext(ctx, "running hook cleanup", "hook", hook.Name())
 		errs = append(errs, hook.Cleanup(ctx))
 	}
 
@@ -83,10 +92,8 @@ func (r *Runner) Close(ctx context.Context) error {
 
 // Setup runs setup hooks. This will return after the first hook failure, or all hooks succeed.
 func (r *Runner) Setup(ctx context.Context) error {
-	logger := logging.FromCtx(ctx)
-
 	for _, hook := range r.hooks {
-		logger.DebugContext(ctx, "running hook setup", "hook", hook.Name())
+		r.logger.DebugContext(ctx, "running hook setup", "hook", hook.Name())
 		if err := hook.Setup(ctx); err != nil {
 			return fmt.Errorf("hook %q setup failed: %w", hook.Name(), err)
 		}
@@ -108,11 +115,9 @@ func (r *Runner) Run(ctx context.Context, name string, args ...string) error {
 		}
 	}
 
-	logger := logging.FromCtx(ctx)
-
 	// Allow hooks to modify the command or arguments
 	for _, hook := range r.hooks {
-		logger.DebugContext(ctx, "running hook pre-command", "hook", hook.Name())
+		r.logger.DebugContext(ctx, "running hook pre-command", "hook", hook.Name())
 		if err := hook.PreCommand(ctx, &name, &args); err != nil {
 			cmdString := buildCommandDebugString(exec.Command(name, args...))
 			return fmt.Errorf("hook %q pre-command failed for command %q: %w",
@@ -128,7 +133,7 @@ func (r *Runner) Run(ctx context.Context, name string, args ...string) error {
 
 	// Allow hooks to modify the command (add env vars, args, etc.)
 	for _, hook := range r.hooks {
-		logger.DebugContext(ctx, "running command hook", "hook", hook.Name())
+		r.logger.DebugContext(ctx, "running command hook", "hook", hook.Name())
 		if err := hook.Command(ctx, cmd); err != nil {
 			return fmt.Errorf("hook %q command failed on command %q: %w", buildCommandDebugString(cmd),
 				hook.Name(), err)
@@ -136,7 +141,7 @@ func (r *Runner) Run(ctx context.Context, name string, args ...string) error {
 	}
 
 	cmdDebugString := buildCommandDebugString(cmd)
-	logger.DebugContext(ctx, "running command", "command", cmdDebugString)
+	r.logger.DebugContext(ctx, "running command", "command", cmdDebugString)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("command %q failed: %w", cmdDebugString, err)
 	}

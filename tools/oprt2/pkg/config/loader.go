@@ -35,6 +35,6 @@ func GetAttuneAuthenticator(config Authenticator) (commandrunner.Hook, error) {
 	return nil, errors.New("not implemented")
 }
 
-func GetPackageManagers(ctx context.Context, configs []PackageManager, attuneAuthHooks ...commandrunner.Hook) ([]packagemanager.PackageManager, []packagemanager.ClosablePackageManager, error) {
-	return nil, nil, errors.New("not implemented")
+func GetPackageManagers(ctx context.Context, configs []PackageManager, attuneAuthHooks ...commandrunner.Hook) ([]packagemanager.PackageManager, error) {
+	return nil, errors.New("not implemented")
 }

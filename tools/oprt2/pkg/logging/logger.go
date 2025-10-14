@@ -17,30 +17,8 @@
 package logging
 
 import (
-	"context"
 	"log/slog"
 )
 
-// Recommended by linter check SA1029
-type loggerKeyType string
-
-const loggerKey loggerKeyType = "logger"
-
 // DiscardLogger is a logger that discards all log data.
 var DiscardLogger = slog.New(slog.DiscardHandler)
-
-// ToCtx creates a new context with the logger.
-func ToCtx(ctx context.Context, logger *slog.Logger) context.Context {
-	return context.WithValue(ctx, loggerKey, logger)
-}
-
-// FromCtx retrieves the logger from the context. If nil, a no-op logger will be returned.
-func FromCtx(ctx context.Context) *slog.Logger {
-	logger := ctx.Value(loggerKey)
-
-	if slogger, ok := logger.(*slog.Logger); ok && slogger != nil {
-		return slogger
-	}
-
-	return DiscardLogger
-}
