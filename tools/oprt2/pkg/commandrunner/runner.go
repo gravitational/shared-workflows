@@ -30,11 +30,12 @@ import (
 // Runner executes a command, running any registered hooks at the appropriate time.
 // Runner MUST be closed prior to program termination.
 type Runner struct {
-	setupRan        bool
-	setupHooks      []SetupHook
-	preCommandHooks []PreCommandHook
-	commandHooks    []CommandHook
-	cleanupHooks    []CleanupHook
+	setupRan bool
+	hooks    []Hook
+	// setupHooks      []SetupHook
+	// preCommandHooks []PreCommandHook
+	// commandHooks    []CommandHook
+	// cleanupHooks    []CleanupHook
 }
 
 type RunnerOption func(r *Runner)
@@ -63,21 +64,7 @@ func (r *Runner) RegisterHook(h Hook) {
 		return
 	}
 
-	if setupHook, ok := h.(SetupHook); ok {
-		r.setupHooks = append(r.setupHooks, setupHook)
-	}
-
-	if preCommandHook, ok := h.(PreCommandHook); ok {
-		r.preCommandHooks = append(r.preCommandHooks, preCommandHook)
-	}
-
-	if commandHook, ok := h.(CommandHook); ok {
-		r.commandHooks = append(r.commandHooks, commandHook)
-	}
-
-	if cleanupHook, ok := h.(CleanupHook); ok {
-		r.cleanupHooks = append(r.cleanupHooks, cleanupHook)
-	}
+	r.hooks = append(r.hooks, h)
 }
 
 // Close runs all cleanup hooks. This should always run, even if the
@@ -85,10 +72,10 @@ func (r *Runner) RegisterHook(h Hook) {
 func (r *Runner) Close(ctx context.Context) error {
 	logger := logging.FromCtx(ctx)
 
-	errs := make([]error, 0, len(r.cleanupHooks))
-	for _, cleanupHook := range r.cleanupHooks {
-		logger.DebugContext(ctx, "running cleanup hook", "hook", cleanupHook.Name())
-		errs = append(errs, cleanupHook.Cleanup(ctx))
+	errs := make([]error, 0, len(r.hooks))
+	for _, hook := range r.hooks {
+		logger.DebugContext(ctx, "running hook cleanup", "hook", hook.Name())
+		errs = append(errs, hook.Cleanup(ctx))
 	}
 
 	return errors.Join(errs...)
@@ -98,10 +85,10 @@ func (r *Runner) Close(ctx context.Context) error {
 func (r *Runner) Setup(ctx context.Context) error {
 	logger := logging.FromCtx(ctx)
 
-	for _, setupHook := range r.setupHooks {
-		logger.DebugContext(ctx, "running setup hook", "hook", setupHook.Name())
-		if err := setupHook.Setup(ctx); err != nil {
-			return fmt.Errorf("setup hook %q failed: %w", setupHook.Name(), err)
+	for _, hook := range r.hooks {
+		logger.DebugContext(ctx, "running hook setup", "hook", hook.Name())
+		if err := hook.Setup(ctx); err != nil {
+			return fmt.Errorf("hook %q setup failed: %w", hook.Name(), err)
 		}
 	}
 
@@ -124,12 +111,12 @@ func (r *Runner) Run(ctx context.Context, name string, args ...string) error {
 	logger := logging.FromCtx(ctx)
 
 	// Allow hooks to modify the command or arguments
-	for _, preCommandHook := range r.preCommandHooks {
-		logger.DebugContext(ctx, "running pre-command hook", "hook", preCommandHook.Name())
-		if err := preCommandHook.PreCommand(ctx, &name, &args); err != nil {
+	for _, hook := range r.hooks {
+		logger.DebugContext(ctx, "running hook pre-command", "hook", hook.Name())
+		if err := hook.PreCommand(ctx, &name, &args); err != nil {
 			cmdString := buildCommandDebugString(exec.Command(name, args...))
-			return fmt.Errorf("pre-command hook %q failed for command %q: %w",
-				preCommandHook.Name(), cmdString, err)
+			return fmt.Errorf("hook %q pre-command failed for command %q: %w",
+				hook.Name(), cmdString, err)
 		}
 	}
 
@@ -140,11 +127,11 @@ func (r *Runner) Run(ctx context.Context, name string, args ...string) error {
 	cmd.Stdin = os.Stdin
 
 	// Allow hooks to modify the command (add env vars, args, etc.)
-	for _, commandHook := range r.commandHooks {
-		logger.DebugContext(ctx, "running command hook", "hook", commandHook.Name())
-		if err := commandHook.Command(ctx, cmd); err != nil {
-			return fmt.Errorf("command hook %q failed on command %q: %w", buildCommandDebugString(cmd),
-				commandHook.Name(), err)
+	for _, hook := range r.hooks {
+		logger.DebugContext(ctx, "running command hook", "hook", hook.Name())
+		if err := hook.Command(ctx, cmd); err != nil {
+			return fmt.Errorf("hook %q command failed on command %q: %w", buildCommandDebugString(cmd),
+				hook.Name(), err)
 		}
 	}
 

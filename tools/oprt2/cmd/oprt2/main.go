@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/alecthomas/kingpin/v2"
-	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/commandrunner"
 	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/config"
 	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/logging"
 	"golang.org/x/sync/errgroup"
@@ -35,20 +34,30 @@ import (
 const EnvVarPrefix = "OPRT2_"
 
 func main() {
-	if err := run(os.Args[1:]); err != nil {
+	var configFilePath string
+
+	kingpin.Flag("config-file", "Path to the config file.").
+		Short('c').
+		Envar(EnvVarPrefix + "CONFIG_FILE").
+		Default("config.yaml").
+		StringVar(&configFilePath)
+
+	kingpin.MustParse(kingpin.CommandLine.Parse(os.Args[1:]))
+
+	if err := run(configFilePath); err != nil {
 		log.Fatalf("%v", err)
 	}
 }
 
-func run(args []string) (err error) {
-	c, err := loadConfig(args)
+func run(configFilePath string) (err error) {
+	c, err := loadConfig(configFilePath)
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
 	logger, err := config.GetLogger(c.Logger)
 	if err != nil {
-		return fmt.Errorf("failed to create logger")
+		return fmt.Errorf("failed to create logger: %w", err)
 	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
@@ -61,19 +70,17 @@ func run(args []string) (err error) {
 	}
 
 	// Ensure that the cleanup hook is always run. This is important to avoid leaking Attune credentials.
-	if closer, ok := authenticator.(commandrunner.CleanupHook); ok {
-		defer func() {
-			cleanupCtx, cancel := context.WithTimeout(context.Background(), time.Minute)
-			defer cancel()
-			logger.DebugContext(cleanupCtx, "cleaning up authenticator")
+	defer func() {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		logger.DebugContext(cleanupCtx, "cleaning up authenticator")
 
-			closerErr := closer.Cleanup(cleanupCtx)
-			if closerErr != nil {
-				closerErr = fmt.Errorf("failed to close authenticator, credentials may be leaked: %w", closerErr)
-			}
-			err = errors.Join(err, closerErr)
-		}()
-	}
+		closerErr := authenticator.Cleanup(cleanupCtx)
+		if closerErr != nil {
+			closerErr = fmt.Errorf("failed to close authenticator, credentials may be leaked: %w", closerErr)
+		}
+		err = errors.Join(err, closerErr)
+	}()
 
 	packageManagers, closablePackageManagers, err := config.GetPackageManagers(ctx, c.PackageManagers, authenticator)
 	// Cleanup must occur for all created package managers even if an error is returned. This ensures that if some are
@@ -84,7 +91,7 @@ func run(args []string) (err error) {
 		errs := make([]error, 0, len(closablePackageManagers))
 		for _, closablePackageManager := range closablePackageManagers {
 			cleanupCtx, cancel := context.WithTimeout(context.Background(), time.Minute)
-			logger.DebugContext(cleanupCtx, fmt.Sprintf("cleaining up %s", closablePackageManager.Name()))
+			logger.DebugContext(cleanupCtx, "cleaning up package manager", "name", closablePackageManager.Name())
 
 			errs = append(errs, closablePackageManager.Close(cleanupCtx))
 			cancel()
@@ -114,17 +121,7 @@ func run(args []string) (err error) {
 	return nil
 }
 
-func loadConfig(args []string) (*config.OPRT2, error) {
-	var configFilePath string
-
-	kingpin.Flag("config-file", "Path to the config file.").
-		Short('c').
-		Envar(EnvVarPrefix + "CONFIG_FILE").
-		Default("config.yaml").
-		StringVar(&configFilePath)
-
-	kingpin.MustParse(kingpin.CommandLine.Parse(args))
-
+func loadConfig(configFilePath string) (*config.OPRT2, error) {
 	config, err := config.ParseOPRT2ConfigFile(configFilePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse config file at %q: %w", configFilePath, err)

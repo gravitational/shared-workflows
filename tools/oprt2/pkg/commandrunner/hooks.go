@@ -25,33 +25,16 @@ import (
 // of a command execution's lifecycle.
 type Hook interface {
 	Name() string
-}
-
-// Runs once, prior to executing any CLI commands. If this errors,
-// the command is never called.
-type SetupHook interface {
-	Hook
+	// Runs once, prior to executing any CLI commands.
+	// If this errors, the command is never called.
 	Setup(ctx context.Context) error
-}
-
-// Runs once per CLI command, prior to building the command.
-// If this errors, the command is not called.
-// This can be useful for prepending arguments.
-type PreCommandHook interface {
-	Hook
+	// Runs once per CLI command, prior to building the command.
+	// If this errors, the command is not called.
+	// This can be useful for prepending arguments.
 	PreCommand(ctx context.Context, name *string, args *[]string) error
-}
-
-// Runs once per CLI command, prior to the command executing.
-// If this errors, the command is not called.
-type CommandHook interface {
-	Hook
+	// Runs once per CLI command, prior to the command executing.
+	// If this errors, the command is not called.
 	Command(ctx context.Context, cmd *exec.Cmd) error
-}
-
-// Called after all CLI commands have been executed, even if
-// an error occurs.
-type CleanupHook interface {
-	Hook
+	// Called after all CLI commands have been executed, even if an error occurs.
 	Cleanup(ctx context.Context) error
 }
