@@ -1,5 +1,5 @@
 OS ?= $(shell uname -s | tr '[[:upper:]]' '[[:lower:]]')
-ARCH ?= $(shell uname -m)
+ARCH ?= $(shell uname -m | sed 's/aarch64/arm64/')
 TOOL_NAME ?= unnamed-dev-tool
 BUILD_DIR = build/$(OS)/$(ARCH)
 PACKAGE_PATH ?= ./...
@@ -24,10 +24,13 @@ lint:
 test:
 	@gotestsum $(if $(GITHUB_ACTIONS),--format github-actions) ./... -- -count 100 -shuffle on -timeout 2m -race
 
-binary:
+generate:
+	@go generate ./...
+
+binary: generate
 	@echo "Building for $(OS)/$(ARCH) and writing to $(BUILD_DIR)"
 	@mkdir -p "$(BUILD_DIR)"
-	@CGO_ENABLED=0 GOOS=$(OS) GOARCH=$(ARCH) go build -o "$(BUILD_DIR)/" -ldflags="-s -w" "$(PACKAGE_PATH)"
+	@CGO_ENABLED=0 GOOS=$(OS) GOARCH=$(ARCH) go build -o "$(BUILD_DIR)/$(BINARY_NAME)" -ldflags="-s -w" "$(PACKAGE_PATH)"
 
 tarball: TARBALL_NAME = $(TOOL_NAME)-$(VERSION)-$(OS)-$(ARCH).tar.gz
 tarball: binary
@@ -42,4 +45,4 @@ clean:
 	@rm -rf build/
 	@docker image rm -f "$(TOOL_NAME):$(CONTAINER_VERSION)" 2> /dev/null > /dev/null
 
-.PHONY: print-tool-name print-version lint test binary tarball container-image clean
+.PHONY: print-tool-name print-version lint test generate binary tarball container-image clean
