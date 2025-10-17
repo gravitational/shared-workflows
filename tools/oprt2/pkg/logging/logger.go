@@ -17,8 +17,15 @@
 package logging
 
 import (
+	"errors"
 	"log/slog"
+
+	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/config"
 )
 
 // DiscardLogger is a logger that discards all log data.
 var DiscardLogger = slog.New(slog.DiscardHandler)
+
+func NewLogger(config.Logger) (*slog.Logger, error) {
+	return nil, errors.New("not implemented")
+}

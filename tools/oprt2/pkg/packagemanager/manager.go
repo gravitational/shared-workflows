@@ -14,27 +14,30 @@
  *  limitations under the License.
  */
 
-package config
+package packagemanager
 
 import (
 	"context"
 	"errors"
-	"log/slog"
 
 	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/commandrunner"
-	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/packagemanager"
+	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/config"
 )
 
-// Instantiate business types for each config type.
+type PackagePublishingTask func(context.Context) error
 
-func GetLogger(config *Logger) (*slog.Logger, error) {
-	return nil, errors.New("not implemented")
+// Manager handles the publishing of all configured packages.
+type Manager interface {
+	// GetPackagePublishingTasks returns tasks for publishing packages.
+	GetPackagePublishingTasks(ctx context.Context) ([]PackagePublishingTask, error)
+
+	// Name is the name of the package manager.
+	Name() string
+
+	// Close closes the package manager
+	Close(ctx context.Context) error
 }
 
-func GetAttuneAuthenticator(config Authenticator) (commandrunner.Hook, error) {
-	return nil, errors.New("not implemented")
-}
-
-func GetPackageManagers(ctx context.Context, configs []PackageManager, attuneAuthHooks ...commandrunner.Hook) ([]packagemanager.PackageManager, error) {
+func FromConfig(ctx context.Context, config config.PackageManager, attuneAuthHooks ...commandrunner.Hook) (Manager, error) {
 	return nil, errors.New("not implemented")
 }

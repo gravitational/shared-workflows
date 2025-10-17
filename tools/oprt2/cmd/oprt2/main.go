@@ -26,7 +26,9 @@ import (
 	"time"
 
 	"github.com/alecthomas/kingpin/v2"
+	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/attunehooks/authenticators"
 	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/config"
+	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/logging"
 	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/packagemanager"
 	"golang.org/x/sync/errgroup"
 )
@@ -55,7 +57,7 @@ func run(configFilePath string) (err error) {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	logger, err := config.GetLogger(c.Logger)
+	logger, err := logging.NewLogger(*c.Logger)
 	if err != nil {
 		return fmt.Errorf("failed to create logger: %w", err)
 	}
@@ -63,7 +65,7 @@ func run(configFilePath string) (err error) {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancel()
 
-	authenticator, err := config.GetAttuneAuthenticator(c.Attune.Authentication)
+	authenticator, err := authenticators.FromConfig(c.Attune.Authentication)
 	if err != nil {
 		return fmt.Errorf("failed to get Attune authenticator: %w", err)
 	}
@@ -81,7 +83,17 @@ func run(configFilePath string) (err error) {
 		err = errors.Join(err, closerErr)
 	}()
 
-	packageManagers, err := config.GetPackageManagers(ctx, c.PackageManagers, authenticator)
+	// Build a list of package managers based on the config
+	packageManagers := make([]packagemanager.Manager, 0, len(c.PackageManagers))
+	for _, packageManagerConfig := range c.PackageManagers {
+		packageManager, err := packagemanager.FromConfig(ctx, packageManagerConfig, authenticator)
+		if err != nil {
+			return fmt.Errorf("failed to create package manager from config: %w", err)
+		}
+
+		packageManagers = append(packageManagers, packageManager)
+	}
+
 	// Cleanup must occur for all created package managers even if an error is returned. This ensures that if some are
 	// created but some fail, the ones that were created don't leak.
 	defer func() {
