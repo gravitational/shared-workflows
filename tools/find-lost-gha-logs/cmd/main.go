@@ -134,7 +134,7 @@ func getRepoResults(tracker *repoTracker, org, repo string, days int) string {
 			continue
 		}
 
-		lines = append(lines, fmt.Sprintf("* [%s](%s) (%d runs):", workflow.workflow.GetName(), workflow.workflow.GetHTMLURL(), len(workflow.runs)))
+		lines = append(lines, fmt.Sprintf("* [%s](%s) (%d total runs):", workflow.workflow.GetName(), workflow.workflow.GetHTMLURL(), len(workflow.runs)))
 		for _, run := range workflow.runs {
 			if len(run.jobsMissingLogs) == 0 {
 				continue
