@@ -80,13 +80,13 @@ func getFlags() (org, repo, githubToken string, opts githubOpts, err error) {
 
 	flag.Parse()
 
-	if githubToken == "" {
+	if githubToken == "${GITHUB_TOKEN}" {
 		// Don't use this as the flag default value to prevent logging it to stdout when `--help` is provided
 		githubToken = os.Getenv("GITHUB_TOKEN")
+	}
 
-		if githubToken == "" {
-			return org, repo, githubToken, opts, errors.New("github token not provided and GITHUB_TOKEN is unset")
-		}
+	if githubToken == "" {
+		return org, repo, githubToken, opts, errors.New("github token not provided and GITHUB_TOKEN is unset")
 	}
 
 	return
