@@ -127,7 +127,9 @@ func run(configFilePath string) (err error) {
 
 	// Run all publishing tasks
 	publishingQueue, queueContext := errgroup.WithContext(ctx)
-	publishingQueue.SetLimit(int(c.Attune.ParallelUploadLimit))
+	if c.Attune.ParallelUploadLimit > 0 {
+		publishingQueue.SetLimit(int(c.Attune.ParallelUploadLimit))
+	}
 
 	for _, task := range packagePublishingTasks {
 		publishingQueue.Go(func() error {

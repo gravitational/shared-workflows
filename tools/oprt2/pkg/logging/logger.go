@@ -26,6 +26,7 @@ import (
 // DiscardLogger is a logger that discards all log data.
 var DiscardLogger = slog.New(slog.DiscardHandler)
 
+// NewLogger creates a new logger from the provided config.
 func NewLogger(config.Logger) (*slog.Logger, error) {
 	return nil, errors.New("not implemented")
 }

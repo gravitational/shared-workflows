@@ -23,6 +23,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 
 	"log/slog"
 
@@ -32,9 +33,10 @@ import (
 // Runner executes a command, running any registered hooks at the appropriate time.
 // Runner MUST be closed prior to program termination.
 type Runner struct {
-	setupRan bool
-	hooks    []Hook
-	logger   *slog.Logger
+	setupLock sync.Mutex
+	setupRan  bool
+	hooks     []Hook
+	logger    *slog.Logger
 }
 
 type RunnerOption func(r *Runner)
@@ -58,6 +60,7 @@ func WithLogger(logger *slog.Logger) RunnerOption {
 	}
 }
 
+// NewRunner creates a new command runner.
 func NewRunner(opts ...RunnerOption) *Runner {
 	r := &Runner{
 		logger: logging.DiscardLogger,
@@ -70,6 +73,7 @@ func NewRunner(opts ...RunnerOption) *Runner {
 	return r
 }
 
+// Register hooks adds a hook to the command lifecycle.
 func (r *Runner) RegisterHook(h Hook) {
 	if h == nil {
 		return
@@ -91,7 +95,15 @@ func (r *Runner) Close(ctx context.Context) error {
 }
 
 // Setup runs setup hooks. This will return after the first hook failure, or all hooks succeed.
+// If setup has already been ran successfully once, it will not run again and will return nil.
 func (r *Runner) Setup(ctx context.Context) error {
+	r.setupLock.Lock()
+	defer r.setupLock.Unlock()
+
+	if r.setupRan {
+		return nil
+	}
+
 	for _, hook := range r.hooks {
 		r.logger.DebugContext(ctx, "running hook setup", "hook", hook.Name())
 		if err := hook.Setup(ctx); err != nil {
@@ -109,10 +121,8 @@ func (r *Runner) Setup(ctx context.Context) error {
 // all associated command have been ran.
 func (r *Runner) Run(ctx context.Context, name string, args ...string) error {
 	// Ensure setup has ran successfully at least once
-	if !r.setupRan {
-		if err := r.Setup(ctx); err != nil {
-			return fmt.Errorf("setup failed: %w", err)
-		}
+	if err := r.Setup(ctx); err != nil {
+		return fmt.Errorf("setup failed: %w", err)
 	}
 
 	// Allow hooks to modify the command or arguments
@@ -152,20 +162,7 @@ func (r *Runner) Run(ctx context.Context, name string, args ...string) error {
 // buildCommandDebugString builds a textual version of cmd for debug logging.
 // This should never be directly executed.
 func buildCommandDebugString(cmd *exec.Cmd) string {
-	if cmd == nil {
-		return ""
-	}
-
 	// This is the same as `cmd.String()` but it includes env vars
 	// Example: VAR1=val1 VAR2=val2 /path/to/command --with args
-	commandTextBuilder := new(strings.Builder)
-	for _, envVar := range cmd.Env {
-		// The current implementation will never return a a non-nil error, and
-		// handling one would just complicate this logic without much added value
-		_, _ = commandTextBuilder.WriteString(envVar)
-		_, _ = commandTextBuilder.WriteRune(' ')
-	}
-	commandTextBuilder.WriteString(cmd.String())
-
-	return commandTextBuilder.String()
+	return strings.Join(append(cmd.Env, cmd.String()), " ")
 }

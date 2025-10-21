@@ -16,22 +16,31 @@
 
 package config
 
+// Authenticator defines Attune authentication configuration.
 type Authenticator struct {
 	// Not implemented
 }
+
+// PackageManager defines package manager configuration.
 type PackageManager struct {
 	// Not implemented
 }
 
+// Attune defines Attune publishing configuration.
 type Attune struct {
-	Authentication      Authenticator
+	// Authentication defines Attune authentication configuration.
+	Authentication Authenticator
+	// ParallelUploadLimit is the maximum number of packages to try to upload to the Attune
+	// control plane at once. If unset, there will be no upload limit.
 	ParallelUploadLimit uint
 }
 
+// Logger defines logging options for the tool.
 type Logger struct {
 	// Not implemented
 }
 
+// OPRT2 defines the tool's configuration.
 type OPRT2 struct {
 	Logger          *Logger
 	Attune          Attune

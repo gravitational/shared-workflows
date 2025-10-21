@@ -38,6 +38,7 @@ type Manager interface {
 	Close(ctx context.Context) error
 }
 
+// FromConfig builds a new package manager from the provided config, adding any provided authentication hooks.
 func FromConfig(ctx context.Context, config config.PackageManager, attuneAuthHooks ...commandrunner.Hook) (Manager, error) {
 	return nil, errors.New("not implemented")
 }
