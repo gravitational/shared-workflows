@@ -177,8 +177,6 @@ func processWorkflow(ctx context.Context, client *github.Client, org, repo strin
 		workflow: workflow,
 	}
 
-	tracker.runsChecked++
-
 	workflowID := workflow.GetID()
 	if workflowID == 0 {
 		return tracker, nil
@@ -186,6 +184,8 @@ func processWorkflow(ctx context.Context, client *github.Client, org, repo strin
 
 	runs := failedRunRetriever(ctx, client, org, repo, workflowID, opts.daysToCheck)
 	for run := range runs.All() {
+		tracker.runsChecked++
+
 		runTracker, err := processRun(ctx, client, org, repo, run, opts)
 		if err != nil {
 			return tracker, fmt.Errorf("failed to process workflow run %d failed: %w", run.GetID(), err)
