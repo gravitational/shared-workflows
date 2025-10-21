@@ -145,6 +145,7 @@ func getRepoResults(tracker *repoTracker, org, repo string, days int) string {
 			}
 		}
 	}
+	lines = append(lines, "")
 
 	return strings.Join(lines, "\n")
 }
