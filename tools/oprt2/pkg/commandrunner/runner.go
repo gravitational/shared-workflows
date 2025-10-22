@@ -39,13 +39,15 @@ type Runner struct {
 	logger    *slog.Logger
 }
 
+// RunnerOption provides optional configuration to the runner.
 type RunnerOption func(r *Runner)
 
 // WithHooks adds hooks to the new runner.
 func WithHooks(hooks ...Hook) RunnerOption {
 	return func(r *Runner) {
 		for _, hook := range hooks {
-			r.RegisterHook(hook)
+			// This will never error under the intended use case (called from `NewRunner`)
+			_ = r.RegisterHook(hook)
 		}
 	}
 }
@@ -74,12 +76,19 @@ func NewRunner(opts ...RunnerOption) *Runner {
 }
 
 // Register hooks adds a hook to the command lifecycle.
-func (r *Runner) RegisterHook(h Hook) {
+func (r *Runner) RegisterHook(h Hook) error {
 	if h == nil {
-		return
+		return nil
 	}
 
+	r.setupLock.Lock()
+	if r.setupRan {
+		return errors.New("hooks cannot be added after setup has ran")
+	}
+	defer r.setupLock.Unlock()
+
 	r.hooks = append(r.hooks, h)
+	return nil
 }
 
 // Close runs all cleanup hooks. This should always run, even if the
