@@ -35,6 +35,7 @@ type Runner struct {
 	logger *slog.Logger
 }
 
+// RunnerOption provides optional configuration to the runner.
 type RunnerOption func(r *Runner)
 
 // WithHooks adds hooks to the new runner.
