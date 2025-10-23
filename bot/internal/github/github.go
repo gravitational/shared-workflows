@@ -637,9 +637,25 @@ func (c *Client) CreateComment(ctx context.Context, organization string, reposit
 	return nil
 }
 
+// EditComment will edit an existing comment on an Issue or Pull Request.
+func (c *Client) EditComment(ctx context.Context, organization string, repository string, id int64, comment string) error {
+	_, _, err := c.client.Issues.EditComment(ctx,
+		organization,
+		repository,
+		id,
+		&go_github.IssueComment{
+			Body: &comment,
+		})
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	return nil
+}
+
 // Comment represents an "issue comment" on a GitHub issue or pull request.
 // This does not include comments that are part of reviews.
 type Comment struct {
+	ID     int64  // the ID of the comment
 	Author string // the GitHub username of the author
 	Body   string // the text of the comment
 
@@ -671,6 +687,7 @@ func (c *Client) ListComments(ctx context.Context, organization string, reposito
 
 		for _, comment := range comments {
 			result = append(result, Comment{
+				ID:        comment.GetID(),
 				Body:      comment.GetBody(),
 				Author:    comment.GetUser().GetLogin(),
 				CreatedAt: comment.GetCreatedAt(),

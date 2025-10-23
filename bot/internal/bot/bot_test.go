@@ -519,6 +519,16 @@ func (f *fakeGithub) CreateComment(ctx context.Context, organization string, rep
 	return nil
 }
 
+func (f *fakeGithub) EditComment(ctx context.Context, organization string, repository string, commentID int64, comment string) error {
+	for i, c := range f.comments {
+		if c.ID == commentID {
+			f.comments[i].Body = comment
+			return nil
+		}
+	}
+	return nil
+}
+
 func (f *fakeGithub) ListComments(ctx context.Context, organization string, repository string, number int) ([]github.Comment, error) {
 	return f.comments, nil
 }
