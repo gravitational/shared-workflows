@@ -32,6 +32,7 @@ type GPGProvider struct {
 }
 
 // APT defines configuration for APT repo management.
+// For APT repo documentation, see https://wiki.debian.org/DebianRepository/Format.
 type APT struct {
 	// FileSource is where Debian packages (*.deb files) will be pulled from.
 	FileSource FileManager
@@ -59,7 +60,7 @@ type Attune struct {
 	// Authentication defines Attune authentication configuration.
 	Authentication Authenticator
 	// ParallelUploadLimit is the maximum number of packages to try to upload to the Attune
-	// control plane at once. If unset, there will be no upload limit. Optioonal.
+	// control plane at once. If unset, there will be no upload limit. Optional.
 	ParallelUploadLimit uint
 }
 

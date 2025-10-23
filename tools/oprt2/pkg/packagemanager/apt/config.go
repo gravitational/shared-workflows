@@ -35,7 +35,7 @@ func FromConfig(ctx context.Context, config config.APT, logger *slog.Logger, att
 		return nil, fmt.Errorf("failed to create file manager from config: %w", err)
 	}
 
-	components, err := getAPTComponents(config.Components)
+	components, err := getAPTComponentsFromConfig(config.Components)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get APT components: %w", err)
 	}
@@ -53,7 +53,10 @@ func FromConfig(ctx context.Context, config config.APT, logger *slog.Logger, att
 	return apt, nil
 }
 
-func getAPTComponents(config map[string][]string) (map[string][]*regexp.Regexp, error) {
+// getAPTComponentsFromConfig converts the input map of component name, component file matchers to
+// an output map of component name, component file matcher regexp instances. An error is returned if
+// any of the provided component file matcher strings cannot be compiled into a regular expression.
+func getAPTComponentsFromConfig(config map[string][]string) (map[string][]*regexp.Regexp, error) {
 	components := make(map[string][]*regexp.Regexp, len(config))
 	for componentName, fileMatchers := range config {
 		fileMatcherExpressions := make([]*regexp.Regexp, 0, len(fileMatchers))
