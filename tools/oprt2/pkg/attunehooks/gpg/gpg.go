@@ -14,22 +14,15 @@
  *  limitations under the License.
  */
 
-package packagemanager
+package gpg
 
 import (
-	"context"
+	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/commandrunner"
+	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/config"
 )
 
-type PackagePublishingTask func(context.Context) error
-
-// Manager handles the publishing of all configured packages.
-type Manager interface {
-	// GetPackagePublishingTasks returns tasks for publishing packages.
-	GetPackagePublishingTasks(ctx context.Context) ([]PackagePublishingTask, error)
-
-	// Name is the name of the package manager.
-	Name() string
-
-	// Close closes the package manager
-	Close(ctx context.Context) error
+// FromConfig builds a new GPG provider from the given config.
+func FromConfig(config *config.GPGProvider) commandrunner.Hook {
+	// Not implemented
+	return nil
 }

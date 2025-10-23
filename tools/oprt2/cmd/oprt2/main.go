@@ -30,6 +30,7 @@ import (
 	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/config"
 	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/logging"
 	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/packagemanager"
+	packagemanagerloader "github.com/gravitational/shared-workflows/tools/oprt2/pkg/packagemanager/loader"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -86,7 +87,7 @@ func run(configFilePath string) (err error) {
 	// Build a list of package managers based on the config
 	packageManagers := make([]packagemanager.Manager, 0, len(c.PackageManagers))
 	for _, packageManagerConfig := range c.PackageManagers {
-		packageManager, err := packagemanager.FromConfig(ctx, packageManagerConfig, authenticator)
+		packageManager, err := packagemanagerloader.FromConfig(ctx, packageManagerConfig, logger, authenticator)
 		if err != nil {
 			return fmt.Errorf("failed to create package manager from config: %w", err)
 		}
