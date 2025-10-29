@@ -159,11 +159,11 @@ func processRepo(ctx context.Context, client *github.Client, org, repo string, o
 	workflows := workflowRetriever(ctx, client, org, repo)
 	for workflow := range workflows.All() {
 		workflowTracker, err := processWorkflow(ctx, client, org, repo, workflow, opts)
+		tracker.workflows = append(tracker.workflows, workflowTracker)
+
 		if err != nil {
 			return tracker, fmt.Errorf("failed to process workflow %d: %w", workflow.GetID(), err)
 		}
-
-		tracker.workflows = append(tracker.workflows, workflowTracker)
 	}
 
 	if err := workflows.Err(); err != nil {
@@ -183,9 +183,16 @@ func processWorkflow(ctx context.Context, client *github.Client, org, repo strin
 		return tracker, nil
 	}
 
-	runs := failedRunRetriever(ctx, client, org, repo, workflowID, opts.daysToCheck)
+	runs := runRetriever(ctx, client, org, repo, workflowID, opts.daysToCheck)
 	for run := range runs.All() {
 		tracker.runsChecked++
+
+		// Filter out workflow runs that succeeded on the first attempt. If either of these are
+		// false, the workflow run MAY have failed, if either the first and only attempt failed,
+		// or if there are multiple attempts.
+		if run.GetRunAttempt() == 1 && run.GetConclusion() == "success" {
+			continue
+		}
 
 		runTracker, err := processRun(ctx, client, org, repo, run, opts)
 		if err != nil {
@@ -288,10 +295,10 @@ func workflowRetriever(ctx context.Context, client *github.Client, org, repo str
 		return workflows.Workflows, response, err
 	}
 
-	return ghiter.NewFromFn(rateLimitRetry(getWorkflowsFunc)).Ctx(ctx)
+	return ghiter.NewFromFn(retry(getWorkflowsFunc)).Ctx(ctx)
 }
 
-func failedRunRetriever(ctx context.Context, client *github.Client, org, repo string, workflowID int64, daysToCheck int) *ghiter.Iterator[*github.WorkflowRun, *github.ListWorkflowRunsOptions] {
+func runRetriever(ctx context.Context, client *github.Client, org, repo string, workflowID int64, daysToCheck int) *ghiter.Iterator[*github.WorkflowRun, *github.ListWorkflowRunsOptions] {
 	getRunsFunc := func(ctx context.Context, opts *github.ListWorkflowRunsOptions) ([]*github.WorkflowRun, *github.Response, error) {
 		runs, response, err := client.Actions.ListWorkflowRunsByID(ctx, org, repo, workflowID, opts)
 		if runs == nil {
@@ -301,13 +308,16 @@ func failedRunRetriever(ctx context.Context, client *github.Client, org, repo st
 		return runs.WorkflowRuns, response, err
 	}
 
+	// This must check _all_ completed workflows, not just failed ones. If workflows fail multiple times and are retried,
+	// and the last one suceed, then all runs are marked as succeeded. Because of this, all must be retrieved and filitered
+	// locally by the caller.
 	startDate := time.Now().AddDate(0, 0, -daysToCheck)
 	opts := &github.ListWorkflowRunsOptions{
-		Status:  "failure",
+		Status:  "completed",
 		Created: ">" + startDate.Format("2006-01-02"),
 	}
 
-	return ghiter.NewFromFn(rateLimitRetry(getRunsFunc)).Ctx(ctx).Opts(opts)
+	return ghiter.NewFromFn(retry(getRunsFunc)).Ctx(ctx).Opts(opts)
 }
 
 func jobRetriever(ctx context.Context, client *github.Client, org, repo string, runID int64) *ghiter.Iterator[*github.WorkflowJob, *github.ListWorkflowJobsOptions] {
@@ -321,12 +331,19 @@ func jobRetriever(ctx context.Context, client *github.Client, org, repo string, 
 	}
 
 	opts := &github.ListWorkflowJobsOptions{
+		// Check previous job executions
 		Filter: "all",
 	}
 
-	return ghiter.NewFromFn(rateLimitRetry(getJobsFunc)).Ctx(ctx).Opts(opts)
+	return ghiter.NewFromFn(retry(getJobsFunc)).Ctx(ctx).Opts(opts)
 }
 
+// retry handles retrying when hitting rate limits or 5xx errors.
+func retry[T, O any](fn func(ctx context.Context, opt O) ([]T, *github.Response, error)) func(ctx context.Context, opt O) ([]T, *github.Response, error) {
+	return rateLimitRetry(serverErrorRetry(fn))
+}
+
+// rateLimitRetry retries when hitting the API rate limit, waiting based off of the time until more API credits are available.
 func rateLimitRetry[T, O any](fn func(ctx context.Context, opt O) ([]T, *github.Response, error)) func(ctx context.Context, opt O) ([]T, *github.Response, error) {
 	return func(ctx context.Context, opt O) ([]T, *github.Response, error) {
 		for {
@@ -345,6 +362,29 @@ func rateLimitRetry[T, O any](fn func(ctx context.Context, opt O) ([]T, *github.
 					case <-retryTicker.C:
 						continue
 					}
+				}
+			}
+
+			return result, response, err
+		}
+	}
+}
+
+// serverErrorRetry retries when receiving a server-side error.
+func serverErrorRetry[T, O any](fn func(ctx context.Context, opt O) ([]T, *github.Response, error)) func(ctx context.Context, opt O) ([]T, *github.Response, error) {
+	return func(ctx context.Context, opt O) ([]T, *github.Response, error) {
+		for {
+			result, response, err := fn(ctx, opt)
+			if err != nil && response.StatusCode < 500 || response.StatusCode >= 600 {
+
+				// Wait for 3 second after the rate limit expires
+				retryTicker := time.NewTicker(3 * time.Second)
+
+				select {
+				case <-ctx.Done():
+					return nil, nil, ctx.Err()
+				case <-retryTicker.C:
+					continue
 				}
 			}
 
