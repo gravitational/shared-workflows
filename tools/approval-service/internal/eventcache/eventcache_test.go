@@ -85,50 +85,6 @@ func TestTryAddDebounceAndCooldown(t *testing.T) {
 	}
 }
 
-// TestTryStartConcurrencyAndCooldown tests TryStart in three phases:
-// 1- successfully start from two successful concurrent attempts
-// 2- after finish, immediate attempts should be blocked by TTL cooldown
-// 3 - after TTL expires, new TryStart should succeed
-func TestTryStartConcurrencyAndCooldown(t *testing.T) {
-	ttl := 500 * time.Millisecond
-	cleanupTicker := 50 * time.Millisecond
-	ec, cleanupFunc, err := eventcache.MakeEventCache(ttl, eventcache.WithCleanupInterval(cleanupTicker))
-	if err != nil {
-		t.Fatalf("MakeEventCache error: %v", err)
-	}
-	defer func() {
-		_ = cleanupFunc()
-	}()
-
-	// step 1: TryStart accepts one entry, concurrent attempt should fail.
-	isStarted, finish := ec.TryStart(eventIDForTest)
-	if !isStarted {
-		t.Fatalf("expected TryStart to succeed")
-	}
-
-	isStarted2, _ := ec.TryStart(eventIDForTest)
-	if isStarted2 {
-		t.Fatalf("expected concurrent TryStart to be rejected while there's an identical eventID in-progress")
-	}
-
-	// finish the in-progress winner
-	finish()
-
-	// step 2: immediately after finish, TryStart should be rejected
-	isStarted3, _ := ec.TryStart(eventIDForTest)
-	if isStarted3 {
-		t.Fatalf("expected TryStart to be rejected immediately after finish due to TTL")
-	}
-
-	// step 3: wait for TTL + small margin, then TryStart should succeed
-	time.Sleep(ttl + 20*time.Millisecond)
-	isStarted4, finish4 := ec.TryStart(eventIDForTest)
-	if !isStarted4 {
-		t.Fatalf("expected TryStart to succeed after TTL expiry")
-	}
-	finish4()
-}
-
 // TestCleanerEvictsExpiredEvents verifies that the background cleaner removes expired items after ttl + some time
 // uses TryAdd to insert and then waits for eviction
 func TestCleanerEvictsExpiredEvents(t *testing.T) {

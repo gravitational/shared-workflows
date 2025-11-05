@@ -8,9 +8,7 @@ import (
 )
 
 // EventCache is a thread-safe dedupe cache.
-// It supports two usage patterns:
 // - TryAdd: "debounce-on-arrival" (first arrival wins, subsequent arrivals within the TTL window are rejected
-// - TryStart/Finish: "in-progress exclusion + post-finish cooldown"
 type EventCache struct {
 	mu              sync.Mutex
 	items           map[string]time.Time // expiry time for an item; zero time reserved for in-progress marker
@@ -90,11 +88,6 @@ func (c *EventCache) TryAdd(eventID string) bool {
 	}
 
 	if expiry, ok := c.items[eventID]; ok {
-		// in-progress (zero time) -> reject
-		if expiry.IsZero() {
-			return false
-		}
-
 		// unexpired -> reject
 		if now.Before(expiry) {
 			return false
@@ -106,65 +99,6 @@ func (c *EventCache) TryAdd(eventID string) bool {
 
 	c.items[eventID] = now.Add(c.ttl)
 	return true
-}
-
-func (c *EventCache) IsEventIsBeingProcessed(eventID string) bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	expiry, ok := c.items[eventID]
-	if !ok {
-		return false
-	}
-	if expiry.IsZero() {
-		return true
-	}
-	return time.Now().Before(expiry) // unexpired cooldown
-}
-
-// TryStart provides in-progress exclusion semantics.
-// Returns (true, finish) for the caller that won. Caller must call finish() when done.
-// finish will set cooldown expiry = now + ttl
-func (c *EventCache) TryStart(eventID string) (bool, func()) {
-	now := time.Now()
-
-	c.mu.Lock()
-	if c.closed {
-		c.mu.Unlock()
-		return false, func() {}
-	}
-
-	if expiry, ok := c.items[eventID]; ok {
-		// in-progress -> reject
-		if expiry.IsZero() {
-			c.mu.Unlock()
-			return false, func() {}
-		}
-
-		// unexpired -> reject
-		if now.Before(expiry) {
-			c.mu.Unlock()
-			return false, func() {}
-		}
-
-		// expired -> remove and proceed
-		delete(c.items, eventID)
-	}
-
-	// mark in-progress / in-process with zero-time
-	c.items[eventID] = time.Time{}
-	c.mu.Unlock()
-
-	finishOnce := sync.Once{}
-	finish := func() {
-		finishOnce.Do(func() {
-			c.mu.Lock()
-			c.items[eventID] = now.Add(c.ttl)
-			c.mu.Unlock()
-		})
-	}
-
-	return true, finish
 }
 
 // Stop stops the cleaner (key evictor) and prevents further additions. It blocks until the cleaner exits or ctx is done.
