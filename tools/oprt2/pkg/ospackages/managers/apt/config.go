@@ -18,39 +18,59 @@ package apt
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"regexp"
 
-	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/attunehooks/gpg"
-	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/commandrunner"
 	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/config"
 	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/filemanager"
+	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/ospackages"
+	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/ospackages/publishers"
 )
 
-// FromConfig creates a new APT instance from the provided config, and optional Attune hooks.
-func FromConfig(ctx context.Context, config config.APT, logger *slog.Logger, attuneHooks ...commandrunner.Hook) (*APT, error) {
-	fileManager, err := filemanager.FromConfig(ctx, config.FileSource)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create file manager from config: %w", err)
-	}
+// This is a version of Manager that always owns the complete lifecycle of dependent services, including cleanup.
+// This differers from Manager which expects service lifecycle to be handled by the caller.
+type aptFromConfig struct {
+	*APT
+	fileManager filemanager.FileManager
+	publisher   ospackages.APTPublisher
+}
 
+var _ ospackages.Manager = (*aptFromConfig)(nil)
+
+// FromConfig creates a new APT instance from the provided config and attune runner.
+func FromConfig(ctx context.Context, config config.APTPackageManager, logger *slog.Logger) (ospackages.Manager, error) {
 	components, err := getAPTComponentsFromConfig(config.Components)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get APT components: %w", err)
 	}
 
-	// This must done last to avoid leaking the provider if something else fails
-	gpgProvider := gpg.FromConfig(config.GPG)
+	fileManager, err := filemanager.FromConfig(ctx, config.FileSource)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create file manager from config: %w", err)
+	}
 
-	apt := NewAPT(
-		fileManager,
-		WithLogger(logger),
-		WithAttuneHooks(append(attuneHooks, gpgProvider)...),
-		WithComponents(components),
-		WithDistros(config.Distros),
-	)
-	return apt, nil
+	publisher, err := publishers.FromAPTConfig(ctx, config.PublishingTool, logger)
+	if err != nil {
+		cleanupErr := fileManager.Close()
+		if cleanupErr != nil {
+			cleanupErr = fmt.Errorf("failed to close file manager %s: %w", fileManager.Name(), err)
+		}
+		return nil, errors.Join(fmt.Errorf("failed to create APT publisher: %w", err), cleanupErr)
+	}
+
+	return &aptFromConfig{
+		APT: NewAPT(
+			fileManager,
+			WithLogger(logger),
+			WithPublisher(publisher),
+			WithComponents(components),
+			WithDistros(config.Distros),
+		),
+		fileManager: fileManager,
+		publisher:   publisher,
+	}, nil
 }
 
 // getAPTComponentsFromConfig converts the input map of component name, component file matchers to
@@ -73,4 +93,21 @@ func getAPTComponentsFromConfig(config map[string][]string) (map[string][]*regex
 	}
 
 	return components, nil
+}
+
+func (afc *aptFromConfig) Close(ctx context.Context) error {
+	errs := make([]error, 0, 2)
+	if afc.APT != nil {
+		if err := afc.APT.Close(ctx); err != nil {
+			errs = append(errs, fmt.Errorf("failed to clean up manager %s: %w", afc.Name(), err))
+		}
+	}
+
+	if afc.fileManager != nil {
+		if err := afc.fileManager.Close(); err != nil {
+			errs = append(errs, fmt.Errorf("failed to clean up file manager %s: %w", afc.fileManager.Name(), err))
+		}
+	}
+
+	return errors.Join(errs...)
 }

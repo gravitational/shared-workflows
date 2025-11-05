@@ -22,23 +22,21 @@ import (
 	"log/slog"
 	"regexp"
 
-	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/commandrunner"
 	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/filemanager"
 	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/logging"
-	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/packagemanager"
+	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/ospackages"
 )
 
-// APT is a [packagemanager.Manager] that manages Debian files in APT repos.
+// APT is a [ospackages.Manager] that manages Debian files in APT repos.
 type APT struct {
-	components   map[string][]*regexp.Regexp
-	distros      map[string][]string
-	fileManager  filemanager.FileManager
-	hooks        []commandrunner.Hook
-	attuneRunner *commandrunner.Runner
-	logger       *slog.Logger
+	components  map[string][]*regexp.Regexp
+	distros     map[string][]string
+	fileManager filemanager.FileManager
+	publisher   ospackages.APTPublisher
+	logger      *slog.Logger
 }
 
-var _ packagemanager.Manager = (*APT)(nil)
+var _ ospackages.Manager = (*APT)(nil)
 
 // NewAPT creates a new APT package manager instance.
 func NewAPT(fileManager filemanager.FileManager, opts ...APTOption) *APT {
@@ -50,13 +48,11 @@ func NewAPT(fileManager filemanager.FileManager, opts ...APTOption) *APT {
 		opt(apt)
 	}
 
-	apt.attuneRunner = commandrunner.NewRunner(commandrunner.WithHooks(apt.hooks...))
-
 	return apt
 }
 
 // GetPackagePublishingTasks returns tasks for publishing packages.
-func (apt *APT) GetPackagePublishingTasks(ctx context.Context) ([]packagemanager.PackagePublishingTask, error) {
+func (apt *APT) GetPackagePublishingTasks(ctx context.Context) ([]ospackages.PackagePublishingTask, error) {
 	// Collect possible files to upload
 	candidateItems, err := apt.fileManager.ListItems(ctx)
 	if err != nil {
@@ -84,33 +80,23 @@ func (apt *APT) GetPackagePublishingTasks(ctx context.Context) ([]packagemanager
 		}
 	}
 
-	// Build the command runner, call and defer hooks
-	if err := apt.attuneRunner.Setup(ctx); err != nil {
-		return nil, fmt.Errorf("attune runner setup hook failed: %w", err)
-	}
-
 	// Enqueue an upload of the files
-	publishingTasks := make([]packagemanager.PackagePublishingTask, 0)
+	publishingTasks := make([]ospackages.PackagePublishingTask, 0)
 	for component, packageFilePaths := range componentFiles {
 		for distro, distroVersions := range apt.distros {
 			for _, distroVersion := range distroVersions {
-				// Attune performs some deduping magic, so after this loop is iterated over once,
-				// packages will not be uploaded again. This greatly reduces publishing time.
-				// If the first distro versions seem to take a long time to publish, this is why. The loop
-				// iterations associated with them do substantially more work then every iteration after
-				// them.
 				for _, packageFilePath := range packageFilePaths {
-					// Publish with Attune
 					publishFunc := func(ctx context.Context) error {
-						err := apt.attuneRunner.Run(ctx, "attune", "apt", "package", "add",
-							"--repo", distro,
-							"--distribution", distroVersion,
-							"--component", component,
-							packageFilePath,
-						)
-
-						if err != nil {
-							return fmt.Errorf("attune package publishing failed: %w", err)
+						if err := apt.publisher.PublishToAPTRepo(ctx, distro, distroVersion, component, packageFilePath); err != nil {
+							return fmt.Errorf(
+								"failed to publish package at %q for distro %s/%s %s via %s: %w",
+								packageFilePath,
+								distro,
+								distroVersion,
+								component,
+								apt.publisher.Name(),
+								err,
+							)
 						}
 
 						return nil
@@ -132,9 +118,5 @@ func (apt *APT) Name() string {
 
 // Close closes the package manager
 func (apt *APT) Close(ctx context.Context) error {
-	if err := apt.attuneRunner.Close(ctx); err != nil {
-		return fmt.Errorf("attune runner cleanup failed: %w", err)
-	}
-
 	return nil
 }

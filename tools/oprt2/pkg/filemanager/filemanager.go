@@ -40,7 +40,7 @@ type FileManager interface {
 	// Name is the name of the file manager
 	Name() string
 
-	// Close closes the file manager.
+	// Close closes the file manager. This should include a cleanup of any local temporary resources.
 	Close() error
 }
 

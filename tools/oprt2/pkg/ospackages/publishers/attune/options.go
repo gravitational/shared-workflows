@@ -14,22 +14,24 @@
  *  limitations under the License.
  */
 
-package packagemanager
+package attune
 
 import (
-	"context"
+	"log/slog"
+
+	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/logging"
 )
 
-type PackagePublishingTask func(context.Context) error
+// PublisherOpt provides optional configuration to the Attune package publisher.
+type PublisherOpt func(*Publisher)
 
-// Manager handles the publishing of all configured packages.
-type Manager interface {
-	// GetPackagePublishingTasks returns tasks for publishing packages.
-	GetPackagePublishingTasks(ctx context.Context) ([]PackagePublishingTask, error)
+// WithLogger configures the package publisher with the provided logger.
+func WithLogger(logger *slog.Logger) PublisherOpt {
+	return func(p *Publisher) {
+		if logger == nil {
+			logger = logging.DiscardLogger
+		}
 
-	// Name is the name of the package manager.
-	Name() string
-
-	// Close closes the package manager
-	Close(ctx context.Context) error
+		p.logger = logger
+	}
 }

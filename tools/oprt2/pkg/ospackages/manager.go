@@ -14,20 +14,22 @@
  *  limitations under the License.
  */
 
-package commandrunner
+package ospackages
 
 import (
 	"context"
-	"os/exec"
 )
 
-// Hook defines function(s) that should be called during different stages
-// of a command execution's lifecycle.
-type Hook interface {
+type PackagePublishingTask func(context.Context) error
+
+// Manager handles the management (publishing, pulling) of all configured packages.
+type Manager interface {
+	// GetPackagePublishingTasks returns tasks for publishing packages.
+	GetPackagePublishingTasks(ctx context.Context) ([]PackagePublishingTask, error)
+
+	// Name is the name of the package manager.
 	Name() string
-	// Runs once per CLI command, prior to the command executing.
-	// If this errors, the command is not called.
-	Command(ctx context.Context, cmd *exec.Cmd) error
-	// Called after all CLI commands have been executed, even if an error occurs.
+
+	// Close closes the package manager
 	Close(ctx context.Context) error
 }

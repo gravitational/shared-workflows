@@ -22,38 +22,23 @@ import (
 	"regexp"
 	"slices"
 
-	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/commandrunner"
 	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/logging"
+	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/ospackages"
+	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/ospackages/publishers/discard"
 )
 
 // APTOption provides optional configuration to the APT package manager.
 type APTOption func(apt *APT)
 
-// WithAttuneHooks adds hooks to the Attune command runner.
-func WithAttuneHooks(hooks ...commandrunner.Hook) APTOption {
-	return func(apt *APT) {
-		apt.hooks = append(apt.hooks, hooks...)
-	}
-}
-
 // WithComponents configures the package manager to map files to APT components. Key is
 // the component name, value is a list of regular expressions used to match files to the
 // component. Each expression will be matched against every file in the storage backend,
 // including the file's path. For example, `some/path/teleport.deb`.
+// Note: This will overwrite existing components, not replace them. Providing
+// `WithComponents` multiple times is not supported.
 func WithComponents(components map[string][]*regexp.Regexp) APTOption {
 	return func(apt *APT) {
-		if len(apt.components) == 0 {
-			apt.components = make(map[string][]*regexp.Regexp, len(components))
-		}
-
-		// Deep merge the maps
-		for componentName, fileNameMatchers := range components {
-			if _, ok := apt.components[componentName]; !ok {
-				components[componentName] = fileNameMatchers
-				continue
-			}
-			components[componentName] = append(apt.components[componentName], fileNameMatchers...)
-		}
+		apt.components = components
 
 		// Get unique matchers
 		// This does not preserve order, but it shouldn't need to
@@ -81,21 +66,12 @@ func WithComponents(components map[string][]*regexp.Regexp) APTOption {
 }
 
 // WithDistros configures the package manager to add packages to the specified distros. Key
-// is the distro name (e.g. ubuntu, debian), value is distro version (e.g. noble, plucky)
+// is the distro name (e.g. ubuntu, debian), value is distro version (e.g. noble, plucky).
+// Note: This will overwrite existing distros, not replace them. Providing `WithDistros`
+// multiple times is not supported.
 func WithDistros(distros map[string][]string) APTOption {
 	return func(apt *APT) {
-		if len(apt.distros) == 0 {
-			apt.distros = make(map[string][]string, len(apt.distros))
-		}
-
-		// Deep merge the maps
-		for distroName, distroVersion := range distros {
-			if _, ok := apt.distros[distroName]; !ok {
-				distros[distroName] = distroVersion
-				continue
-			}
-			distros[distroName] = append(apt.distros[distroName], distroVersion...)
-		}
+		apt.distros = distros
 
 		// Get unique values only
 		for distroName, distroVersions := range distros {
@@ -124,5 +100,16 @@ func WithLogger(logger *slog.Logger) APTOption {
 			logger = logging.DiscardLogger
 		}
 		apt.logger = logger
+	}
+}
+
+// WithPublisher sets the publisher to use.
+func WithPublisher(publisher ospackages.APTPublisher) APTOption {
+	return func(apt *APT) {
+		if publisher == nil {
+			publisher = discard.NewDiscardPublisher()
+		}
+
+		apt.publisher = publisher
 	}
 }

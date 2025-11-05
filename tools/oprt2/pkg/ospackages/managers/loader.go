@@ -21,17 +21,17 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/commandrunner"
 	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/config"
-	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/packagemanager"
-	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/packagemanager/apt"
+	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/ospackages"
+	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/ospackages/managers/apt"
 )
 
 // FromConfig builds a new package manager from the provided config, adding any provided authentication hooks.
-func FromConfig(ctx context.Context, config config.PackageManager, logger *slog.Logger, attuneHooks ...commandrunner.Hook) (packagemanager.Manager, error) {
+// Attune hooks can be nil if Attune is not used.
+func FromConfig(ctx context.Context, config config.PackageManager, logger *slog.Logger) (ospackages.Manager, error) {
 	switch {
 	case config.APT != nil:
-		return apt.FromConfig(ctx, *config.APT, logger, attuneHooks...)
+		return apt.FromConfig(ctx, *config.APT, logger)
 	default:
 		return nil, fmt.Errorf("no package manager config provided")
 	}

@@ -14,20 +14,26 @@
  *  limitations under the License.
  */
 
-package commandrunner
+package ospackages
 
 import (
 	"context"
-	"os/exec"
 )
 
-// Hook defines function(s) that should be called during different stages
-// of a command execution's lifecycle.
-type Hook interface {
+// Publisher handles the publishing of manager-specific packages.
+// This should be embedded in manager-specific publishers.
+type Publisher interface {
+	// Name is the name of the package publisher.
 	Name() string
-	// Runs once per CLI command, prior to the command executing.
-	// If this errors, the command is not called.
-	Command(ctx context.Context, cmd *exec.Cmd) error
-	// Called after all CLI commands have been executed, even if an error occurs.
+
+	// Close closes the publisher
 	Close(ctx context.Context) error
+}
+
+type APTPublisher interface {
+	Publisher
+
+	// PublishToAPTRepo publishes the package at the provided file path to the publisher's APT repo,
+	// with the set distro, and component.
+	PublishToAPTRepo(ctx context.Context, repo, distro, component, packageFilePath string) error
 }

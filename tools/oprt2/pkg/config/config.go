@@ -31,13 +31,35 @@ type GPGProvider struct {
 	// Not implemented
 }
 
-// APT defines configuration for APT repo management.
-// For APT repo documentation, see https://wiki.debian.org/DebianRepository/Format.
-type APT struct {
-	// FileSource is where Debian packages (*.deb files) will be pulled from.
-	FileSource FileManager
+// AttuneAPTPackagePublisher publishes packages for an APT repo via Attune.
+// If this is used, then the global Attune configuration must also be provided.
+type AttuneAPTPackagePublisher struct {
+	// Authentication defines Attune authentication configuration.
+	Authentication Authenticator
 	// GPG is how GPG keys will be retrieved for repo signing. Optional.
 	GPG *GPGProvider
+}
+
+// DiscardAPTPackagePublisher doesn't actually publish any APT packages.
+// Useful for dry-runs.
+type DiscardAPTPackagePublisher struct{}
+
+// APTPackagePublisher defines the package publisher configuration.
+// Only one field may be specified.
+type APTPackagePublisher struct {
+	// AttuneAPTPackagePublisher publishes packages for an APT repo via Attune.
+	// If this is used, then the global Attune configuration must also be provided.
+	Attune *AttuneAPTPackagePublisher
+	// DiscardAPTPackagePublisher doesn't actually publish any APT packages.
+	// Useful for dry-runs.
+	Discard *DiscardAPTPackagePublisher
+}
+
+// APTPackageManager defines configuration for APTPackageManager repo management.
+// For APTPackageManager repo documentation, see https://wiki.debian.org/DebianRepository/Format.
+type APTPackageManager struct {
+	// FileSource is where Debian packages (*.deb files) will be pulled from.
+	FileSource FileManager
 	// Components are the APT repo components that should be used.
 	// Key is the name of the APT component, value is a list of regular expressions
 	// that match file path that should be associated with the component.
@@ -46,22 +68,15 @@ type APT struct {
 	// Key is the name of the distro (e.g. `ubuntu`, `debian`), value is a list of
 	// distro versions (e.g. `plucky`, `trixie`).
 	Distros map[string][]string
+	// PublishingTool is the tool that should be used to publish packages.
+	PublishingTool APTPackagePublisher
 }
 
 // PackageManager defines package manager configuration.
 // Only one field may be specified.
 type PackageManager struct {
 	// APT defines an APT repo that should be managed.
-	APT *APT
-}
-
-// Attune defines Attune-specific configuration.
-type Attune struct {
-	// Authentication defines Attune authentication configuration.
-	Authentication Authenticator
-	// ParallelUploadLimit is the maximum number of packages to try to upload to the Attune
-	// control plane at once. If unset, there will be no upload limit. Optional.
-	ParallelUploadLimit uint
+	APT *APTPackageManager
 }
 
 // Logger defines logging options for the tool.
@@ -73,8 +88,9 @@ type Logger struct {
 type OPRT2 struct {
 	// Logger is the logging options for the tool. Optional.
 	Logger *Logger
-	// Attune is the Attune-specific configuration.
-	Attune Attune
 	// PackageManagers are the package manager repos that should be  used.
 	PackageManagers []PackageManager
+	// ParallelLimit is the maximum number of parallel operations (e.g. uploads)
+	// that can run at once. If unset, or set to 0, there will be no limit. Optional.
+	ParallelLimit uint
 }

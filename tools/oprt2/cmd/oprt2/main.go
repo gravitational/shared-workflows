@@ -26,11 +26,10 @@ import (
 	"time"
 
 	"github.com/alecthomas/kingpin/v2"
-	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/attunehooks/authenticators"
 	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/config"
 	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/logging"
-	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/packagemanager"
-	packagemanagerloader "github.com/gravitational/shared-workflows/tools/oprt2/pkg/packagemanager/loader"
+	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/ospackages"
+	packagemanagers "github.com/gravitational/shared-workflows/tools/oprt2/pkg/ospackages/managers"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -66,28 +65,10 @@ func run(configFilePath string) (err error) {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancel()
 
-	authenticator, err := authenticators.FromConfig(c.Attune.Authentication)
-	if err != nil {
-		return fmt.Errorf("failed to get Attune authenticator: %w", err)
-	}
-
-	// Ensure that the cleanup hook is always run. This is important to avoid leaking Attune credentials.
-	defer func() {
-		cleanupCtx, cancel := context.WithTimeout(context.Background(), time.Minute)
-		defer cancel()
-		logger.DebugContext(cleanupCtx, "cleaning up authenticator")
-
-		closerErr := authenticator.Cleanup(cleanupCtx)
-		if closerErr != nil {
-			closerErr = fmt.Errorf("failed to close authenticator, credentials may be leaked: %w", closerErr)
-		}
-		err = errors.Join(err, closerErr)
-	}()
-
 	// Build a list of package managers based on the config
-	packageManagers := make([]packagemanager.Manager, 0, len(c.PackageManagers))
+	packageManagers := make([]ospackages.Manager, 0, len(c.PackageManagers))
 	for _, packageManagerConfig := range c.PackageManagers {
-		packageManager, err := packagemanagerloader.FromConfig(ctx, packageManagerConfig, logger, authenticator)
+		packageManager, err := packagemanagers.FromConfig(ctx, packageManagerConfig, logger)
 		if err != nil {
 			return fmt.Errorf("failed to create package manager from config: %w", err)
 		}
@@ -117,7 +98,7 @@ func run(configFilePath string) (err error) {
 	}
 
 	// Collect package publishing tasks for all configured package managers
-	packagePublishingTasks := make([]packagemanager.PackagePublishingTask, 0)
+	packagePublishingTasks := make([]ospackages.PackagePublishingTask, 0)
 	for _, packageManager := range packageManagers {
 		tasks, err := packageManager.GetPackagePublishingTasks(ctx)
 		if err != nil {
@@ -128,8 +109,8 @@ func run(configFilePath string) (err error) {
 
 	// Run all publishing tasks
 	publishingQueue, queueContext := errgroup.WithContext(ctx)
-	if c.Attune.ParallelUploadLimit > 0 {
-		publishingQueue.SetLimit(int(c.Attune.ParallelUploadLimit))
+	if c.ParallelLimit > 0 {
+		publishingQueue.SetLimit(int(c.ParallelLimit))
 	}
 
 	for _, task := range packagePublishingTasks {
