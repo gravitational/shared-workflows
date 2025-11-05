@@ -128,6 +128,7 @@ func (c *EventCache) Len() int {
 	return len(c.items)
 }
 
+// evictor runs in a background goroutine and periodically removes expired entries from the cache.
 func (c *EventCache) evictor() {
 	ticker := time.NewTicker(c.cleanupInterval)
 	defer ticker.Stop()
@@ -139,10 +140,6 @@ func (c *EventCache) evictor() {
 			now := time.Now()
 			c.mu.Lock()
 			for k, v := range c.items {
-				if v.IsZero() {
-					// in progress: keep until finish sets expiry
-					continue
-				}
 				if now.After(v) {
 					delete(c.items, k)
 				}
