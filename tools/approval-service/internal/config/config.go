@@ -42,7 +42,7 @@ type ApprovalService struct {
 	ReconcileInterval time.Duration `yaml:"reconcile_interval,omitempty"`
 	// EventCacheTTL defines how long events are kept in the local event cache before being evicted.
 	// This is used to avoid duplicate processing while ensuring stale data is eventually cleared.
-	EventCacheTTL time.Duration `yaml:"event_cache_ttl,omitempty"`
+	EventCacheTTL int `yaml:"event_cache_ttl,omitempty"`
 }
 
 type EventSources struct {

@@ -107,7 +107,15 @@ func NewReleaseService(cfg config.Root, teleClient teleClient, ghClient ghClient
 		}
 	}
 
-	dedupeTTL := cmp.Or(cfg.ApprovalService.EventCacheTTL, 15*time.Second)
+	// choose default TTL if not set (15s)
+	const defaultEventCacheTTL = 15 * time.Second
+	var dedupeTTL time.Duration
+
+	if cfg.ApprovalService.EventCacheTTL <= 0 {
+		dedupeTTL = defaultEventCacheTTL
+	} else {
+		dedupeTTL = time.Duration(cfg.ApprovalService.EventCacheTTL) * time.Second
+	}
 	ec, cleanup, err := eventcache.MakeEventCache(dedupeTTL)
 	if err != nil {
 		return nil, fmt.Errorf("creating event cache: %w", err)
