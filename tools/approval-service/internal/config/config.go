@@ -40,6 +40,9 @@ type ApprovalService struct {
 	// ReconcileInterval is the interval at which the service will reconcile waiting workflows.
 	// This is used to ensure that workflows that are waiting for approval are processed in a timely manner.
 	ReconcileInterval time.Duration `yaml:"reconcile_interval,omitempty"`
+	// EventCacheTTL defines how long events are kept in the local event cache before being evicted.
+	// This is used to avoid duplicate processing while ensuring stale data is eventually cleared.
+	EventCacheTTL time.Duration `yaml:"event_cache_ttl,omitempty"`
 }
 
 type EventSources struct {

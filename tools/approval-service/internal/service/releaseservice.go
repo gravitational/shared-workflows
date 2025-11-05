@@ -107,7 +107,7 @@ func NewReleaseService(cfg config.Root, teleClient teleClient, ghClient ghClient
 		}
 	}
 
-	dedupeTTL := 15 * time.Second
+	dedupeTTL := cmp.Or(cfg.ApprovalService.EventCacheTTL, 15*time.Second)
 	ec, cleanup, err := eventcache.MakeEventCache(dedupeTTL) // TODO: pass as config
 	if err != nil {
 		return nil, fmt.Errorf("creating event cache: %w", err)
