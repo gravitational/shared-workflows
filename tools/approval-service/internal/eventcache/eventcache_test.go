@@ -11,7 +11,6 @@ import (
 
 var (
 	eventIDForTest           = "event-id-for-test"
-	eventIDForTest2          = "event-id-for-test2"
 	eventIDInProgressForTest = "event-id-in-progress-for-test"
 )
 
