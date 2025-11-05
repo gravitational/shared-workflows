@@ -108,6 +108,20 @@ func (c *EventCache) TryAdd(eventID string) bool {
 	return true
 }
 
+func (c *EventCache) IsEventIsBeingProcessed(eventID string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	expiry, ok := c.items[eventID]
+	if !ok {
+		return false
+	}
+	if expiry.IsZero() {
+		return true
+	}
+	return time.Now().Before(expiry) // unexpired cooldown
+}
+
 // TryStart provides in-progress exclusion semantics.
 // Returns (true, finish) for the caller that won. Caller must call finish() when done.
 // finish will set cooldown expiry = now + ttl

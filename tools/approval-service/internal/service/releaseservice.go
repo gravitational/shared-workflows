@@ -152,7 +152,7 @@ func (w *ReleaseService) HandleAccessRequestReviewed(ctx context.Context, req ty
 func (w *ReleaseService) onDeploymentReviewEventReceived(ctx context.Context, e githubevents.DeploymentReviewEvent) {
 	// One Access Request should be created per workflow run and environment.
 	eventID := githubEventID(e.Organization, e.Repository, e.WorkflowID, e.Environment)
-	if !w.eventCache.TryAdd(eventID) {
+	if w.eventCache.IsEventIsBeingProcessed(eventID) {
 		// Already processing this event, skip it.
 		w.log.Debug("Skipping already processed event", "event_id", eventID)
 		return
