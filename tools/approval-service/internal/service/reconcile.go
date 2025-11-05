@@ -130,7 +130,7 @@ func (r *ReleaseService) constructNewEventsForWorkflow(ctx context.Context, work
 
 	// We only need to create an event for each unique environment.
 	// GitHub is a bit weird in that it can have multiple pending deployments for the same environment.
-	// However only one API call is needed to approve/reject ALL current pending deployments protection rules for that environment.
+	// However, only one API call is needed to approve/reject ALL current pending deployments protection rules for that environment.
 	uniqueEnvironments := slices.CompactFunc(pendingDeployments, func(x, y github.PendingDeploymentInfo) bool {
 		return x.Environment == y.Environment
 	})
@@ -140,7 +140,8 @@ func (r *ReleaseService) constructNewEventsForWorkflow(ctx context.Context, work
 	for _, deployment := range uniqueEnvironments {
 		// Skip if we already have an event for this environment.
 		// This prevents duplicate events in the case the reconcilation process is run while related events are being received.
-		if r.eventIsBeingProcessed(githubEventID(workflowRun.Organization, workflowRun.Repository, workflowRun.WorkflowID, deployment.Environment)) {
+		eventID := githubEventID(workflowRun.Organization, workflowRun.Repository, workflowRun.WorkflowID, deployment.Environment)
+		if added := r.eventCache.TryAdd(eventID); !added {
 			continue
 		}
 

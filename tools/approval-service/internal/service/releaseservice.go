@@ -22,11 +22,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/config"
+	"github.com/gravitational/shared-workflows/tools/approval-service/internal/eventcache"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/eventsources/githubevents"
 	"github.com/gravitational/teleport/api/types"
 )
@@ -42,7 +42,7 @@ type ReleaseService struct {
 	teleClient      teleClient
 
 	ghApprover *gitHubWorkflowApprover
-	// github information
+	// gitHub information
 	githubOrg    string
 	githubRepo   string
 	githubClient ghClient
@@ -53,8 +53,12 @@ type ReleaseService struct {
 
 	// For deduplication logic to ensure that we do not process similar events concurrently.
 	// For example, we can receive 10s-100s of deployment review events in a short period of time for the same workflow.
-	mu                  sync.Mutex
-	currentlyProcessing map[string]struct{} // tracks currently processing events by their IDs
+	// EventCache provides debounce semantics, ensuring that first arrival in the TTL window wins and subsequent
+	// arrivals are rejected (within the TTL window).
+	eventCache *eventcache.EventCache
+	// cleanup is an optional service level cleanup function (e.g. EventCache). Callers should invoke ReleaseService.Close
+	// which will call this function to stop any goroutines and release resources, or nil if no cleanup is required.
+	cleanup func() error
 
 	reconcileInterval time.Duration
 
@@ -79,16 +83,15 @@ func NewReleaseService(cfg config.Root, teleClient teleClient, ghClient ghClient
 	}
 
 	d := &ReleaseService{
-		ghApprover:          approver,
-		githubClient:        ghClient,
-		githubOrg:           cfg.EventSources.GitHub.Org,
-		githubRepo:          cfg.EventSources.GitHub.Repo,
-		teleClient:          teleClient,
-		requestTTLHours:     cmp.Or(time.Duration(cfg.ApprovalService.Teleport.RequestTTLHours)*time.Hour, 7*24*time.Hour),
-		teleportUser:        cfg.ApprovalService.Teleport.User,
-		currentlyProcessing: make(map[string]struct{}),
-		reconcileInterval:   cmp.Or(cfg.ApprovalService.ReconcileInterval, time.Minute),
-		log:                 slog.Default(),
+		ghApprover:        approver,
+		githubClient:      ghClient,
+		githubOrg:         cfg.EventSources.GitHub.Org,
+		githubRepo:        cfg.EventSources.GitHub.Repo,
+		teleClient:        teleClient,
+		requestTTLHours:   cmp.Or(time.Duration(cfg.ApprovalService.Teleport.RequestTTLHours)*time.Hour, 7*24*time.Hour),
+		teleportUser:      cfg.ApprovalService.Teleport.User,
+		reconcileInterval: cmp.Or(cfg.ApprovalService.ReconcileInterval, time.Minute),
+		log:               slog.Default(),
 		// Channels for asynchronous processing of events.
 		// Setting buffer size to 1 to allow for non-blocking sends but still allow for some backpressure.
 		// An issue is that for large buffers, we end up with a lot of events queued in memory that will be lost if the service crashes.
@@ -103,6 +106,14 @@ func NewReleaseService(cfg config.Root, teleClient teleClient, ghClient ghClient
 			return nil, fmt.Errorf("applying option: %w", err)
 		}
 	}
+
+	dedupeTTL := 15 * time.Second
+	ec, cleanup, err := eventcache.MakeEventCache(dedupeTTL) // TODO: pass as config
+	if err != nil {
+		return nil, fmt.Errorf("creating event cache: %w", err)
+	}
+	d.eventCache = ec
+	d.cleanup = cleanup
 
 	return d, nil
 }
@@ -141,12 +152,11 @@ func (w *ReleaseService) HandleAccessRequestReviewed(ctx context.Context, req ty
 func (w *ReleaseService) onDeploymentReviewEventReceived(ctx context.Context, e githubevents.DeploymentReviewEvent) {
 	// One Access Request should be created per workflow run and environment.
 	eventID := githubEventID(e.Organization, e.Repository, e.WorkflowID, e.Environment)
-	if !w.tryStartEventProcessing(eventID) {
+	if !w.eventCache.TryAdd(eventID) {
 		// Already processing this event, skip it.
 		w.log.Debug("Skipping already processed event", "event_id", eventID)
 		return
 	}
-	defer w.finishEventProcessing(eventID)
 
 	w.log.Info("Processing deployment review event", "event", e)
 	existingRequest, err := w.findExistingAccessRequest(ctx, e)
@@ -188,7 +198,7 @@ func (w *ReleaseService) onDeploymentReviewEventReceived(ctx context.Context, e 
 // It returns the Access Request if it exists, or nil if it does not.
 // An error indicates a problem with the Teleport API, not that an Access Request does not exist.
 //
-// Three main things can determined from this:
+// Three main things can be determined from this:
 //  1. If no Access Request exists, we need to create one.
 //  2. If an Access Request exists, and is pending, no further action is needed.
 //  3. If an Access Request exists, and is not pending, we can update the state of the GitHub deployment accordingly.
@@ -252,48 +262,14 @@ func (w *ReleaseService) createAccessRequest(ctx context.Context, e githubevents
 	return created, nil
 }
 
-// tryStartEventProcessing attempts to start processing an event if it's not already being processed.
-// Returns true if processing should proceed, false if the event is already being processed.
-// This method provides deduplication to prevent concurrent processing of the same workflow event.
-func (w *ReleaseService) tryStartEventProcessing(eventID string) bool {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	if _, exists := w.currentlyProcessing[eventID]; exists {
-		// Already processing this event, skip it.
-		return false
-	}
-
-	// Mark this event as currently being processed.
-	w.currentlyProcessing[eventID] = struct{}{}
-	return true
-}
-
-// finishEventProcessing marks an event as finished processing, allowing it to be processed again in the future.
-// This removes the event from the currently processing set to prevent memory leaks.
-func (w *ReleaseService) finishEventProcessing(eventID string) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	delete(w.currentlyProcessing, eventID)
-}
-
-// eventIsBeingProcessed checks if an event is currently being processed.
-func (w *ReleaseService) eventIsBeingProcessed(eventID string) bool {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	_, exists := w.currentlyProcessing[eventID]
-	return exists
-}
-
 // onAccessRequestReviewed processes the Access Request review event.
 func (w *ReleaseService) onAccessRequestReviewed(ctx context.Context, req types.AccessRequest) {
 	eventID := req.GetName()
-	if !w.tryStartEventProcessing(eventID) {
+	if !w.eventCache.TryAdd(eventID) {
 		// Already processing this event, skip it.
 		w.log.Debug("Skipping already processed access request", "access_request_name", req.GetName())
 		return
 	}
-	defer w.finishEventProcessing(eventID)
 
 	info, err := getWorkflowLabels(req)
 	if err != nil {
@@ -310,13 +286,23 @@ func (w *ReleaseService) onAccessRequestReviewed(ctx context.Context, req types.
 	w.log.Info("Handled access request reviewed", "access_request_name", req.GetName(), "org", info.Org, "repo", info.Repo)
 }
 
+// Close performs service-level cleanup. It calls the EventCache cleanup function (if present) to stop the cache's
+// background cleaner and release any resources. Close is safe to call multiple times and returns any error produced
+// by the cleanup function so the caller can handle shutdown failures if necessary.
+func (w *ReleaseService) Close() error {
+	if w.cleanup != nil {
+		return w.cleanup()
+	}
+	return nil
+}
+
 // WithLogger sets the logger for the ReleaseService.
 func WithLogger(logger *slog.Logger) ReleaseServiceOpts {
-	return func(d *ReleaseService) error {
+	return func(w *ReleaseService) error {
 		if logger == nil {
 			return errors.New("logger cannot be nil")
 		}
-		d.log = logger
+		w.log = logger
 		return nil
 	}
 }

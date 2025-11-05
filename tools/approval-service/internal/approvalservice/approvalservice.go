@@ -46,7 +46,7 @@ type Service struct {
 	log *slog.Logger
 }
 
-// EvenrSource provides methods for setting up and running event sources.
+// EventSource provides methods for setting up and running event sources.
 // This is an interface that allows us to abstract different event sources like GitHub webhooks, Teleport access requests, etc.
 // Each event source should implement this interface to provide its own setup and run logic.
 type EventSource interface {
@@ -109,6 +109,11 @@ func NewFromConfig(ctx context.Context, cfg config.Root, opts ...Opt) (*Service,
 		return nil, fmt.Errorf("creating event processor: %w", err)
 	}
 	a.processor = processor
+	defer func() {
+		if err := processor.Close(); err != nil {
+			a.log.Warn("Failed to close event processor")
+		}
+	}()
 
 	// Initialize server that listens for webhook events
 	srv, err := a.newServer(cfg, a.processor)
