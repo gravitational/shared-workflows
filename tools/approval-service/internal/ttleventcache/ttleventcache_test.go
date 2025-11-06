@@ -1,4 +1,4 @@
-package eventcache_test
+package ttleventcache_test
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gravitational/shared-workflows/tools/approval-service/internal/eventcache"
+	"github.com/gravitational/shared-workflows/tools/approval-service/internal/ttleventcache"
 )
 
 var (
@@ -19,9 +19,9 @@ var (
 func TestTryAddConcurrency(t *testing.T) {
 	// Arrange
 	ttl := 200 * time.Millisecond
-	ec, cleanupFunc, err := eventcache.MakeEventCache(ttl)
+	ec, cleanupFunc, err := ttleventcache.MakeTTLCache(ttl)
 	if err != nil {
-		t.Fatalf("MakeEventCache error: %v", err)
+		t.Fatalf("MakeTTLCache error: %v", err)
 	}
 	defer func() {
 		_ = cleanupFunc
@@ -57,9 +57,9 @@ func TestTryAddConcurrency(t *testing.T) {
 // 3- after TTL expires, TryAdd succeeds again (cooldown expired)
 func TestTryAddDebounceAndCooldown(t *testing.T) {
 	ttl := 100 * time.Millisecond
-	ec, cleanupFunc, err := eventcache.MakeEventCache(ttl)
+	ec, cleanupFunc, err := ttleventcache.MakeTTLCache(ttl)
 	if err != nil {
-		t.Fatalf("MakeEventCache error: %v", err)
+		t.Fatalf("MakeTTLCache error: %v", err)
 	}
 	defer func() { _ = cleanupFunc() }()
 
@@ -89,9 +89,9 @@ func TestTryAddDebounceAndCooldown(t *testing.T) {
 func TestCleanerEvictsExpiredEvents(t *testing.T) {
 	ttl := 100 * time.Millisecond
 	cleanupTicker := 50 * time.Millisecond
-	ec, cleanupFunc, err := eventcache.MakeEventCache(ttl, eventcache.WithCleanupInterval(cleanupTicker))
+	ec, cleanupFunc, err := ttleventcache.MakeTTLCache(ttl, ttleventcache.WithCleanupInterval(cleanupTicker))
 	if err != nil {
-		t.Fatalf("MakeEventCache error: %v", err)
+		t.Fatalf("MakeTTLCache error: %v", err)
 	}
 	defer func() {
 		_ = cleanupFunc()
@@ -118,9 +118,9 @@ func TestCleanerEvictsExpiredEvents(t *testing.T) {
 // TestStopPreventsAdds ensures Stop prevents further additions and that Stop returns
 func TestStopPreventsAdds(t *testing.T) {
 	ttl := 100 * time.Millisecond
-	ec, cleanupFunc, err := eventcache.MakeEventCache(ttl)
+	ec, cleanupFunc, err := ttleventcache.MakeTTLCache(ttl)
 	if err != nil {
-		t.Fatalf("MakeEventCache error: %v", err)
+		t.Fatalf("MakeTTLCache error: %v", err)
 	}
 	defer func() {
 		_ = cleanupFunc()

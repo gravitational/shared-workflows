@@ -1,4 +1,4 @@
-package eventcache
+package ttleventcache
 
 import (
 	"context"
@@ -7,9 +7,9 @@ import (
 	"time"
 )
 
-// EventCache is a thread-safe dedupe cache.
+// TTLEventCache is a thread-safe dedupe cache.
 // - TryAdd: "debounce-on-arrival" (first arrival wins, subsequent arrivals within the TTL window are rejected
-type EventCache struct {
+type TTLEventCache struct {
 	mu              sync.Mutex
 	items           map[string]time.Time // expiry time for an item; zero time reserved for in-progress marker
 	ttl             time.Duration
@@ -19,13 +19,13 @@ type EventCache struct {
 	closed          bool
 }
 
-// Option configures EventCache construction
-type Option func(*EventCache) error
+// Option configures TTLEventCache construction
+type Option func(*TTLEventCache) error
 
 // WithCleanupInterval allows overriding the tick interval (used by janitor for cleanup) via option.
 // Validates duration > 0.
 func WithCleanupInterval(interval time.Duration) Option {
-	return func(c *EventCache) error {
+	return func(c *TTLEventCache) error {
 		if interval <= 0 {
 			return fmt.Errorf("invalid interval")
 		}
@@ -34,10 +34,10 @@ func WithCleanupInterval(interval time.Duration) Option {
 	}
 }
 
-// MakeEventCache creates a new EventCache.
+// MakeTTLCache creates a new TTLEventCache.
 // ttl: how long to prevent re-processing after an arrival or after finish().
 // Use options for additional configuration (e.g., WithCleanupInterval).
-func MakeEventCache(ttl time.Duration, opts ...Option) (*EventCache, func() error, error) {
+func MakeTTLCache(ttl time.Duration, opts ...Option) (*TTLEventCache, func() error, error) {
 	// set a logical default
 	if ttl <= 0 {
 		ttl = 15 * time.Second
@@ -51,7 +51,7 @@ func MakeEventCache(ttl time.Duration, opts ...Option) (*EventCache, func() erro
 		return 1 * time.Second
 	}
 
-	c := &EventCache{
+	c := &TTLEventCache{
 		items:           make(map[string]time.Time),
 		ttl:             ttl,
 		cleanupInterval: defaultCleanupInterval(ttl),
@@ -77,7 +77,7 @@ func MakeEventCache(ttl time.Duration, opts ...Option) (*EventCache, func() erro
 
 // TryAdd implements debounce-on-arrival semantics.
 // Returns true if the caller should process the event; false if unexpired entry exists.
-func (c *EventCache) TryAdd(eventID string) bool {
+func (c *TTLEventCache) TryAdd(eventID string) bool {
 	now := time.Now()
 
 	c.mu.Lock()
@@ -102,7 +102,7 @@ func (c *EventCache) TryAdd(eventID string) bool {
 }
 
 // Stop stops the cleaner (key evictor) and prevents further additions. It blocks until the cleaner exits or ctx is done.
-func (c *EventCache) Stop(ctx context.Context) error {
+func (c *TTLEventCache) Stop(ctx context.Context) error {
 	c.mu.Lock()
 	if c.closed {
 		c.mu.Unlock()
@@ -122,14 +122,14 @@ func (c *EventCache) Stop(ctx context.Context) error {
 }
 
 // Len returns the number of entries currently in the cache. Useful for tests/metrics.
-func (c *EventCache) Len() int {
+func (c *TTLEventCache) Len() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return len(c.items)
 }
 
 // evictor runs in a background goroutine and periodically removes expired entries from the cache.
-func (c *EventCache) evictor() {
+func (c *TTLEventCache) evictor() {
 	ticker := time.NewTicker(c.cleanupInterval)
 	defer ticker.Stop()
 	defer close(c.done)

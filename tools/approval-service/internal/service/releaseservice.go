@@ -26,8 +26,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/config"
-	"github.com/gravitational/shared-workflows/tools/approval-service/internal/eventcache"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/eventsources/githubevents"
+	"github.com/gravitational/shared-workflows/tools/approval-service/internal/ttleventcache"
 	"github.com/gravitational/teleport/api/types"
 )
 
@@ -55,8 +55,8 @@ type ReleaseService struct {
 	// For example, we can receive 10s-100s of deployment review events in a short period of time for the same workflow.
 	// EventCache provides debounce semantics, ensuring that first arrival in the TTL window wins and subsequent
 	// arrivals are rejected (within the TTL window).
-	eventCache *eventcache.EventCache
-	// cleanup is an optional service level cleanup function (e.g. EventCache). Callers should invoke ReleaseService.Close
+	ttlEventCache *ttleventcache.TTLEventCache
+	// cleanup is an optional service level cleanup function (e.g. TTLEventCache). Callers should invoke ReleaseService.Close
 	// which will call this function to stop any goroutines and release resources, or nil if no cleanup is required.
 	cleanup func() error
 
@@ -116,11 +116,11 @@ func NewReleaseService(cfg config.Root, teleClient teleClient, ghClient ghClient
 	} else {
 		dedupeTTL = time.Duration(cfg.ApprovalService.EventCacheTTL) * time.Second
 	}
-	ec, cleanup, err := eventcache.MakeEventCache(dedupeTTL)
+	ec, cleanup, err := ttleventcache.MakeTTLCache(dedupeTTL)
 	if err != nil {
 		return nil, fmt.Errorf("creating event cache: %w", err)
 	}
-	d.eventCache = ec
+	d.ttlEventCache = ec
 	d.cleanup = cleanup
 
 	return d, nil
@@ -160,7 +160,7 @@ func (w *ReleaseService) HandleAccessRequestReviewed(ctx context.Context, req ty
 func (w *ReleaseService) onDeploymentReviewEventReceived(ctx context.Context, e githubevents.DeploymentReviewEvent) {
 	// One Access Request should be created per workflow run and environment.
 	eventID := githubEventID(e.Organization, e.Repository, e.WorkflowID, e.Environment)
-	if !w.eventCache.TryAdd(eventID) {
+	if !w.ttlEventCache.TryAdd(eventID) {
 		// Already processing this event, skip it.
 		w.log.Debug("Skipping already processed event", "event_id", eventID)
 		return
@@ -273,7 +273,7 @@ func (w *ReleaseService) createAccessRequest(ctx context.Context, e githubevents
 // onAccessRequestReviewed processes the Access Request review event.
 func (w *ReleaseService) onAccessRequestReviewed(ctx context.Context, req types.AccessRequest) {
 	eventID := req.GetName()
-	if !w.eventCache.TryAdd(eventID) {
+	if !w.ttlEventCache.TryAdd(eventID) {
 		// Already processing this event, skip it.
 		w.log.Debug("Skipping already processed access request", "access_request_name", req.GetName())
 		return
