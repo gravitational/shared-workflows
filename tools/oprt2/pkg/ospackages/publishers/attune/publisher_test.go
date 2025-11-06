@@ -82,7 +82,7 @@ func TestPublishToAPTRepo(t *testing.T) {
 	).Return(nil).Once()
 
 	publisher := NewPublisher(mockAttuneRunner)
-	publisher.PublishToAPTRepo(ctx, repo, distro, component, packageFilePath)
+	assert.NoError(t, publisher.PublishToAPTRepo(ctx, repo, distro, component, packageFilePath))
 }
 
 func TestClose(t *testing.T) {
