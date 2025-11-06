@@ -34,10 +34,10 @@ func WithCleanupInterval(interval time.Duration) Option {
 	}
 }
 
-// MakeTTLCache creates a new TTLEventCache.
+// MakeTTLEventCache creates a new TTLEventCache.
 // ttl: how long to prevent re-processing after an arrival or after finish().
 // Use options for additional configuration (e.g., WithCleanupInterval).
-func MakeTTLCache(ttl time.Duration, opts ...Option) (*TTLEventCache, func() error, error) {
+func MakeTTLEventCache(ttl time.Duration, opts ...Option) (*TTLEventCache, func() error, error) {
 	// set a logical default
 	if ttl <= 0 {
 		ttl = 15 * time.Second

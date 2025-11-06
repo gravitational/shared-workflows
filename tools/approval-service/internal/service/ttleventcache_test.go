@@ -19,7 +19,7 @@ var (
 func TestTryAddConcurrency(t *testing.T) {
 	// Arrange
 	ttl := 200 * time.Millisecond
-	ec, cleanupFunc, err := service.MakeTTLCache(ttl)
+	ec, cleanupFunc, err := service.MakeTTLEventCache(ttl)
 	if err != nil {
 		t.Fatalf("MakeTTLCache error: %v", err)
 	}
@@ -57,7 +57,7 @@ func TestTryAddConcurrency(t *testing.T) {
 // 3- after TTL expires, TryAdd succeeds again (cooldown expired)
 func TestTryAddDebounceAndCooldown(t *testing.T) {
 	ttl := 100 * time.Millisecond
-	ec, cleanupFunc, err := service.MakeTTLCache(ttl)
+	ec, cleanupFunc, err := service.MakeTTLEventCache(ttl)
 	if err != nil {
 		t.Fatalf("MakeTTLCache error: %v", err)
 	}
@@ -89,7 +89,7 @@ func TestTryAddDebounceAndCooldown(t *testing.T) {
 func TestCleanerEvictsExpiredEvents(t *testing.T) {
 	ttl := 100 * time.Millisecond
 	cleanupTicker := 50 * time.Millisecond
-	ec, cleanupFunc, err := service.MakeTTLCache(ttl, service.WithCleanupInterval(cleanupTicker))
+	ec, cleanupFunc, err := service.MakeTTLEventCache(ttl, service.WithCleanupInterval(cleanupTicker))
 	if err != nil {
 		t.Fatalf("MakeTTLCache error: %v", err)
 	}
@@ -118,7 +118,7 @@ func TestCleanerEvictsExpiredEvents(t *testing.T) {
 // TestStopPreventsAdds ensures Stop prevents further additions and that Stop returns
 func TestStopPreventsAdds(t *testing.T) {
 	ttl := 100 * time.Millisecond
-	ec, cleanupFunc, err := service.MakeTTLCache(ttl)
+	ec, cleanupFunc, err := service.MakeTTLEventCache(ttl)
 	if err != nil {
 		t.Fatalf("MakeTTLCache error: %v", err)
 	}

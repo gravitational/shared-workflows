@@ -115,7 +115,7 @@ func NewReleaseService(cfg config.Root, teleClient teleClient, ghClient ghClient
 	} else {
 		dedupeTTL = time.Duration(cfg.ApprovalService.EventCacheTTL) * time.Second
 	}
-	ec, cleanup, err := MakeTTLCache(dedupeTTL)
+	ec, cleanup, err := MakeTTLEventCache(dedupeTTL)
 	if err != nil {
 		return nil, fmt.Errorf("creating event cache: %w", err)
 	}
