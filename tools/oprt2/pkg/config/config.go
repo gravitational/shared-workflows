@@ -21,9 +21,27 @@ type Authenticator struct {
 	// Not implemented
 }
 
+// S3FileManager is a file manager that uses files stored in a remote S3 bucket.
+type S3FileManager struct {
+	// Bucket is the name of the S3 bucket containing files.
+	Bucket string
+	// Prefix is the path prefix of the bucket that all files should exist under.
+	Prefix string
+}
+
+// LocalFileManager is a file manager that uses files already on the local filesystem.
+type LocalFileManager struct {
+	// Directory is the path to the local directory containing files.
+	Directory string
+}
+
 // FileManager defines a storage backend for storing and pulling files.
+// Only one field may be specified.
 type FileManager struct {
-	// Not implemented
+	// Local handles files on the local filesystem.
+	Local *LocalFileManager
+	// S3 handles files in a remote S3 bucket.
+	S3 *S3FileManager
 }
 
 // GPGProvider defines a source of GPG keys.
@@ -48,7 +66,6 @@ type DiscardAPTPackagePublisher struct{}
 // Only one field may be specified.
 type APTPackagePublisher struct {
 	// AttuneAPTPackagePublisher publishes packages for an APT repo via Attune.
-	// If this is used, then the global Attune configuration must also be provided.
 	Attune *AttuneAPTPackagePublisher
 	// DiscardAPTPackagePublisher doesn't actually publish any APT packages.
 	// Useful for dry-runs.
