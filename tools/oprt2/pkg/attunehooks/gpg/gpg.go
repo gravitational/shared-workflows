@@ -14,20 +14,15 @@
  *  limitations under the License.
  */
 
-package commandrunner
+package gpg
 
 import (
-	"context"
-	"os/exec"
+	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/commandrunner"
+	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/config"
 )
 
-// Hook defines function(s) that should be called during different stages
-// of a command execution's lifecycle.
-type Hook interface {
-	Name() string
-	// Runs once per CLI command, prior to the command executing.
-	// If this errors, the command is not called.
-	Command(ctx context.Context, cmd *exec.Cmd) error
-	// Called after all CLI commands have been executed, even if an error occurs.
-	Close(ctx context.Context) error
+// FromConfig builds a new GPG provider from the given config.
+func FromConfig(config *config.GPGProvider) commandrunner.Hook {
+	// Not implemented
+	return nil
 }

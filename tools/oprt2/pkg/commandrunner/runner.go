@@ -18,12 +18,10 @@ package commandrunner
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"strings"
-	"sync"
 
 	"log/slog"
 
@@ -33,10 +31,8 @@ import (
 // Runner executes a command, running any registered hooks at the appropriate time.
 // Runner MUST be closed prior to program termination.
 type Runner struct {
-	setupLock sync.Mutex
-	setupRan  bool
-	hooks     []Hook
-	logger    *slog.Logger
+	hooks  []Hook
+	logger *slog.Logger
 }
 
 type RunnerOption func(r *Runner)
@@ -44,9 +40,7 @@ type RunnerOption func(r *Runner)
 // WithHooks adds hooks to the new runner.
 func WithHooks(hooks ...Hook) RunnerOption {
 	return func(r *Runner) {
-		for _, hook := range hooks {
-			r.RegisterHook(hook)
-		}
+		r.hooks = append(r.hooks, hooks...)
 	}
 }
 
@@ -73,67 +67,11 @@ func NewRunner(opts ...RunnerOption) *Runner {
 	return r
 }
 
-// Register hooks adds a hook to the command lifecycle.
-func (r *Runner) RegisterHook(h Hook) {
-	if h == nil {
-		return
-	}
-
-	r.hooks = append(r.hooks, h)
-}
-
-// Close runs all cleanup hooks. This should always run, even if the
-// command errors.
-func (r *Runner) Close(ctx context.Context) error {
-	errs := make([]error, 0, len(r.hooks))
-	for _, hook := range r.hooks {
-		r.logger.DebugContext(ctx, "running hook cleanup", "hook", hook.Name())
-		errs = append(errs, hook.Cleanup(ctx))
-	}
-
-	return errors.Join(errs...)
-}
-
-// Setup runs setup hooks. This will return after the first hook failure, or all hooks succeed.
-// If setup has already been ran successfully once, it will not run again and will return nil.
-func (r *Runner) Setup(ctx context.Context) error {
-	r.setupLock.Lock()
-	defer r.setupLock.Unlock()
-
-	if r.setupRan {
-		return nil
-	}
-
-	for _, hook := range r.hooks {
-		r.logger.DebugContext(ctx, "running hook setup", "hook", hook.Name())
-		if err := hook.Setup(ctx); err != nil {
-			return fmt.Errorf("hook %q setup failed: %w", hook.Name(), err)
-		}
-	}
-
-	r.setupRan = true
-	return nil
-}
-
 // Run executes the provided command. If setup hooks have not been successfully called, they
 // will be ran prior to executing the command.
 // Cleanup hooks will not be called explicitly. The caller should `Close` the runner after
 // all associated command have been ran.
 func (r *Runner) Run(ctx context.Context, name string, args ...string) error {
-	// Ensure setup has ran successfully at least once
-	if err := r.Setup(ctx); err != nil {
-		return fmt.Errorf("setup failed: %w", err)
-	}
-
-	// Allow hooks to modify the command or arguments
-	for _, hook := range r.hooks {
-		r.logger.DebugContext(ctx, "running hook pre-command", "hook", hook.Name())
-		if err := hook.PreCommand(ctx, &name, &args); err != nil {
-			cmdString := buildCommandDebugString(exec.Command(name, args...))
-			return fmt.Errorf("hook %q pre-command failed for command %q: %w",
-				hook.Name(), cmdString, err)
-		}
-	}
 
 	// Build the command
 	cmd := exec.CommandContext(ctx, name, args...)

@@ -14,31 +14,25 @@
  *  limitations under the License.
  */
 
-package packagemanager
+package loader
 
 import (
 	"context"
-	"errors"
+	"fmt"
+	"log/slog"
 
-	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/commandrunner"
 	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/config"
+	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/ospackages"
+	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/ospackages/managers/apt"
 )
 
-type PackagePublishingTask func(context.Context) error
-
-// Manager handles the publishing of all configured packages.
-type Manager interface {
-	// GetPackagePublishingTasks returns tasks for publishing packages.
-	GetPackagePublishingTasks(ctx context.Context) ([]PackagePublishingTask, error)
-
-	// Name is the name of the package manager.
-	Name() string
-
-	// Close closes the package manager
-	Close(ctx context.Context) error
-}
-
 // FromConfig builds a new package manager from the provided config, adding any provided authentication hooks.
-func FromConfig(ctx context.Context, config config.PackageManager, attuneAuthHooks ...commandrunner.Hook) (Manager, error) {
-	return nil, errors.New("not implemented")
+// Attune hooks can be nil if Attune is not used.
+func FromConfig(ctx context.Context, config config.PackageManager, logger *slog.Logger) (ospackages.Manager, error) {
+	switch {
+	case config.APT != nil:
+		return apt.FromConfig(ctx, *config.APT, logger)
+	default:
+		return nil, fmt.Errorf("no package manager config provided")
+	}
 }
