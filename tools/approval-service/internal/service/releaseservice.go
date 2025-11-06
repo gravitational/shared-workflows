@@ -27,7 +27,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/config"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/eventsources/githubevents"
-	"github.com/gravitational/shared-workflows/tools/approval-service/internal/ttleventcache"
 	"github.com/gravitational/teleport/api/types"
 )
 
@@ -53,9 +52,9 @@ type ReleaseService struct {
 
 	// For deduplication logic to ensure that we do not process similar events concurrently.
 	// For example, we can receive 10s-100s of deployment review events in a short period of time for the same workflow.
-	// EventCache provides debounce semantics, ensuring that first arrival in the TTL window wins and subsequent
+	// TTLEventCache provides debounce semantics, ensuring that first arrival in the TTL window wins and subsequent
 	// arrivals are rejected (within the TTL window).
-	ttlEventCache *ttleventcache.TTLEventCache
+	ttlEventCache *TTLEventCache
 	// cleanup is an optional service level cleanup function (e.g. TTLEventCache). Callers should invoke ReleaseService.Close
 	// which will call this function to stop any goroutines and release resources, or nil if no cleanup is required.
 	cleanup func() error
@@ -116,7 +115,7 @@ func NewReleaseService(cfg config.Root, teleClient teleClient, ghClient ghClient
 	} else {
 		dedupeTTL = time.Duration(cfg.ApprovalService.EventCacheTTL) * time.Second
 	}
-	ec, cleanup, err := ttleventcache.MakeTTLCache(dedupeTTL)
+	ec, cleanup, err := MakeTTLCache(dedupeTTL)
 	if err != nil {
 		return nil, fmt.Errorf("creating event cache: %w", err)
 	}
