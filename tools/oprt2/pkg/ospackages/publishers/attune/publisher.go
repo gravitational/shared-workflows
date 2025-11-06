@@ -28,13 +28,13 @@ import (
 // Publisher is a publisher that publishes via Attune.
 type Publisher struct {
 	logger *slog.Logger
-	attune *commandrunner.Runner
+	attune commandrunner.Runner
 }
 
 var _ ospackages.Publisher = (*Publisher)(nil)
 
 // NewPublisher creates a new publisher that uses Attune to upload packages.
-func NewPublisher(attuneRunner *commandrunner.Runner, opts ...PublisherOpt) (*Publisher, error) {
+func NewPublisher(attuneRunner commandrunner.Runner, opts ...PublisherOpt) *Publisher {
 	ap := &Publisher{
 		logger: logging.DiscardLogger,
 		attune: attuneRunner,
@@ -44,7 +44,7 @@ func NewPublisher(attuneRunner *commandrunner.Runner, opts ...PublisherOpt) (*Pu
 		opt(ap)
 	}
 
-	return ap, nil
+	return ap
 }
 
 // Name is the name of the package publisher.

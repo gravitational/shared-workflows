@@ -14,37 +14,29 @@
  *  limitations under the License.
  */
 
-package commandrunner
+package apt
 
 import (
 	"context"
-	"os/exec"
 
+	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/ospackages"
 	"github.com/stretchr/testify/mock"
 )
 
-type mockHook struct {
+type mockAPTPublisher struct {
 	mock.Mock
 }
 
-var _ Hook = (*mockHook)(nil)
+var _ ospackages.APTPublisher = (*mockAPTPublisher)(nil)
 
-func (mh *mockHook) Name() string {
-	return mh.Called().Get(0).(string)
+func (maptp *mockAPTPublisher) Name() string {
+	return maptp.Called().Get(0).(string)
 }
 
-func (mh *mockHook) Setup(ctx context.Context) error {
-	return mh.Called(ctx).Error(0)
+func (maptp *mockAPTPublisher) Close(ctx context.Context) error {
+	return maptp.Called(ctx).Error(0)
 }
 
-func (mh *mockHook) PreCommand(ctx context.Context, name *string, args *[]string) error {
-	return mh.Called(ctx, name, args).Error(0)
-}
-
-func (mh *mockHook) Command(ctx context.Context, cmd *exec.Cmd) error {
-	return mh.Called(ctx, cmd).Error(0)
-}
-
-func (mh *mockHook) Cleanup(ctx context.Context) error {
-	return mh.Called(ctx).Error(0)
+func (maptp *mockAPTPublisher) PublishToAPTRepo(ctx context.Context, repo, distro, component, packageFilePath string) error {
+	return maptp.Called(ctx, repo, distro, component, packageFilePath).Error(0)
 }
