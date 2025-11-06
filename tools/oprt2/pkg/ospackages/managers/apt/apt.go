@@ -29,8 +29,10 @@ import (
 
 // APT is a [ospackages.Manager] that manages Debian files in APT repos.
 type APT struct {
-	components  map[string][]*regexp.Regexp
-	distros     map[string][]string
+	// Key is component name, value is a set of matchers to select files that should be associated with each component
+	components map[string][]*regexp.Regexp
+	// Key is repo name (e.g. `ubuntu`, `debian` for Gravitational), value is APT distros that should be associated with each repo (e.g. `noble`, `trixie` for Gravitational)
+	repos       map[string][]string
 	fileManager filemanager.FileManager
 	publisher   ospackages.APTPublisher
 	logger      *slog.Logger
@@ -59,7 +61,11 @@ func (apt *APT) GetPackagePublishingTasks(ctx context.Context) ([]ospackages.Pac
 		return nil, fmt.Errorf("failed to get packages to publish to APT repos: %w", err)
 	}
 
-	// Map the files to specific components
+	// Map the components to files components
+	// Given a map of components with regex file selectors for each component, get a specific list of files that
+	// should be associated with each component.
+	// For example, given {"noble": ["teleport-(amd|arm)64\.deb", other-packages\.deb]}, produce
+	// {"noble": ["teleport-amd64.deb", "teleport-arm64.deb", "other-packages.deb (if exists)"]}
 	componentFiles := make(map[string][]string, len(apt.components))
 	for component, filePatterns := range apt.components {
 		for _, candidateItem := range candidateItems {
@@ -83,7 +89,7 @@ func (apt *APT) GetPackagePublishingTasks(ctx context.Context) ([]ospackages.Pac
 	// Enqueue an upload of the files
 	publishingTasks := make([]ospackages.PackagePublishingTask, 0)
 	for component, packageFilePaths := range componentFiles {
-		for distro, distroVersions := range apt.distros {
+		for distro, distroVersions := range apt.repos {
 			for _, distroVersion := range distroVersions {
 				for _, packageFilePath := range packageFilePaths {
 					publishFunc := func(ctx context.Context) error {

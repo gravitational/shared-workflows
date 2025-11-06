@@ -76,6 +76,8 @@ func FromConfig(ctx context.Context, config config.APTPackageManager, logger *sl
 // getAPTComponentsFromConfig converts the input map of component name, component file matchers to
 // an output map of component name, component file matcher regexp instances. An error is returned if
 // any of the provided component file matcher strings cannot be compiled into a regular expression.
+// For example, given {"noble": []string{"teleport-(amd|arm)64\.deb", other-packages\.deb}}, produce
+// {"noble": []*regex.Regexp{"teleport-(amd|arm)64\.deb", other-packages\.deb}}
 func getAPTComponentsFromConfig(config map[string][]string) (map[string][]*regexp.Regexp, error) {
 	components := make(map[string][]*regexp.Regexp, len(config))
 	for componentName, fileMatchers := range config {

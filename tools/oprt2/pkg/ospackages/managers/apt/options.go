@@ -71,7 +71,7 @@ func WithComponents(components map[string][]*regexp.Regexp) APTOption {
 // multiple times is not supported.
 func WithDistros(distros map[string][]string) APTOption {
 	return func(apt *APT) {
-		apt.distros = distros
+		apt.repos = distros
 
 		// Get unique values only
 		for distroName, distroVersions := range distros {
@@ -89,7 +89,7 @@ func WithDistros(distros map[string][]string) APTOption {
 			slices.Sort(distros[distroName])
 		}
 
-		apt.distros = distros
+		apt.repos = distros
 	}
 }
 
