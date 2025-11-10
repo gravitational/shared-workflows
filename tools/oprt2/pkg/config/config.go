@@ -44,9 +44,26 @@ type FileManager struct {
 	S3 *S3FileManager
 }
 
+// GPGArchiveProvider provides a GPG key  via a compressed tar archive that is a standard
+// RFC 4648 base64-encoded string.
+// Example command to generate this:
+// tar --exclude='.#*' --exclude="*~" --exclude="S.*" -czf - ~/.gnupg/ | base64
+type GPGArchiveProvider struct {
+	Archive string  `json:"archive" jsonschema:"required"`
+	KeyID   *string `json:"keyID"`
+}
+
+// GPGKeyIDProvider provides a GPG key from the local filesystem specified by the
+// provided GPG key ID.
+type GPGKeyIDProvider struct {
+	KeyID            *string `json:"keyID"`
+	GPGHomeDirectory *string `json:"gpgHomeDirectory"`
+}
+
 // GPGProvider defines a source of GPG keys.
 type GPGProvider struct {
-	// Not implemented
+	Archive *GPGArchiveProvider `json:"archive"`
+	KeyID   *GPGKeyIDProvider   `json:"keyID"`
 }
 
 // AttuneAPTPackagePublisher publishes packages for an APT repo via Attune.
