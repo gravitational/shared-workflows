@@ -40,7 +40,7 @@ func TestLock(t *testing.T) {
 	require.NoError(t, err)
 	defer lock.Unlock()
 
-	secondLockCtx, cancel := context.WithTimeout(t.Context(), 10*time.Millisecond)
+	secondLockCtx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 	defer cancel()
 	// This should fail
 	err = lock.Lock(secondLockCtx)
@@ -66,10 +66,12 @@ func TestClose(t *testing.T) {
 	})
 
 	t.Run("close locked lock", func(t *testing.T) {
-		closeCtx, cancel := context.WithTimeout(t.Context(), 10*time.Millisecond)
+		closeCtx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 		cancel()
 
 		lock := NewContextLock()
+		err := lock.Lock(t.Context())
+		require.NoError(t, err)
 		assert.Error(t, lock.Close(closeCtx))
 	})
 }
