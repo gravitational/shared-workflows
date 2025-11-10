@@ -14,12 +14,28 @@
  *  limitations under the License.
  */
 
-package commandrunner
+package attune
 
-import "context"
+import (
+	"context"
 
-// Runner abstracts command execution to allow for easier testing.
-type Runner interface {
-	// Run executes the provided command `name` with args `args`.
-	Run(ctx context.Context, name string, args ...string) error
+	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/commandrunner"
+	"github.com/stretchr/testify/mock"
+)
+
+type mockRunner struct {
+	mock.Mock
+}
+
+var _ commandrunner.Runner = (*mockRunner)(nil)
+
+func (mr *mockRunner) Run(ctx context.Context, name string, args ...string) error {
+	calledArgs := make([]any, 0, 2+len(args))
+	calledArgs = append(calledArgs, ctx, name)
+	for _, arg := range args {
+		// Implicitly convert from `string` to `interface{}`
+		calledArgs = append(calledArgs, arg)
+	}
+
+	return mr.Called(calledArgs...).Error(0)
 }

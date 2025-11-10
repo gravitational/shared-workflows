@@ -22,28 +22,31 @@ import (
 	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/ospackages"
 )
 
-// DiscardPublisher is a publisher that does nothing.
-type DiscardPublisher struct{}
+// Publisher is a publisher that does nothing.
+type Publisher struct{}
 
-var _ ospackages.APTPublisher = (*DiscardPublisher)(nil)
+var _ ospackages.APTPublisher = (*Publisher)(nil)
+
+// DiscardLogger is a publisher that does nothing.
+var DiscardPublisher = NewDiscardPublisher()
 
 // NewDiscardPublisher creates a new, do-nothing publisher.
-func NewDiscardPublisher() *DiscardPublisher {
-	return &DiscardPublisher{}
+func NewDiscardPublisher() *Publisher {
+	return &Publisher{}
 }
 
 // Name is the name of the package publisher.
-func (*DiscardPublisher) Name() string {
+func (*Publisher) Name() string {
 	return "discard"
 }
 
 // PublishToAPTRepo publishes the package at the provided file path to the publisher's APT repo,
 // with the set distro, and component.
-func (*DiscardPublisher) PublishToAPTRepo(ctx context.Context, repo, distro, component, packageFileName string) error {
+func (*Publisher) PublishToAPTRepo(ctx context.Context, repo, distro, component, packageFileName string) error {
 	return nil
 }
 
 // Close closes the publisher
-func (*DiscardPublisher) Close(_ context.Context) error {
+func (*Publisher) Close(_ context.Context) error {
 	return nil
 }

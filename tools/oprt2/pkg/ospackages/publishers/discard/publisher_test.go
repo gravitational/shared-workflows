@@ -14,12 +14,26 @@
  *  limitations under the License.
  */
 
-package commandrunner
+package discard
 
-import "context"
+import (
+	"testing"
 
-// Runner abstracts command execution to allow for easier testing.
-type Runner interface {
-	// Run executes the provided command `name` with args `args`.
-	Run(ctx context.Context, name string, args ...string) error
+	"github.com/stretchr/testify/assert"
+)
+
+func TestNewDiscardPublisher(t *testing.T) {
+	assert.NotNil(t, NewDiscardPublisher())
+}
+
+func TestName(t *testing.T) {
+	assert.NotEmpty(t, NewDiscardPublisher().Name())
+}
+
+func TestPublishToAPTRepo(t *testing.T) {
+	assert.NoError(t, NewDiscardPublisher().PublishToAPTRepo(t.Context(), "", "", "", ""))
+}
+
+func TestClose(t *testing.T) {
+	assert.NoError(t, NewDiscardPublisher().Close(t.Context()))
 }

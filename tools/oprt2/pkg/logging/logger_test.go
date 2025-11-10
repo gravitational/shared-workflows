@@ -14,12 +14,16 @@
  *  limitations under the License.
  */
 
-package commandrunner
+package logging
 
-import "context"
+import (
+	"log/slog"
+	"testing"
 
-// Runner abstracts command execution to allow for easier testing.
-type Runner interface {
-	// Run executes the provided command `name` with args `args`.
-	Run(ctx context.Context, name string, args ...string) error
+	"github.com/stretchr/testify/assert"
+)
+
+func TestDiscardLogger(t *testing.T) {
+	assert.NotNil(t, DiscardLogger)
+	assert.Equal(t, slog.DiscardHandler, DiscardLogger.Handler())
 }

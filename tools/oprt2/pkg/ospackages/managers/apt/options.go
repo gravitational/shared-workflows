@@ -28,74 +28,57 @@ import (
 )
 
 // APTOption provides optional configuration to the APT package manager.
-type APTOption func(apt *APT)
+type APTOption func(apt *Manager)
 
-// WithComponents configures the package manager to map files to APT components. Key is
-// the component name, value is a list of regular expressions used to match files to the
-// component. Each expression will be matched against every file in the storage backend,
-// including the file's path. For example, `some/path/teleport.deb`.
-// Note: This will overwrite existing components, not replace them. Providing
-// `WithComponents` multiple times is not supported.
-func WithComponents(components map[string][]*regexp.Regexp) APTOption {
-	return func(apt *APT) {
-		apt.components = components
+// Repos is the full config for what APT repos that should be used.
+// First-level key is repo name (e.g. `ubuntu`, `debian` for Gravitational).
+// Second-level key is distribution (e.g. `plucky`, `trixie` for Gravitational).
+// Third-level key is component (e.g. `stable/rolling`, `stable/v18` for Gravitational).
+// Values are a list of regular expressions that match file paths that should be associated with
+// with repo/distribution/component combination.
+// See https://wiki.debian.org/DebianRepository/Format#Overview for details.
+// Note: This will overwrite existing repos, not replace them. Providing `WithRepos`
+// multiple times is not supported.
+func WithRepos(repos map[string]map[string]map[string][]*regexp.Regexp) APTOption {
+	return func(apt *Manager) {
+		for repoName, distributions := range repos {
+			for distributionName, components := range distributions {
+				for componentName, fileNameMatchers := range components {
+					// Get unique values file matcher values only
+					uniqueMatchers := make(map[string]*regexp.Regexp, len(fileNameMatchers))
+					for _, fileNameMatcher := range fileNameMatchers {
+						uniqueMatchers[fileNameMatcher.String()] = fileNameMatcher
+					}
 
-		// Get unique matchers
-		// This does not preserve order, but it shouldn't need to
-		for componentName, fileNameMatchers := range components {
-			uniqueMatchers := make(map[string]*regexp.Regexp, len(fileNameMatchers))
-			for _, fileNameMatcher := range fileNameMatchers {
-				uniqueMatchers[fileNameMatcher.String()] = fileNameMatcher
-			}
+					if len(uniqueMatchers) == len(fileNameMatchers) {
+						// Short-circuit when all items are already unique
+						continue
+					}
 
-			if len(uniqueMatchers) != len(fileNameMatchers) {
-				keys := slices.Collect(maps.Keys(uniqueMatchers))
-				slices.Sort(keys)
+					keys := slices.Collect(maps.Keys(uniqueMatchers))
+					slices.Sort(keys)
 
-				sortedUniqueMatchers := make([]*regexp.Regexp, 0, len(keys))
-				for _, key := range keys {
-					sortedUniqueMatchers = append(sortedUniqueMatchers, uniqueMatchers[key])
+					sortedUniqueMatchers := make([]*regexp.Regexp, 0, len(keys))
+					for _, key := range keys {
+						sortedUniqueMatchers = append(sortedUniqueMatchers, uniqueMatchers[key])
+					}
+
+					components[componentName] = sortedUniqueMatchers
 				}
 
-				components[componentName] = sortedUniqueMatchers
+				distributions[distributionName] = components
 			}
+
+			repos[repoName] = distributions
 		}
 
-		apt.components = components
-	}
-}
-
-// WithDistros configures the package manager to add packages to the specified distros. Key
-// is the distro name (e.g. ubuntu, debian), value is distro version (e.g. noble, plucky).
-// Note: This will overwrite existing distros, not replace them. Providing `WithDistros`
-// multiple times is not supported.
-func WithDistros(distros map[string][]string) APTOption {
-	return func(apt *APT) {
-		apt.repos = distros
-
-		// Get unique values only
-		for distroName, distroVersions := range distros {
-			uniqueVersions := make(map[string]struct{}, len(distroVersions))
-			for _, distroVersion := range distroVersions {
-				uniqueVersions[distroVersion] = struct{}{}
-			}
-
-			// Collect the results if anything has changed
-			if len(uniqueVersions) != len(distroVersions) {
-				distros[distroName] = slices.Collect(maps.Keys(uniqueVersions))
-			}
-
-			// Sort to make the process a little more predictable (e.g. log output ordering)
-			slices.Sort(distros[distroName])
-		}
-
-		apt.repos = distros
+		apt.repos = repos
 	}
 }
 
 // WithLogger configures the package manager with the provided logger.
 func WithLogger(logger *slog.Logger) APTOption {
-	return func(apt *APT) {
+	return func(apt *Manager) {
 		if logger == nil {
 			logger = logging.DiscardLogger
 		}
@@ -105,9 +88,9 @@ func WithLogger(logger *slog.Logger) APTOption {
 
 // WithPublisher sets the publisher to use.
 func WithPublisher(publisher ospackages.APTPublisher) APTOption {
-	return func(apt *APT) {
+	return func(apt *Manager) {
 		if publisher == nil {
-			publisher = discard.NewDiscardPublisher()
+			publisher = discard.DiscardPublisher
 		}
 
 		apt.publisher = publisher

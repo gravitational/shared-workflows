@@ -25,6 +25,7 @@ import (
 	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/attunehooks/authenticators"
 	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/attunehooks/gpg"
 	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/commandrunner"
+	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/commandrunner/exec"
 	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/config"
 	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/ospackages"
 )
@@ -50,17 +51,8 @@ func FromConfig(ctx context.Context, config config.AttuneAPTPackagePublisher, lo
 		gpg.FromConfig(config.GPG),
 	}
 
-	attuneRunner := commandrunner.NewRunner(commandrunner.WithLogger(logger), commandrunner.WithHooks(hooks...))
-	publisher, err := NewPublisher(attuneRunner, WithLogger(logger))
-	if err != nil {
-		return nil, errors.Join(
-			fmt.Errorf("failed to create new publisher: %w", err),
-			// This must be called to prevent leakage of sensitive resources (e.g. GPG keys, certs)
-			// This needs to use a separate context to ensure that cleanup is not cancelled in the event that
-			// ctx is cancelled. TODO figure out a better way of plumbing this from the caller.
-			cleanupHooks(context.TODO(), hooks),
-		)
-	}
+	attuneRunner := exec.NewRunner(exec.WithLogger(logger), exec.WithHooks(hooks...))
+	publisher := NewPublisher(attuneRunner, WithLogger(logger))
 
 	return &publisherFromConfig{
 		Publisher: publisher,

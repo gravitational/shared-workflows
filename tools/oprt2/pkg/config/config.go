@@ -60,14 +60,14 @@ type APTPackagePublisher struct {
 type APTPackageManager struct {
 	// FileSource is where Debian packages (*.deb files) will be pulled from.
 	FileSource FileManager
-	// Components are the APT repo components that should be used.
-	// Key is the name of the APT component, value is a list of regular expressions
-	// that match file path that should be associated with the component.
-	Components map[string][]string
-	// Distros are the APT distros that should be used.
-	// Key is the name of the distro (e.g. `ubuntu`, `debian`), value is a list of
-	// distro versions (e.g. `plucky`, `trixie`).
-	Distros map[string][]string
+	// Repos is the full config for what APT repos that should be used.
+	// First-level key is repo name (e.g. `ubuntu`, `debian` for Gravitational).
+	// Second-level key is distribution (e.g. `plucky`, `trixie` for Gravitational).
+	// Third-level key is component (e.g. `stable/rolling`, `stable/v18` for Gravitational).
+	// Values are a list of regular expressions that match file paths that should be associated with
+	// with repo/distribution/component combination.
+	// See https://wiki.debian.org/DebianRepository/Format#Overview for details.
+	Repos map[string]map[string]map[string][]string
 	// PublishingTool is the tool that should be used to publish packages.
 	PublishingTool APTPackagePublisher
 }
