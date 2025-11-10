@@ -59,7 +59,7 @@ func (lfm *FileManager) Name() string {
 	return "local@" + lfm.baseDirectory
 }
 
-func (lfm *FileManager) Close() error {
+func (lfm *FileManager) Close(_ context.Context) error {
 	if lfm.baseDirectoryRoot != nil {
 		return lfm.baseDirectoryRoot.Close()
 	}
@@ -94,5 +94,14 @@ func (lfm *FileManager) ListItems(_ context.Context) ([]string, error) {
 
 // GetLocalFilePath gets a local filesystem path to the specified item.
 func (lfm *FileManager) GetLocalFilePath(_ context.Context, item string) (string, error) {
+	info, err := lfm.baseDirectoryRoot.Lstat(item)
+	if err != nil {
+		return "", fmt.Errorf("failed to verify that item %q exists: %w", item, err)
+	}
+
+	if !info.Mode().IsRegular() {
+		return "", fmt.Errorf("item %q is not a regular file", item)
+	}
+
 	return item, nil
 }

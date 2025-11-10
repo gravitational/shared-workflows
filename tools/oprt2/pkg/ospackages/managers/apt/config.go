@@ -54,7 +54,7 @@ func FromConfig(ctx context.Context, config config.APTPackageManager, logger *sl
 
 	publisher, err := publishers.FromAPTConfig(ctx, config.PublishingTool, logger)
 	if err != nil {
-		cleanupErr := fileManager.Close()
+		cleanupErr := fileManager.Close(context.TODO())
 		if cleanupErr != nil {
 			cleanupErr = fmt.Errorf("failed to close file manager %s: %w", fileManager.Name(), err)
 		}
@@ -115,7 +115,7 @@ func (afc *managerFromConfig) Close(ctx context.Context) error {
 	}
 
 	if afc.fileManager != nil {
-		if err := afc.fileManager.Close(); err != nil {
+		if err := afc.fileManager.Close(ctx); err != nil {
 			errs = append(errs, fmt.Errorf("failed to clean up file manager %s: %w", afc.fileManager.Name(), err))
 		}
 	}

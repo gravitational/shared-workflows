@@ -38,5 +38,5 @@ type FileManager interface {
 	Name() string
 
 	// Close closes the file manager. This should include a cleanup of any local temporary resources.
-	Close() error
+	Close(ctx context.Context) error
 }
