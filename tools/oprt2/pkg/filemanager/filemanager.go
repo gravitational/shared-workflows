@@ -18,9 +18,6 @@ package filemanager
 
 import (
 	"context"
-	"errors"
-
-	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/config"
 )
 
 // Handles storage and retrieval of items in a storage backend.
@@ -42,9 +39,4 @@ type FileManager interface {
 
 	// Close closes the file manager. This should include a cleanup of any local temporary resources.
 	Close() error
-}
-
-// FromConfig builds a new file manager from the provided config.
-func FromConfig(ctx context.Context, config config.FileManager) (FileManager, error) {
-	return nil, errors.New("not implemented")
 }

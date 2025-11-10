@@ -25,6 +25,7 @@ import (
 
 	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/config"
 	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/filemanager"
+	filemanagerloader "github.com/gravitational/shared-workflows/tools/oprt2/pkg/filemanager/loader"
 	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/ospackages"
 	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/ospackages/publishers"
 )
@@ -46,7 +47,7 @@ func FromConfig(ctx context.Context, config config.APTPackageManager, logger *sl
 		return nil, fmt.Errorf("failed to get APT repos: %w", err)
 	}
 
-	fileManager, err := filemanager.FromConfig(ctx, config.FileSource)
+	fileManager, err := filemanagerloader.FromConfig(ctx, config.FileSource)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create file manager from config: %w", err)
 	}
