@@ -89,7 +89,10 @@ func (sfm *FileManager) Name() string {
 
 func (sfm *FileManager) Close(ctx context.Context) error {
 	// Closing this first ensures that item retrieval will not be attempted while removing the directories
-	sfm.itemLocker.Close(ctx)
+	if err := sfm.itemLocker.Close(ctx); err != nil {
+		// If this fails then the file manager cannot be cleaned up because it could be in use
+		return fmt.Errorf("failed to close file locks: %w", err)
+	}
 
 	cleanupErrs := make([]error, 0, 2)
 	if sfm.workingDirectoryRoot != nil {

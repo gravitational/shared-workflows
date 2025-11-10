@@ -50,9 +50,10 @@ func TestMapLockUnlock(t *testing.T) {
 	err = mm.Unlock(t.Context(), keyB)
 	require.NoError(t, err)
 
-	assert.Panics(t, func() { mm.Unlock(t.Context(), keyB) })
+	assert.Panics(t, func() { _ = mm.Unlock(t.Context(), keyB) })
 
-	mm.Unlock(t.Context(), keyA)
+	err = mm.Unlock(t.Context(), keyA)
+	require.NoError(t, err)
 
 	assert.Len(t, mm.locks, 0)
 }
