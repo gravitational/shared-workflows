@@ -47,7 +47,6 @@ import (
 // metadata are intentionally ignored. Created filesystem objects will have mode
 // 0600, and will be owned by the current user.
 type Provider struct {
-	archive              string
 	keyID                string
 	credentialsDirectory string
 	logger               *slog.Logger
@@ -58,15 +57,14 @@ var _ commandrunner.Hook = (*Provider)(nil)
 // NewProvider creates a new Provider.
 func NewProvider(ctx context.Context, archive string, opts ...ProviderOption) (*Provider, error) {
 	p := &Provider{
-		archive: archive,
-		logger:  logging.DiscardLogger,
+		logger: logging.DiscardLogger,
 	}
 
 	for _, opt := range opts {
 		opt(p)
 	}
 
-	if err := p.setup(ctx); err != nil {
+	if err := p.setup(ctx, archive); err != nil {
 		return nil, fmt.Errorf("failed to setup provider: %w", err)
 	}
 
@@ -78,16 +76,16 @@ func (p *Provider) Name() string {
 	return "GPG archive provider"
 }
 
-func (p *Provider) setup(ctx context.Context) (err error) {
+func (p *Provider) setup(ctx context.Context, archive string) (err error) {
 	// Attempt to decode, decompress, and extract the contents of the archive
-	b64Decoder := base64.NewDecoder(base64.RawStdEncoding, bytes.NewReader([]byte(p.archive)))
+	b64Decoder := base64.NewDecoder(base64.RawStdEncoding, bytes.NewReader([]byte(archive)))
 
 	gzipDecompressor, err := gzip.NewReader(b64Decoder)
 	if err != nil {
 		return fmt.Errorf("failed to create gzip decompressor for archive: %w", err)
 	}
 
-	cleanupFunc := func(retErr error) error {
+	cleanupFunc1 := func(retErr error) error {
 		// The underlying close function can return a decompression-related error and needs to be checked
 		cleanupErr := gzipDecompressor.Close()
 		if cleanupErr != nil {
@@ -101,21 +99,21 @@ func (p *Provider) setup(ctx context.Context) (err error) {
 	// Create a directory to extract the archive to
 	credentialsDirectory, err := os.MkdirTemp("", "gpghome-*")
 	if err != nil {
-		return cleanupFunc(fmt.Errorf("failed to create temporary GPG home directory: %w", err))
+		return cleanupFunc1(fmt.Errorf("failed to create temporary GPG home directory: %w", err))
 	}
 	p.credentialsDirectory = credentialsDirectory
 
-	cleanupFunc = func(retErr error) error {
+	cleanupFunc2 := func(retErr error) error {
 		cleanupErr := p.Close(ctx)
 		if cleanupErr != nil {
 			cleanupErr = fmt.Errorf("cleanup failed: %w", err)
 		}
-		return errors.Join(cleanupFunc(retErr), cleanupErr)
+		return errors.Join(cleanupFunc1(retErr), cleanupErr)
 	}
 
 	// Extract all contents
 	if err := p.extractArchive(ctx, tarExtractor); err != nil {
-		return cleanupFunc(fmt.Errorf("failed to extract all GPG archive contents to disk: %w", err))
+		return cleanupFunc2(fmt.Errorf("failed to extract all GPG archive contents to disk: %w", err))
 	}
 
 	return nil
@@ -138,7 +136,16 @@ func (p *Provider) extractArchive(ctx context.Context, reader *tar.Reader) error
 	}()
 
 	// Write all the the archive contents to disk
-	for tarHeader, err := reader.Next(); err != nil; {
+	for {
+		tarHeader, err := reader.Next()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				// The reader should return this error specifically when all archive items have been enumerated
+				break
+			}
+			return fmt.Errorf("archive extraction failed: %w", err)
+		}
+
 		if tarHeader == nil {
 			continue
 		}
@@ -146,11 +153,6 @@ func (p *Provider) extractArchive(ctx context.Context, reader *tar.Reader) error
 		if err := p.createTarFilesytemObject(ctx, credDirRoot, tarHeader, reader); err != nil {
 			return fmt.Errorf("failed to create filesystem object from GPG archive: %w", err)
 		}
-	}
-
-	// The reader should return this error specifically when all archive items have been enumerated
-	if !errors.Is(err, io.EOF) {
-		return fmt.Errorf("archive extraction failed: %w", err)
 	}
 
 	return nil
@@ -200,7 +202,7 @@ func createTarFile(root *os.Root, relFilePath string, contents []byte) error {
 	}
 
 	// Create the actual file
-	_, err := root.Lstat(realPath)
+	_, err := root.Lstat(relFilePath)
 	if err == nil {
 		return fmt.Errorf("filesystem object already exists at %q (duplicate archive entries?)", realPath)
 	}
@@ -222,7 +224,11 @@ func createTarFile(root *os.Root, relFilePath string, contents []byte) error {
 
 // Command implements the [commandrunner.Hook] interface.
 func (p *Provider) Command(_ context.Context, cmd *exec.Cmd) error {
-	providerFlags := []string{"--gpg-home-dir", p.credentialsDirectory, "--key-id", p.keyID}
+	providerFlags := []string{"--gpg-home-dir", p.credentialsDirectory}
+
+	if p.keyID != "" {
+		providerFlags = append(providerFlags, "--key-id", p.keyID)
+	}
 
 	if len(cmd.Args) == 0 {
 		cmd.Args = providerFlags
@@ -234,11 +240,11 @@ func (p *Provider) Command(_ context.Context, cmd *exec.Cmd) error {
 
 	var flags []string
 	if len(cmd.Args) > 1 {
-		flags = cmd.Args[0 : len(cmd.Args)-2]
+		flags = cmd.Args[0 : len(cmd.Args)-1]
 	}
 
 	// Args = flags + provider flags + file name
-	args := make([]string, len(flags)+len(providerFlags)+1)
+	args := make([]string, 0, len(flags)+len(providerFlags)+1)
 	args = append(args, flags...)
 	args = append(args, providerFlags...)
 	args = append(args, filePath)

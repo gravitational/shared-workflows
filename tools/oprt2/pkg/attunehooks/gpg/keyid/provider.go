@@ -60,6 +60,10 @@ func (p *Provider) Command(_ context.Context, cmd *exec.Cmd) error {
 		providerFlags = append(providerFlags, "--key-id", p.keyID)
 	}
 
+	if len(providerFlags) == 0 {
+		return nil
+	}
+
 	if len(cmd.Args) == 0 {
 		cmd.Args = providerFlags
 		return nil
@@ -70,11 +74,11 @@ func (p *Provider) Command(_ context.Context, cmd *exec.Cmd) error {
 
 	var flags []string
 	if len(cmd.Args) > 1 {
-		flags = cmd.Args[0 : len(cmd.Args)-2]
+		flags = cmd.Args[0 : len(cmd.Args)-1]
 	}
 
 	// Args = flags + provider flags + file name
-	args := make([]string, len(flags)+len(providerFlags)+1)
+	args := make([]string, 0, len(flags)+len(providerFlags)+1)
 	args = append(args, flags...)
 	args = append(args, providerFlags...)
 	args = append(args, filePath)
