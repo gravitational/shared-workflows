@@ -22,6 +22,7 @@ import (
 	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/logging"
 )
 
+// ProviderOption provides optional configuration to the Provider.
 type ProviderOption func(p *Provider)
 
 // WithKeyID sets the key ID to provide Attune. If not set and only one key exists in the

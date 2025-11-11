@@ -16,7 +16,8 @@
 
 package keyid
 
-type ProviderOption func(kidp *Provider)
+// ProviderOption provides optional configuration to the Provider.
+type ProviderOption func(p *Provider)
 
 // WithGPGHomeDir specifies the directory containing the GPG keychain.
 func WithGPGHomeDir(gpgHomeDir string) ProviderOption {

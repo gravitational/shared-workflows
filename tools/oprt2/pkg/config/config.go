@@ -49,21 +49,28 @@ type FileManager struct {
 // Example command to generate this:
 // tar --exclude='.#*' --exclude="*~" --exclude="S.*" -czf - ~/.gnupg/ | base64
 type GPGArchiveProvider struct {
-	Archive string  `json:"archive" jsonschema:"required"`
-	KeyID   *string `json:"keyID"`
+	// Archive is the base64-encoded tarball to use.
+	Archive string
+	// KeyID is the key within the archive to use. Optional if there is only one key.
+	KeyID *string
 }
 
 // GPGKeyIDProvider provides a GPG key from the local filesystem specified by the
 // provided GPG key ID.
 type GPGKeyIDProvider struct {
-	KeyID            *string `json:"keyID"`
-	GPGHomeDirectory *string `json:"gpgHomeDirectory"`
+	// KeyID is the key within the GPG home directory to use. Optional if there is only one key.
+	KeyID *string
+	// GPGHomeDirectory is the path to the GPG home directory containing GPG keys. Optional.
+	GPGHomeDirectory *string
 }
 
 // GPGProvider defines a source of GPG keys.
+// Only one field may be specified.
 type GPGProvider struct {
-	Archive *GPGArchiveProvider `json:"archive"`
-	KeyID   *GPGKeyIDProvider   `json:"keyID"`
+	// Archive provides a GPG key from a base64-encoded tarball.
+	Archive *GPGArchiveProvider
+	// KeyID provides a GPG key from the local filesystem.
+	KeyID *GPGKeyIDProvider
 }
 
 // AttuneAPTPackagePublisher publishes packages for an APT repo via Attune.

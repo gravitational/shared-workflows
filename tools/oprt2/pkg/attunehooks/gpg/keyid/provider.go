@@ -32,6 +32,7 @@ type Provider struct {
 
 var _ commandrunner.Hook = (*Provider)(nil)
 
+// NewProvider creates a new Provider.
 func NewProvider(opts ...ProviderOption) *Provider {
 	p := &Provider{}
 
@@ -42,10 +43,12 @@ func NewProvider(opts ...ProviderOption) *Provider {
 	return p
 }
 
+// Name implements the [commandrunner.Hook] interface.
 func (p *Provider) Name() string {
 	return "GPG key ID provider"
 }
 
+// Command implements the [commandrunner.Hook] interface.
 func (p *Provider) Command(_ context.Context, cmd *exec.Cmd) error {
 	providerFlags := make([]string, 0, 4)
 
@@ -80,6 +83,7 @@ func (p *Provider) Command(_ context.Context, cmd *exec.Cmd) error {
 	return nil
 }
 
+// Close implements the [commandrunner.Hook] interface.
 func (p *Provider) Close(_ context.Context) error {
 	return nil
 }

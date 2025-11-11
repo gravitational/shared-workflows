@@ -24,6 +24,7 @@ import (
 	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/config"
 )
 
+// FromConfig creates a new Provider instance from the provided config.
 func FromConfig(ctx context.Context, config *config.GPGArchiveProvider, logger *slog.Logger) (*Provider, error) {
 	opts := make([]ProviderOption, 0, 2)
 

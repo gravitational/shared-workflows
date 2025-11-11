@@ -55,6 +55,7 @@ type Provider struct {
 
 var _ commandrunner.Hook = (*Provider)(nil)
 
+// NewProvider creates a new Provider.
 func NewProvider(ctx context.Context, archive string, opts ...ProviderOption) (*Provider, error) {
 	p := &Provider{
 		archive: archive,
@@ -72,6 +73,7 @@ func NewProvider(ctx context.Context, archive string, opts ...ProviderOption) (*
 	return p, nil
 }
 
+// Name implements the [commandrunner.Hook] interface.
 func (p *Provider) Name() string {
 	return "GPG archive provider"
 }
@@ -84,39 +86,36 @@ func (p *Provider) setup(ctx context.Context) (err error) {
 	if err != nil {
 		return fmt.Errorf("failed to create gzip decompressor for archive: %w", err)
 	}
-	defer func() {
+
+	cleanupFunc := func(retErr error) error {
 		// The underlying close function can return a decompression-related error and needs to be checked
 		cleanupErr := gzipDecompressor.Close()
 		if cleanupErr != nil {
-			cleanupErr = fmt.Errorf("failed to close gzip decompressor, decompression may have failed: %w", err)
+			cleanupErr = fmt.Errorf("failed to close gzip decompressor, decompression may have failed: %w", cleanupErr)
 		}
-		err = errors.Join(err, cleanupErr)
-	}()
+		return errors.Join(retErr, cleanupErr)
+	}
 
 	tarExtractor := tar.NewReader(gzipDecompressor)
 
 	// Create a directory to extract the archive to
 	credentialsDirectory, err := os.MkdirTemp("", "gpghome-*")
 	if err != nil {
-		return fmt.Errorf("failed to create temporary GPG home directory: %w", err)
+		return cleanupFunc(fmt.Errorf("failed to create temporary GPG home directory: %w", err))
 	}
 	p.credentialsDirectory = credentialsDirectory
 
-	defer func() {
-		if err == nil {
-			return
-		}
-
+	cleanupFunc = func(retErr error) error {
 		cleanupErr := p.Close(ctx)
 		if cleanupErr != nil {
 			cleanupErr = fmt.Errorf("cleanup failed: %w", err)
 		}
-		err = errors.Join(err, cleanupErr)
-	}()
+		return errors.Join(cleanupFunc(retErr), cleanupErr)
+	}
 
 	// Extract all contents
 	if err := p.extractArchive(ctx, tarExtractor); err != nil {
-		return fmt.Errorf("failed to extract all GPG archive contents to disk: %w", err)
+		return cleanupFunc(fmt.Errorf("failed to extract all GPG archive contents to disk: %w", err))
 	}
 
 	return nil
@@ -178,7 +177,7 @@ func (p *Provider) createTarFilesytemObject(ctx context.Context, root *os.Root, 
 			return fmt.Errorf("failed to create file %q from archive: %w", header.Name, err)
 		}
 	case fileMode.IsDir():
-		if err := createTarDirectory(root, header.Name); err != nil {
+		if err := root.MkdirAll(header.Name, 0700); err != nil {
 			return fmt.Errorf("failed to create directory %q from archive: %w", header.Name, err)
 		}
 	default:
@@ -196,7 +195,7 @@ func (p *Provider) createTarFilesytemObject(ctx context.Context, root *os.Root, 
 // object is not modified.
 func createTarFile(root *os.Root, relFilePath string, contents []byte) error {
 	realPath := filepath.Join(root.Name(), relFilePath)
-	if err := createTarDirectory(root, relFilePath); err != nil {
+	if err := root.MkdirAll(filepath.Dir(relFilePath), 0700); err != nil {
 		return fmt.Errorf("failed to create directory %q: %w", realPath, err)
 	}
 
@@ -221,46 +220,7 @@ func createTarFile(root *os.Root, relFilePath string, contents []byte) error {
 	return nil
 }
 
-// createTarDirectory creates the directory at the provided relative path, as well as all parents.
-// The directories will be owned by the current use and will have permission bits 0600 set.
-func createTarDirectory(root *os.Root, relDirPath string) error {
-	// Split up the parent directories so that each one can be created individually
-	// The first item in this slice is always the topmost directory
-	parentDirectories := make([]string, 0)
-	directory := relDirPath
-	for directory != "." {
-		parentDirectories = append([]string{directory}, parentDirectories...)
-		directory = filepath.Base(directory)
-	}
-
-	// Loop over the parent directories in reverse order. The slice contains the
-	// top-levle directory _last_, not first.
-	for _, parentDirectory := range parentDirectories {
-		realPath := filepath.Join(root.Name(), parentDirectory)
-
-		fsoInfo, err := root.Lstat(parentDirectory)
-		if err == nil {
-			// Just verify that filesystem object is a directory. This FSO should
-			// have the correct permissions assuming that it was created by this
-			// function
-			if !fsoInfo.IsDir() {
-				return fmt.Errorf("filesystem object already exists at %q but is not a directory (conflicting archive entries?)", realPath)
-			}
-			continue
-		}
-
-		if !os.IsNotExist(err) {
-			return fmt.Errorf("failed to lstat %q while extracting archive: %w", realPath, err)
-		}
-
-		if err := os.Mkdir(parentDirectory, 0600); err != nil {
-			return fmt.Errorf("failed to create directory at %q: %w", realPath, err)
-		}
-	}
-
-	return nil
-}
-
+// Command implements the [commandrunner.Hook] interface.
 func (p *Provider) Command(_ context.Context, cmd *exec.Cmd) error {
 	providerFlags := []string{"--gpg-home-dir", p.credentialsDirectory, "--key-id", p.keyID}
 
@@ -287,6 +247,7 @@ func (p *Provider) Command(_ context.Context, cmd *exec.Cmd) error {
 	return nil
 }
 
+// Close implements the [commandrunner.Hook] interface.
 func (p *Provider) Close(_ context.Context) error {
 	if p.credentialsDirectory == "" {
 		return nil

@@ -18,6 +18,7 @@ package keyid
 
 import "github.com/gravitational/shared-workflows/tools/oprt2/pkg/config"
 
+// FromConfig creates a new Provider instance from the provided config.
 func FromConfig(config *config.GPGKeyIDProvider) *Provider {
 	opts := make([]ProviderOption, 0, 2)
 
