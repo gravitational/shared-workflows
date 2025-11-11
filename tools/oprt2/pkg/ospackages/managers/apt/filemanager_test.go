@@ -43,6 +43,6 @@ func (mfm *mockFileManager) Name() string {
 	return mfm.Called().Get(0).(string)
 }
 
-func (mfm *mockFileManager) Close() error {
-	return mfm.Called().Error(0)
+func (mfm *mockFileManager) Close(ctx context.Context) error {
+	return mfm.Called(ctx).Error(0)
 }

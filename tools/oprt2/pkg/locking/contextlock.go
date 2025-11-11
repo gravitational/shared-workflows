@@ -29,6 +29,7 @@ type ContextLock struct {
 	_ sync.Mutex
 
 	lock      chan struct{}
+	lockHeld  bool
 	closeLock func()
 }
 
@@ -49,15 +50,25 @@ func (cl *ContextLock) Lock(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	case cl.lock <- struct{}{}:
+		cl.lockHeld = true
 		return nil
 	}
 }
 
 func (cl *ContextLock) Unlock() {
+	// This models the `sync.Mutex` behavior
+	// It's not perfect; it's best effort to model the mutex logic.
+	// Worse case scenario a panic will not occur if the lock is not held,
+	// and this will block indefinitely.
+	if !cl.lockHeld {
+		panic("attempted to release unlocked lock")
+	}
+
+	cl.lockHeld = false
 	<-cl.lock
 }
 
-func (cl *ContextLock) CloseCtx(ctx context.Context) error {
+func (cl *ContextLock) Close(ctx context.Context) error {
 	// Aquire the lock to make sure nothing else breaks
 	if err := cl.Lock(ctx); err != nil {
 		return err
@@ -65,8 +76,4 @@ func (cl *ContextLock) CloseCtx(ctx context.Context) error {
 
 	cl.closeLock()
 	return nil
-}
-
-func (cl *ContextLock) Close() {
-	_ = cl.CloseCtx(context.Background())
 }
