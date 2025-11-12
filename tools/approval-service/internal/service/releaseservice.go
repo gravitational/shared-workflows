@@ -289,9 +289,9 @@ func (w *ReleaseService) onAccessRequestReviewed(ctx context.Context, req types.
 	w.log.Info("Handled access request reviewed", "access_request_name", req.GetName(), "org", info.Org, "repo", info.Repo)
 }
 
-// Close performs service-level cleanup. It calls the EventCache cleanup function (if present) to stop the cache's
+// Close performs service-level cleanup. It calls the EventCache Stop function to stop the cache's
 // background cleaner and release any resources. Close is safe to call multiple times and returns any error produced
-// by the cleanup function so the caller can handle shutdown failures if necessary.
+// by the Stop function so the caller can handle shutdown failures if necessary.
 func (w *ReleaseService) Close(ctx context.Context) error {
 	if err := w.ttlEventCache.Stop(ctx); err != nil {
 		w.log.Warn("Failed to close event cache", "error", err)
