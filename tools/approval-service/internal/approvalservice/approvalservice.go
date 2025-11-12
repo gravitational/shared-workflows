@@ -110,8 +110,8 @@ func NewFromConfig(ctx context.Context, cfg config.Root, opts ...Opt) (*Service,
 	}
 	a.processor = processor
 	defer func() {
-		if err := processor.Close(); err != nil {
-			a.log.Warn("Failed to close event processor")
+		if err := processor.Close(ctx); err != nil {
+			a.log.Warn("release service closing", "error", err)
 		}
 	}()
 

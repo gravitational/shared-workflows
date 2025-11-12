@@ -55,9 +55,6 @@ type ReleaseService struct {
 	// TTLEventCache provides debounce semantics, ensuring that first arrival in the TTL window wins and subsequent
 	// arrivals are rejected (within the TTL window).
 	ttlEventCache *TTLEventCache
-	// cleanup is an optional service level cleanup function (e.g. TTLEventCache). Callers should invoke ReleaseService.Close
-	// which will call this function to stop any goroutines and release resources, or nil if no cleanup is required.
-	cleanup func() error
 
 	reconcileInterval time.Duration
 
@@ -115,12 +112,11 @@ func NewReleaseService(cfg config.Root, teleClient teleClient, ghClient ghClient
 	} else {
 		dedupeTTL = time.Duration(cfg.ApprovalService.EventCacheTTL) * time.Second
 	}
-	ec, cleanup, err := MakeTTLEventCache(dedupeTTL)
+	ec, err := NewTTLEventCache(dedupeTTL)
 	if err != nil {
 		return nil, fmt.Errorf("creating event cache: %w", err)
 	}
 	d.ttlEventCache = ec
-	d.cleanup = cleanup
 
 	return d, nil
 }
@@ -296,9 +292,10 @@ func (w *ReleaseService) onAccessRequestReviewed(ctx context.Context, req types.
 // Close performs service-level cleanup. It calls the EventCache cleanup function (if present) to stop the cache's
 // background cleaner and release any resources. Close is safe to call multiple times and returns any error produced
 // by the cleanup function so the caller can handle shutdown failures if necessary.
-func (w *ReleaseService) Close() error {
-	if w.cleanup != nil {
-		return w.cleanup()
+func (w *ReleaseService) Close(ctx context.Context) error {
+	if err := w.ttlEventCache.Stop(ctx); err != nil {
+		w.log.Warn("Failed to close event cache", "error", err)
+		return fmt.Errorf("closing ttl event cache: %w", err)
 	}
 	return nil
 }

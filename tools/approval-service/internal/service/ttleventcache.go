@@ -1,3 +1,19 @@
+/*
+ *  Copyright 2025 Gravitational, Inc
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ */
+
 package service
 
 import (
@@ -34,49 +50,49 @@ func WithCleanupInterval(interval time.Duration) Option {
 	}
 }
 
-// MakeTTLEventCache creates a new TTLEventCache.
-// ttl: how long to prevent re-processing after an arrival or after finish().
+// NewTTLEventCache creates and starts a TTL-based in memory cache.
+//
+// The cache prevents re-processing of the string based key for the configured time-to-live (ttl).
+// The cache stores the key with an expiration of now + ttl; while that expiration is in the cache, TryAdd for the
+// same key will return false.
+//
+// Eviction and Cleanup
+//   - A background evictor goroutine runs using a cleanup interval chose by default as max(ttl/4, 1s).
+//     The evictor removes entries whose expiration time is past the tick time.
+//
+// Lifecycle and concurrency
+//   - the cache is safe for concurrent use from multiple goroutines
+//   - Callers must call Stop(ctx) to shut down the background evictor and to prevent further additions. Stop blocks
+//     until the evictor exits or the provided context is done.
+//
 // Use options for additional configuration (e.g., WithCleanupInterval).
-func MakeTTLEventCache(ttl time.Duration, opts ...Option) (*TTLEventCache, func() error, error) {
+func NewTTLEventCache(ttl time.Duration, opts ...Option) (*TTLEventCache, error) {
 	// set a logical default
 	if ttl <= 0 {
 		ttl = 15 * time.Second
 	}
 
-	// default tick: ttl/4 for moderate TTLs, minimum 1s
-	defaultCleanupInterval := func(ttl time.Duration) time.Duration {
-		if ttl > 4*time.Second {
-			return ttl / 4
-		}
-		return 1 * time.Second
-	}
-
 	c := &TTLEventCache{
 		items:           make(map[string]time.Time),
 		ttl:             ttl,
-		cleanupInterval: defaultCleanupInterval(ttl),
+		cleanupInterval: max(ttl/4, 1*time.Second), // default tick: ttl/4 for moderate TTLs, minimum 1s
 		stop:            make(chan struct{}),
 		done:            make(chan struct{}),
 	}
 
 	for _, opt := range opts {
 		if err := opt(c); err != nil {
-			return nil, nil, err
+			return nil, err
 		}
-	}
-
-	cleanup := func() error {
-		_ = c.Stop(context.Background())
-		return nil
 	}
 
 	// start evictor
 	go c.evictor()
-	return c, cleanup, nil
+	return c, nil
 }
 
 // TryAdd implements debounce-on-arrival semantics.
-// Returns true if the caller should process the event; false if unexpired entry exists.
+// Returns true if the entry is not in the cache, or it has expired; false otherwise.
 func (c *TTLEventCache) TryAdd(eventID string) bool {
 	now := time.Now()
 
@@ -92,9 +108,6 @@ func (c *TTLEventCache) TryAdd(eventID string) bool {
 		if now.Before(expiry) {
 			return false
 		}
-
-		// expired -> delete and allow insertion
-		delete(c.items, eventID)
 	}
 
 	c.items[eventID] = now.Add(c.ttl)
@@ -136,8 +149,7 @@ func (c *TTLEventCache) evictor() {
 
 	for {
 		select {
-		case <-ticker.C:
-			now := time.Now()
+		case now := <-ticker.C:
 			c.mu.Lock()
 			for k, v := range c.items {
 				if now.After(v) {
