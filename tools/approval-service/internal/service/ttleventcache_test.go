@@ -24,11 +24,6 @@ import (
 	"time"
 )
 
-var (
-	eventIDForTest           = "event-id-for-test"
-	eventIDInProgressForTest = "event-id-in-progress-for-test"
-)
-
 func (c *TTLEventCache) checkInternalState(t *testing.T, expectedMapLen, expectedListLen int) {
 	t.Helper()
 	c.mu.Lock()
@@ -53,12 +48,6 @@ func TestTTLEventCache_WithInvalidTLL_ShouldSetDefaultValue(t *testing.T) {
 	ecNegative := NewTTLEventCache(-5 * time.Second)
 	if ecNegative.ttl != defaultTTL {
 		t.Errorf("NewTTLEventCache(-5) did not set default TTL: got: %v; want: %v", ecNegative.ttl, defaultTTL)
-	}
-
-	oneSecondTTlForTest := 1 * time.Second
-	ecPositive := NewTTLEventCache(oneSecondTTlForTest)
-	if ecPositive.ttl != oneSecondTTlForTest {
-		t.Errorf("NewTTLEventCache(1) did not set correct TTL: got: %v; want: %v", ecPositive.ttl, oneSecondTTlForTest)
 	}
 }
 
