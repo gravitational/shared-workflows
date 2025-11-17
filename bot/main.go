@@ -82,6 +82,8 @@ func main() {
 		err = b.CheckChangelog(ctx)
 	case "docpaths":
 		err = b.CheckDocsPathsForMissingRedirects(ctx, flags.teleportClonePath)
+	case "rfd":
+		err = b.ValidateNewRFD(ctx)
 	default:
 		err = trace.BadParameter("unknown workflow: %v", flags.workflow)
 	}
@@ -122,7 +124,7 @@ type flags struct {
 
 func parseFlags() (flags, error) {
 	var (
-		workflow          = flag.String("workflow", "", "specific workflow to run [assign, check, dismiss, backport]")
+		workflow          = flag.String("workflow", "", "specific workflow to run [assign, check, dismiss, label, backport, verify, exclude-flakes, binary-sizes, bloat, changelog, docpaths, rfd]")
 		token             = flag.String("token", "", "GitHub authentication token")
 		reviewers         = flag.String("reviewers", "", "reviewer assignments")
 		local             = flag.Bool("local", false, "local workflow dry run")
