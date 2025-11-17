@@ -17,148 +17,104 @@
 package service
 
 import (
-	"context"
-	"fmt"
 	"sync"
 	"time"
 )
 
-// TTLEventCache is a thread-safe dedupe cache.
-// - TryAdd: "debounce-on-arrival" (first arrival wins, subsequent arrivals within the TTL window are rejected
-type TTLEventCache struct {
-	mu              sync.Mutex
-	items           map[string]time.Time // expiry time for an item; zero time reserved for in-progress marker
-	ttl             time.Duration
-	cleanupInterval time.Duration
-	stop            chan struct{}
-	done            chan struct{}
-	closed          bool
+// cacheEntry stores ID and expiry time for an item in the expiry list
+type cacheEntry struct {
+	id     string
+	expiry time.Time
 }
 
-// Option configures TTLEventCache construction
-type Option func(*TTLEventCache) error
-
-// WithCleanupInterval allows overriding the tick interval (used by janitor for cleanup) via option.
-// Validates duration > 0.
-func WithCleanupInterval(interval time.Duration) Option {
-	return func(c *TTLEventCache) error {
-		if interval <= 0 {
-			return fmt.Errorf("invalid interval")
-		}
-		c.cleanupInterval = interval
-		return nil
-	}
+// TTLEventCache is a thread-safe TTL-based event cache.
+// It uses "evict-on-write" semantics: expired entries are cleaned up during calls to TryAdd.
+//
+// The cache prevents re-processing of the string-based key for the configured time-to-live (ttl). While an entry
+// is in the cache, TryAdd will return false.
+type TTLEventCache struct {
+	mu         sync.Mutex
+	cache      map[string]time.Time // stores key -> expiry time for O(1) lookups
+	expiryList []cacheEntry         // stores (key, expiry time), sorted by expiry time
+	ttl        time.Duration
 }
 
 // NewTTLEventCache creates and starts a TTL-based in memory cache.
-//
-// The cache prevents re-processing of the string based key for the configured time-to-live (ttl).
-// The cache stores the key with an expiration of now + ttl; while that expiration is in the cache, TryAdd for the
-// same key will return false.
-//
-// Eviction and Cleanup
-//   - A background evictor goroutine runs using a cleanup interval chose by default as max(ttl/4, 1s).
-//     The evictor removes entries whose expiration time is past the tick time.
-//
-// Lifecycle and concurrency
-//   - the cache is safe for concurrent use from multiple goroutines
-//   - Callers must call Stop(ctx) to shut down the background evictor and to prevent further additions. Stop blocks
-//     until the evictor exits or the provided context is done.
-//
-// Use options for additional configuration (e.g., WithCleanupInterval).
-func NewTTLEventCache(ttl time.Duration, opts ...Option) (*TTLEventCache, error) {
+// ttl specifies the time-to-live for each entry.
+// If ttl is zero or negative, a default of 15 seconds will be used.
+func NewTTLEventCache(ttl time.Duration) *TTLEventCache {
 	// set a logical default
 	if ttl <= 0 {
 		ttl = 15 * time.Second
 	}
 
 	c := &TTLEventCache{
-		items:           make(map[string]time.Time),
-		ttl:             ttl,
-		cleanupInterval: max(ttl/4, 1*time.Second), // default tick: ttl/4 for moderate TTLs, minimum 1s
-		stop:            make(chan struct{}),
-		done:            make(chan struct{}),
+		cache: make(map[string]time.Time),
+		ttl:   ttl,
 	}
 
-	for _, opt := range opts {
-		if err := opt(c); err != nil {
-			return nil, err
-		}
-	}
-
-	// start evictor
-	go c.evictor()
-	return c, nil
+	return c
 }
 
-// TryAdd implements debounce-on-arrival semantics.
-// Returns true if the entry is not in the cache, or it has expired; false otherwise.
-func (c *TTLEventCache) TryAdd(eventID string) bool {
-	now := time.Now()
-
+// TryAdd attempts to add an entry to the cache.
+//
+// Returns true if the ID was added, or false if the ID is already in the cache and has not expired.
+//
+// Calls to TryAdd will prune any expired entries from the cache before performing the check.
+func (c *TTLEventCache) TryAdd(id string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if c.closed {
+	now := time.Now()
+	c.evictExpired(now)
+
+	if _, found := c.cache[id]; found {
 		return false
 	}
 
-	if expiry, ok := c.items[eventID]; ok {
-		// unexpired -> reject
-		if now.Before(expiry) {
-			return false
-		}
-	}
+	// add new entry
+	expiry := now.Add(c.ttl)
+	c.cache[id] = expiry
+	c.expiryList = append(c.expiryList, cacheEntry{id, expiry})
 
-	c.items[eventID] = now.Add(c.ttl)
 	return true
 }
 
-// Stop stops the cleaner (key evictor) and prevents further additions. It blocks until the cleaner exits or ctx is done.
-func (c *TTLEventCache) Stop(ctx context.Context) error {
-	c.mu.Lock()
-	if c.closed {
-		c.mu.Unlock()
-		return nil
+// evictExpired removes expired entries from the cache.
+// This method MUST be called with the mutex c.mu held.
+func (c *TTLEventCache) evictExpired(now time.Time) {
+	// fast path: no entries to expire
+	if len(c.expiryList) == 0 {
+		return
 	}
-	c.closed = true
-	// signal cleaner
-	close(c.stop)
-	c.mu.Unlock()
 
-	select {
-	case <-c.done:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
+	// fast path: oldest entry is not expired, so nothing is. The expiry slice is guaranteed to be sorted by expiry time
+	if c.expiryList[0].expiry.After(now) {
+		return
+	}
+
+	var i int
+	for i < len(c.expiryList) {
+		if c.expiryList[i].expiry.After(now) {
+			break // found first non-expired item at index i
+		}
+
+		// this item (c.expiryList[i]) is expired, delete it
+		delete(c.cache, c.expiryList[i].id)
+		i++
+	}
+
+	// reslice to remove expired items from the expiry list
+	if i == len(c.expiryList) {
+		c.expiryList = nil // items were expired, reset slice
+	} else {
+		c.expiryList = c.expiryList[i:] // keep items from i onwards
 	}
 }
 
-// Len returns the number of entries currently in the cache. Useful for tests/metrics.
+// Len returns the number of entries currently in the cache and expiry list. Useful for tests/metrics.
 func (c *TTLEventCache) Len() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return len(c.items)
-}
-
-// evictor runs in a background goroutine and periodically removes expired entries from the cache.
-func (c *TTLEventCache) evictor() {
-	ticker := time.NewTicker(c.cleanupInterval)
-	defer ticker.Stop()
-	defer close(c.done)
-
-	for {
-		select {
-		case now := <-ticker.C:
-			c.mu.Lock()
-			for k, v := range c.items {
-				if now.After(v) {
-					delete(c.items, k)
-				}
-			}
-			c.mu.Unlock()
-		case <-c.stop:
-			return
-		}
-	}
+	return len(c.cache)
 }

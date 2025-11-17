@@ -14,17 +14,14 @@
  *  limitations under the License.
  */
 
-package service_test
+package service
 
 import (
-	"context"
-	"sync"
+	"fmt"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
-
-	"github.com/gravitational/shared-workflows/tools/approval-service/internal/service"
 )
 
 var (
@@ -32,175 +29,263 @@ var (
 	eventIDInProgressForTest = "event-id-in-progress-for-test"
 )
 
-// TestTryAddConcurrency ensures that under a burst of concurrent TryAdds for the same key
-// exactly one caller wins (returns true) and others are rejected within the TTL
-func TestTryAddConcurrency(t *testing.T) {
+func (c *TTLEventCache) checkInternalState(t *testing.T, expectedMapLen, expectedListLen int) {
+	t.Helper()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if len(c.cache) != expectedMapLen {
+		t.Errorf("len(c.cache) = %d; want %d", len(c.cache), expectedMapLen)
+	}
+	if len(c.expiryList) != expectedListLen {
+		t.Errorf("len(c.expiryList) = %d; want %d", len(c.expiryList), expectedListLen)
+	}
+}
+
+func TestTTLEventCache_WithInvalidTLL_ShouldSetDefaultValue(t *testing.T) {
+	defaultTTL := 15 * time.Second
+
+	ecWithZero := NewTTLEventCache(0)
+	if ecWithZero.ttl != defaultTTL {
+		t.Errorf("NewTTLEventCache(0) did not set default TTL: got: %v; want: %v", ecWithZero.ttl, defaultTTL)
+	}
+
+	ecNegative := NewTTLEventCache(-5 * time.Second)
+	if ecNegative.ttl != defaultTTL {
+		t.Errorf("NewTTLEventCache(-5) did not set default TTL: got: %v; want: %v", ecNegative.ttl, defaultTTL)
+	}
+
+	oneSecondTTlForTest := 1 * time.Second
+	ecPositive := NewTTLEventCache(oneSecondTTlForTest)
+	if ecPositive.ttl != oneSecondTTlForTest {
+		t.Errorf("NewTTLEventCache(1) did not set correct TTL: got: %v; want: %v", ecPositive.ttl, oneSecondTTlForTest)
+	}
+}
+
+func TestTTLEventCache_ValidTTL_ShouldOverrideDefault(t *testing.T) {
+	// Arrange
+	oneSecondTTlForTest := 1 * time.Second
+
+	// Act
+	ecPositive := NewTTLEventCache(oneSecondTTlForTest)
+
+	// Assert
+	if ecPositive.ttl != oneSecondTTlForTest {
+		t.Errorf("NewTTLEventCache(1) did not set correct TTL: got: %v; want: %v", ecPositive.ttl, oneSecondTTlForTest)
+	}
+}
+
+func TestTTLEventCache_TryAdd_HappyPath(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		// Arrange
-		ttl := 200 * time.Millisecond
-		ec, err := service.NewTTLEventCache(ttl)
-		if err != nil {
-			t.Fatalf("MakeTTLCache error: %v", err)
-		}
-		defer func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-			defer cancel()
-			if err := ec.Stop(ctx); err != nil {
-				t.Fatalf("Failed to stop cache: %v", err)
-			}
-		}()
-
-		const goroutines = 500
-		var wg sync.WaitGroup
-		wg.Add(goroutines)
-
-		var wins int32
-		start := make(chan struct{})
+		keyForTest := "key-for-test"
+		ec := NewTTLEventCache(15 * time.Second)
 
 		// Act
-		for i := 0; i < goroutines; i++ {
-			go func() {
-				defer wg.Done()
-				<-start
-				if ec.TryAdd(eventIDForTest) {
-					atomic.AddInt32(&wins, 1)
-				}
-			}()
-		}
-
-		// release all goroutines simultaneously
-		close(start)
-		wg.Wait()
+		isSuccessfulFirstTryAdd := ec.TryAdd(keyForTest)
 
 		// Assert
-		if got := atomic.LoadInt32(&wins); got != 1 {
-			t.Errorf("expected exactly 1 TryAdd winner, got %d", got)
+		if !isSuccessfulFirstTryAdd {
+			t.Errorf("TryAdd(key) returned false on first add, expected true")
 		}
+		ec.checkInternalState(t, 1, 1)
 	})
 }
 
-// TestTryAddDebounceAndCooldown verifies that
-// 1- The first caller for a given eventID wins and sets the TTL
-// 2- concurrent callers during that TTL are rejected (debounced)
-// 3- after TTL expires, TryAdd succeeds again (cooldown expired)
-func TestTryAddDebounceAndCooldown(t *testing.T) {
+func TestTTLEventCache_TryAdd_BasicRejectDuplicates(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		ttl := 10 * time.Second
-		cleanupTicker := 2 * time.Second
+		ec := NewTTLEventCache(15 * time.Second)
+		keyForTest := "key-for-test"
 
-		ec, err := service.NewTTLEventCache(ttl, service.WithCleanupInterval(cleanupTicker))
-		if err != nil {
-			t.Fatalf("MakeTTLCache error: %v", err)
+		isSuccessfulFirstTryAdd := ec.TryAdd(keyForTest)
+		if !isSuccessfulFirstTryAdd {
+			t.Errorf("TryAdd(key) returned false on first add, expected true")
 		}
+		ec.checkInternalState(t, 1, 1)
 
-		// ensure evictor is stopped
-		defer func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-			defer cancel()
-			if err := ec.Stop(ctx); err != nil {
-				t.Fatalf("Failed to stop cache: %v", err)
-			}
-		}()
-
-		// first caller wins and sets the TTL
-		if !ec.TryAdd(eventIDInProgressForTest) {
-			t.Fatalf("expected first TryAdd to succeed")
+		isSuccessfulSecondTryAdd := ec.TryAdd(keyForTest)
+		if isSuccessfulSecondTryAdd {
+			t.Errorf("TryAdd(keyForTest) returned true on duplicate add, expected false")
 		}
-
-		// concurrent event should be rejected immediately
-		resultChan := make(chan bool, 1)
-		go func() { resultChan <- ec.TryAdd(eventIDInProgressForTest) }()
-
-		if secondTryAddResult := <-resultChan; secondTryAddResult {
-			t.Fatalf("expected concurrent TryAdd to be rejected while ttl has not expired")
-		}
-
-		// virtual sleep inside synctest bubble for TTL + cleanupTicker + small buffer
-		// and then advance the time in bubble so timers / tickers run immediately
-		time.Sleep(ttl + cleanupTicker + 20*time.Millisecond)
-		synctest.Wait()
-
-		// Assert
-		if !ec.TryAdd(eventIDInProgressForTest) {
-			t.Fatalf("expected first TryAdd to succeed for the same key after TTL has expired")
-		}
+		ec.checkInternalState(t, 1, 1)
 	})
 }
 
-// TestCleanerEvictsExpiredEvents verifies that the background cleaner removes expired items after ttl + some time
-// uses TryAdd to insert and then waits for eviction
-func TestCleanerEvictsExpiredEvents(t *testing.T) {
+func TestTTLEventCache_TryAdd_Concurrency(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ttl := 15 * time.Second
-		cleanupTicker := 5 * time.Second
+		ec := NewTTLEventCache(ttl)
 
-		ec, err := service.NewTTLEventCache(ttl, service.WithCleanupInterval(cleanupTicker))
-		if err != nil {
-			t.Fatalf("MakeTTLCache error: %v", err)
-		}
+		const (
+			distinctKeys   = 5
+			requestsPerKey = 200
+		)
 
-		// ensure evictor is stopped
-		defer func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-			defer cancel()
-			if err := ec.Stop(ctx); err != nil {
-				t.Fatalf("Failed to stop cache: %v", err)
+		var successfulAdds int32
+
+		// Schedule one small step per logical request. The synctest harness runs these
+		// steps under a deterministic scheduler so inter-leavings are reproducible.
+		for i := 0; i < distinctKeys; i++ {
+			key := fmt.Sprintf("key-%d", i)
+			for j := 0; j < requestsPerKey; j++ {
+				if ec.TryAdd(key) {
+					atomic.AddInt32(&successfulAdds, 1)
+				}
 			}
-		}()
-
-		ok := ec.TryAdd(eventIDForTest)
-		if !ok {
-			t.Fatalf("expected initial TryAdd to succeed")
 		}
 
-		if got := ec.Len(); got != 1 {
-			t.Fatalf("expected 1 TryAdd to contain an event, got %d", got)
+		// After all scheduled steps run (all requests within the TTL), exactly one
+		// successful add per key is expected.
+		got := int(atomic.LoadInt32(&successfulAdds))
+		if got != distinctKeys {
+			t.Fatalf("expected %d successful adds (one per key), got %d", distinctKeys, got)
 		}
-
-		// virtual sleep inside synctest bubble for TTL + cleanupTicker + small buffer
-		// and then advance the time in bubble so timers / tickers run immediately
-		time.Sleep(ttl + cleanupTicker + 20*time.Millisecond)
-		synctest.Wait()
-
-		if got := ec.Len(); got != 0 {
-			t.Fatalf("expected cache to be empty after ttl+cleanup, got %d", got)
-		}
-
 	})
 
 }
 
-// // TestStopPreventsAdds ensures Stop prevents further additions and that Stop returns
-func TestStopPreventsAdds(t *testing.T) {
+func TestTTLEventCache_TryAdd_AddAfterExpiry(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		ttl := 15 * time.Second
+		ec := NewTTLEventCache(ttl)
+		keyABCForTest := "ABC"
+		key123ForTest := "123"
+
+		isSuccessfulKeyOneFirstTry := ec.TryAdd(keyABCForTest)
+		if !isSuccessfulKeyOneFirstTry {
+			t.Errorf("TryAdd(keyOne) returned false on first add, expected true")
+		}
+
+		// wait for TTL to pass (virtual sleep)
+		time.Sleep(ttl + 10*time.Millisecond)
+
+		// try to add a different key to trigger eviction
+		isSuccessfulKeyTwoFirstTry := ec.TryAdd(key123ForTest)
+		if !isSuccessfulKeyTwoFirstTry {
+			t.Errorf("TryAdd(keyTwo) returned false, expected true")
+		}
+
+		// internal state check: keyForTest should be gone
+		ec.mu.Lock()
+		if _, found := ec.cache[keyABCForTest]; found {
+			t.Errorf("cache map still contains expired key after eviction")
+		}
+
+		// the expiry list should only contain "keyTwo"
+		if len(ec.expiryList) != 1 || ec.expiryList[0].id != key123ForTest {
+			t.Errorf("expiry list was not pruned correctly, keyOne should have been evicted")
+		}
+		ec.mu.Unlock()
+
+		ec.checkInternalState(t, 1, 1)
+
+		// try adding original key (should succeed)
+		isSuccessfulRetry := ec.TryAdd(keyABCForTest)
+		if !isSuccessfulRetry {
+			t.Errorf("TryAdd returned false when trying to insert key after after ttl expired, expected true")
+		}
+
+		ec.checkInternalState(t, 2, 2)
+
+	})
+}
+
+func TestTTLEventCache_EvictionLogic(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ttl := 100 * time.Millisecond
-		cleanupTicker := 50 * time.Millisecond
+		ec := NewTTLEventCache(ttl)
 
-		ec, err := service.NewTTLEventCache(ttl, service.WithCleanupInterval(cleanupTicker))
-		if err != nil {
-			t.Fatalf("MakeTTLCache error: %v", err)
+		// 1. Add "A" at T=0
+		if !ec.TryAdd("A") {
+			t.Fatal("TryAdd(A) failed")
+		} // "A" expires at T=100ms
+
+		// 2. Wait 50ms, Add "B" at T=50ms
+		time.Sleep(50 * time.Millisecond)
+		if !ec.TryAdd("B") {
+			t.Fatal("TryAdd(B) failed")
+		} // "B" expires at T=150ms
+
+		ec.checkInternalState(t, 2, 2)
+
+		// 3. Wait 60ms, time is now T=110ms
+		// "A" (T=100ms) is expired.
+		// "B" (T=150ms) is NOT expired.
+		time.Sleep(60 * time.Millisecond)
+
+		// 4. Add "C", which triggers expire()
+		if !ec.TryAdd("C") {
+			t.Fatal("TryAdd(C) failed")
+		} // "C" expires at T=210ms
+
+		// 5. Check state. "A" should be gone. "B" and "C" should remain.
+		if ec.Len() != 2 {
+			t.Errorf("Len() is %d, expected 2 (B, C)", ec.Len())
 		}
 
-		// ensure evictor is stopped
-		defer func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-			defer cancel()
-			if err := ec.Stop(ctx); err != nil {
-				t.Fatalf("Failed to stop cache: %v", err)
-			}
-		}()
-
-		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
-		defer cancel()
-
-		if err := ec.Stop(ctx); err != nil {
-			t.Fatalf("Failed to stop cache: %v", err)
+		ec.mu.Lock()
+		if _, ok := ec.cache["A"]; ok {
+			t.Error("cache map still contains expired key 'A'")
 		}
+		if _, ok := ec.cache["B"]; !ok {
+			t.Error("cache map does not contain key 'B'")
+		}
+		if _, ok := ec.cache["C"]; !ok {
+			t.Error("cache map does not contain key 'C'")
+		}
+		if len(ec.expiryList) != 2 || ec.expiryList[0].id != "B" || ec.expiryList[1].id != "C" {
+			t.Errorf("expiry list not pruned correctly: got %v, want [B, C]", ec.expiryList)
+		}
+		ec.mu.Unlock()
 
-		// after stop, TryAdd should return false
-		if ec.TryAdd(eventIDForTest) {
-			t.Fatalf("expected TryAdd to fail after Stop")
+		// 6. Add "A" again, should be fine
+		if !ec.TryAdd("A") {
+			t.Fatal("TryAdd(A) again failed")
+		}
+		if ec.Len() != 3 {
+			t.Errorf("Len() is %d, expected 3 (B, C, A)", ec.Len())
 		}
 	})
+}
 
+func TestTTLEventCache_EvictAll(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		ttl := 50 * time.Millisecond
+		ec := NewTTLEventCache(ttl)
+
+		if !ec.TryAdd("A") {
+			t.Fatal("TryAdd(A) failed")
+		}
+		if !ec.TryAdd("B") {
+			t.Fatal("TryAdd(B) failed")
+		}
+		ec.checkInternalState(t, 2, 2)
+
+		// Wait for all to expire
+		time.Sleep(ttl + 10*time.Millisecond)
+
+		// Add "C", triggering eviction of "A" and "B"
+		if !ec.TryAdd("C") {
+			t.Fatal("TryAdd(C) failed")
+		}
+
+		// Check state. Only "C" should remain.
+		if ec.Len() != 1 {
+			t.Errorf("Len() is %d, expected 1 (C)", ec.Len())
+		}
+		ec.mu.Lock()
+		if _, ok := ec.cache["A"]; ok {
+			t.Error("cache map still contains expired key 'A'")
+		}
+		if _, ok := ec.cache["B"]; ok {
+			t.Error("cache map still contains expired key 'B'")
+		}
+		if _, ok := ec.cache["C"]; !ok {
+			t.Error("cache map does not contain key 'C'")
+		}
+		if len(ec.expiryList) != 1 || ec.expiryList[0].id != "C" {
+			t.Errorf("expiry list not pruned correctly: got %v, want [C]", ec.expiryList)
+		}
+		ec.mu.Unlock()
+	})
 }

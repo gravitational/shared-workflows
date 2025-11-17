@@ -86,6 +86,7 @@ func NewReleaseService(cfg config.Root, teleClient teleClient, ghClient ghClient
 		teleClient:        teleClient,
 		requestTTLHours:   cmp.Or(time.Duration(cfg.ApprovalService.Teleport.RequestTTLHours)*time.Hour, 7*24*time.Hour),
 		teleportUser:      cfg.ApprovalService.Teleport.User,
+		ttlEventCache:     NewTTLEventCache(time.Duration(cfg.ApprovalService.EventCacheTTL) * time.Second),
 		reconcileInterval: cmp.Or(cfg.ApprovalService.ReconcileInterval, time.Minute),
 		log:               slog.Default(),
 		// Channels for asynchronous processing of events.
@@ -102,21 +103,6 @@ func NewReleaseService(cfg config.Root, teleClient teleClient, ghClient ghClient
 			return nil, fmt.Errorf("applying option: %w", err)
 		}
 	}
-
-	// choose default TTL if not set (15s)
-	const defaultEventCacheTTL = 15 * time.Second
-	var dedupeTTL time.Duration
-
-	if cfg.ApprovalService.EventCacheTTL <= 0 {
-		dedupeTTL = defaultEventCacheTTL
-	} else {
-		dedupeTTL = time.Duration(cfg.ApprovalService.EventCacheTTL) * time.Second
-	}
-	ec, err := NewTTLEventCache(dedupeTTL)
-	if err != nil {
-		return nil, fmt.Errorf("creating event cache: %w", err)
-	}
-	d.ttlEventCache = ec
 
 	return d, nil
 }
@@ -287,17 +273,6 @@ func (w *ReleaseService) onAccessRequestReviewed(ctx context.Context, req types.
 		return
 	}
 	w.log.Info("Handled access request reviewed", "access_request_name", req.GetName(), "org", info.Org, "repo", info.Repo)
-}
-
-// Close performs service-level cleanup. It calls the EventCache Stop function to stop the cache's
-// background cleaner and release any resources. Close is safe to call multiple times and returns any error produced
-// by the Stop function so the caller can handle shutdown failures if necessary.
-func (w *ReleaseService) Close(ctx context.Context) error {
-	if err := w.ttlEventCache.Stop(ctx); err != nil {
-		w.log.Warn("Failed to close event cache", "error", err)
-		return fmt.Errorf("closing ttl event cache: %w", err)
-	}
-	return nil
 }
 
 // WithLogger sets the logger for the ReleaseService.

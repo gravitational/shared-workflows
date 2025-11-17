@@ -109,11 +109,6 @@ func NewFromConfig(ctx context.Context, cfg config.Root, opts ...Opt) (*Service,
 		return nil, fmt.Errorf("creating event processor: %w", err)
 	}
 	a.processor = processor
-	defer func() {
-		if err := processor.Close(ctx); err != nil {
-			a.log.Warn("release service closing", "error", err)
-		}
-	}()
 
 	// Initialize server that listens for webhook events
 	srv, err := a.newServer(cfg, a.processor)
