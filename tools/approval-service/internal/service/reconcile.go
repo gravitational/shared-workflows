@@ -142,6 +142,7 @@ func (r *ReleaseService) constructNewEventsForWorkflow(ctx context.Context, work
 		// This prevents duplicate events in the case the reconcilation process is run while related events are being received.
 		eventID := githubEventID(workflowRun.Organization, workflowRun.Repository, workflowRun.WorkflowID, deployment.Environment)
 		if isBeingProcessed := r.ttlEventCache.IsBeingProcessed(eventID); isBeingProcessed {
+			r.log.Debug("found pending deployment that this service is already processing - skipping", "deployment_protection_rule", deployment)
 			continue
 		}
 
