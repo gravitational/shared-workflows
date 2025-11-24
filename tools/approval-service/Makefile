@@ -1,6 +1,6 @@
 TOOL_NAME = approval-service
 PACKAGE_PATH = ./cmd/approval-service.go
-VERSION = v0.1.3-dev-aadcdev
+VERSION = v0.1.4-dev-aadcdev
 
 
 include ../repo-release-tooling/tooling.mk
