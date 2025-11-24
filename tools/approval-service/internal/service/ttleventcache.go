@@ -80,6 +80,17 @@ func (c *TTLEventCache) TryAdd(id string) bool {
 	return true
 }
 
+func (c *TTLEventCache) IsBeingProcessed(id string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if _, found := c.cache[id]; found {
+		return true
+	}
+
+	return false
+}
+
 // evictExpired removes expired entries from the cache.
 // This method MUST be called with the mutex c.mu held.
 func (c *TTLEventCache) evictExpired(now time.Time) {

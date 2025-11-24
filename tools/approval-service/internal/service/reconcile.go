@@ -141,7 +141,7 @@ func (r *ReleaseService) constructNewEventsForWorkflow(ctx context.Context, work
 		// Skip if we already have an event for this environment.
 		// This prevents duplicate events in the case the reconcilation process is run while related events are being received.
 		eventID := githubEventID(workflowRun.Organization, workflowRun.Repository, workflowRun.WorkflowID, deployment.Environment)
-		if added := r.ttlEventCache.TryAdd(eventID); !added {
+		if isBeingProcessed := r.ttlEventCache.IsBeingProcessed(eventID); !isBeingProcessed {
 			continue
 		}
 
