@@ -17,7 +17,9 @@
 package service
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/gravitational/shared-workflows/tools/approval-service/internal/config"
@@ -147,4 +149,58 @@ func TestWaitingWorkflowReconciler(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestWaitingWorkflowReconciler_SkipProcessed verifies that logic skips events
+// if the TTL cache indicates they are already being processed.
+func TestWaitingWorkflowReconciler_SkipProcessed(t *testing.T) {
+	// Arrange
+	ctx := context.Background()
+	workflowID := int64(123456789)
+
+	mockGitHub := newFakeGitHubClient(workflowID)
+	mockTeleport := newFakeTeleportClient(nil) // empty access requests
+
+	svc, err := NewReleaseService(
+		config.Root{},
+		mockTeleport,
+		mockGitHub,
+	)
+	require.NoError(t, err, "Failed to create ReleaseService")
+
+	realCache := NewTTLEventCache(time.Minute)
+	svc.ttlEventCache = realCache
+
+	// Fetch what the fake client *actually* returns.
+	// The fake client might return empty Org/Repo strings or different IDs than expected.
+	// To ensure the test is robust, we query the fake client for the exact values
+	// it will provide to the service during reconciliation.
+	runs, err := mockGitHub.ListWaitingWorkflowRuns(ctx, testOrg, testRepo)
+	require.NoError(t, err)
+	require.NotEmpty(t, runs, "Mock client should return waiting workflows")
+	actualRun := runs[0]
+
+	deployments, err := mockGitHub.GetPendingDeployments(ctx, actualRun.Organization, actualRun.Repository, actualRun.WorkflowID)
+	require.NoError(t, err)
+	require.NotEmpty(t, deployments, "Mock client should return pending deployments")
+	actualEnv := deployments[0].Environment
+
+	// Construct the Event ID using the ACTUAL values the service will see.
+	// This fixes the issue where testOrg != actualRun.Organization (e.g. if fake uses empty string defaults).
+	expectedEventID := githubEventID(actualRun.Organization, actualRun.Repository, actualRun.WorkflowID, actualEnv)
+
+	// Explicitly TryAdd the event to the cache.
+	added := realCache.TryAdd(expectedEventID)
+	require.True(t, added, "Test setup failed: expected to be able to add event to cache")
+
+	// 4. Act
+	deploymentRules, accessRequests, err := svc.findReconciliationWork(ctx)
+
+	// 5. Assert
+	require.NoError(t, err)
+
+	// Because the eventID is now in the cache, IsBeingProcessed() should return true inside the service,
+	// causing it to skip generating a deployment rule for this workflow.
+	assert.Empty(t, deploymentRules, "Expected pending deployment to be skipped because it is present in the cache")
+	assert.Empty(t, accessRequests)
 }

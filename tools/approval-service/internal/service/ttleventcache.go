@@ -80,6 +80,11 @@ func (c *TTLEventCache) TryAdd(id string) bool {
 	return true
 }
 
+// IsBeingProcessed reports whether the given id is currently present in the cache
+//
+// Concurrency and semantics:
+// Acquires c.mu to read the internal map and is safe for concurrent use.
+// It does not modify the cache, extend TTLs, or affect eviction, it only observes presence.
 func (c *TTLEventCache) IsBeingProcessed(id string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()

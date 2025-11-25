@@ -24,20 +24,19 @@ import (
 	"time"
 )
 
-func (c *TTLEventCache) checkInternalState(t *testing.T, expectedMapLen, expectedListLen int) {
-	t.Helper()
-	c.mu.Lock()
-	defer c.mu.Unlock()
+func checkInternalState(t *testing.T, ec *TTLEventCache, expectedMapLen, expectedListLen int) {
+	ec.mu.Lock()
+	defer ec.mu.Unlock()
 
-	if len(c.cache) != expectedMapLen {
-		t.Errorf("len(c.cache) = %d; want %d", len(c.cache), expectedMapLen)
+	if len(ec.cache) != expectedMapLen {
+		t.Errorf("len(c.cache) = %d; want %d", len(ec.cache), expectedMapLen)
 	}
-	if len(c.expiryList) != expectedListLen {
-		t.Errorf("len(c.expiryList) = %d; want %d", len(c.expiryList), expectedListLen)
+	if len(ec.expiryList) != expectedListLen {
+		t.Errorf("len(c.expiryList) = %d; want %d", len(ec.expiryList), expectedListLen)
 	}
 }
 
-func TestTTLEventCache_WithInvalidTLL_ShouldSetDefaultValue(t *testing.T) {
+func TestTTLEventCache_WithInvalidTTL_ShouldSetDefaultValue(t *testing.T) {
 	defaultTTL := 15 * time.Second
 
 	ecWithZero := NewTTLEventCache(0)
@@ -77,7 +76,7 @@ func TestTTLEventCache_TryAdd_HappyPath(t *testing.T) {
 		if !isSuccessfulFirstTryAdd {
 			t.Errorf("TryAdd(key) returned false on first add, expected true")
 		}
-		ec.checkInternalState(t, 1, 1)
+		checkInternalState(t, ec, 1, 1)
 	})
 }
 
@@ -90,13 +89,13 @@ func TestTTLEventCache_TryAdd_BasicRejectDuplicates(t *testing.T) {
 		if !isSuccessfulFirstTryAdd {
 			t.Errorf("TryAdd(key) returned false on first add, expected true")
 		}
-		ec.checkInternalState(t, 1, 1)
+		checkInternalState(t, ec, 1, 1)
 
 		isSuccessfulSecondTryAdd := ec.TryAdd(keyForTest)
 		if isSuccessfulSecondTryAdd {
 			t.Errorf("TryAdd(keyForTest) returned true on duplicate add, expected false")
 		}
-		ec.checkInternalState(t, 1, 1)
+		checkInternalState(t, ec, 1, 1)
 	})
 }
 
@@ -166,7 +165,7 @@ func TestTTLEventCache_TryAdd_AddAfterExpiry(t *testing.T) {
 		}
 		ec.mu.Unlock()
 
-		ec.checkInternalState(t, 1, 1)
+		checkInternalState(t, ec, 1, 1)
 
 		// try adding original key (should succeed)
 		isSuccessfulRetry := ec.TryAdd(keyABCForTest)
@@ -174,7 +173,7 @@ func TestTTLEventCache_TryAdd_AddAfterExpiry(t *testing.T) {
 			t.Errorf("TryAdd returned false when trying to insert key after after ttl expired, expected true")
 		}
 
-		ec.checkInternalState(t, 2, 2)
+		checkInternalState(t, ec, 2, 2)
 
 	})
 }
@@ -195,12 +194,26 @@ func TestTTLEventCache_EvictionLogic(t *testing.T) {
 			t.Fatal("TryAdd(B) failed")
 		} // "B" expires at T=150ms
 
-		ec.checkInternalState(t, 2, 2)
+		checkInternalState(t, ec, 2, 2)
 
-		// 3. Wait 60ms, time is now T=110ms
+		// 2a. Sleep 49ms (T = 99ms) and verify both A and B are present
+		time.Sleep(49 * time.Millisecond)
+		if ec.Len() != 2 {
+			t.Fatalf("After 99ms: Len() is %d, expected 2 (A, B)", ec.Len())
+		}
+		ec.mu.Lock()
+		if _, ok := ec.cache["A"]; !ok {
+			t.Error("after 99ms: cache does not contain key 'A' (expected present)")
+		}
+		if _, ok := ec.cache["B"]; !ok {
+			t.Error("after 99ms: cache does not contain key 'B' (expected present)")
+		}
+		ec.mu.Unlock()
+
+		// 3. Wait 2ms, time is now T=111ms
 		// "A" (T=100ms) is expired.
 		// "B" (T=150ms) is NOT expired.
-		time.Sleep(60 * time.Millisecond)
+		time.Sleep(1 * time.Millisecond)
 
 		// 4. Add "C", which triggers expire()
 		if !ec.TryAdd("C") {
@@ -248,7 +261,7 @@ func TestTTLEventCache_EvictAll(t *testing.T) {
 		if !ec.TryAdd("B") {
 			t.Fatal("TryAdd(B) failed")
 		}
-		ec.checkInternalState(t, 2, 2)
+		checkInternalState(t, ec, 2, 2)
 
 		// Wait for all to expire
 		time.Sleep(ttl + 10*time.Millisecond)
