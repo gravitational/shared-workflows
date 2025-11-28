@@ -20,6 +20,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/gravitational/shared-workflows/bot/internal/env"
@@ -533,4 +534,46 @@ func (f *fakeGithub) GetRef(ctx context.Context, organization string, repository
 
 func (f *fakeGithub) ListCommitFiles(ctx context.Context, organization string, repository string, commitSHA string, pathPrefix string) ([]string, error) {
 	return f.commitFiles, nil
+}
+
+func TestSkipFileForSizeCheck(t *testing.T) {
+	generatedFilePaths := []string{
+		// go types from proto
+		"api/types/types.pb.go",
+		"api/gen/proto/go/teleport/accesslist/v1/accesslist.pb.go",
+		// derived functions
+		"api/types/accesslist/derived.gen.go",
+		// generated docs
+		"docs/pages/includes/helm-reference/zz_generated.teleport-kube-agent.mdx",
+		"docs/pages/reference/infrastructure-as-code/operator-resources/resources-teleport-dev-accesslists.mdx",
+		"docs/pages/reference/infrastructure-as-code/terraform-provider/resources/access_list.mdx",
+		"docs/pages/reference/infrastructure-as-code/terraform-provider/data-sources/access_list.mdx",
+		// CRDs
+		"integrations/operator/config/crd/bases/resources.teleport.dev_accesslists.yaml",
+		"examples/chart/teleport-cluster/charts/teleport-operator/operator-crds/resources.teleport.dev_accesslists.yaml",
+		// CRs deepcopy
+		"integrations/operator/apis/resources/v1/zz_generated.deepcopy.go",
+		// TF schemas
+		"integrations/terraform/tfschema/types_terraform.go",
+		"integrations/terraform/tfschema/accesslist/v1/accesslist_terraform.go",
+	}
+	for _, file := range generatedFilePaths {
+		assert.True(t, skipFileForSizeCheck(file), "file %q should be skipped for size check", file)
+	}
+
+	// This is not very scientific but here are a few files that are similar to
+	// the generated ones but are hand-crafted. This test is not exhaustive, it
+	// is only here to avoid an accidental catch-all regexp.
+	nonGeneratedFilePaths := []string{
+		"api/types/access_request.go",
+		"api/types/accesslist/accesslist.go",
+		"lib/accesslists/collection.go",
+		"integrations/terraform/tfschema/accesslist/v1/custom_types.go",
+		"integrations/operator/apis/resources/v1/accesslist_types.go",
+		"docs/pages/identity-governance/access-lists/access-lists.mdx",
+	}
+
+	for _, file := range nonGeneratedFilePaths {
+		assert.False(t, skipFileForSizeCheck(file), "file %q should not be skipped for size check", file)
+	}
 }
