@@ -31,7 +31,11 @@ import (
 
 // isCRDRegex matches Teleport operator CRD file paths.
 // Those files receive a special treatment as they're automatically generated.
-var isCRDRegex = regexp.MustCompile(`.*/resources\.teleport\.dev_[[:alnum:]]+\.yaml$`)
+var (
+	isCRDRegex               = regexp.MustCompile(`.*/resources\.teleport\.dev_[[:alnum:]]+\.yaml$`)
+	isTerraformSchemaRegexp  = regexp.MustCompile(`integrations/terraform/tfschema/.+_terraform.go$`)
+	isOperatorDeepCopyRegexp = regexp.MustCompile(`integrations/operator/apis/resources/.+/zz_generated.deepcopy.go$`)
+)
 
 // Client implements the GitHub API.
 type Client interface {
@@ -279,9 +283,15 @@ func skipFileForSizeCheck(name string) bool {
 		strings.HasSuffix(name, ".json") ||
 		strings.HasSuffix(name, ".snap") ||
 		strings.Contains(name, "webassets/") ||
+		strings.HasSuffix(name, "derived.gen.go") ||
 		strings.Contains(name, "vendor/") ||
 		strings.Contains(name, "integrations/operator/crdgen/testdata/") ||
-		isCRDRegex.MatchString(name)
+		strings.HasPrefix(name, "docs/pages/reference/infrastructure-as-code/terraform-provider/") ||
+		strings.HasPrefix(name, "docs/pages/reference/infrastructure-as-code/operator-resources/") ||
+		strings.HasPrefix(name, "docs/pages/includes/helm-reference/") ||
+		isCRDRegex.MatchString(name) ||
+		isTerraformSchemaRegexp.MatchString(name) ||
+		isOperatorDeepCopyRegexp.MatchString(name)
 }
 
 func isReleaseBranch(branch string) bool {
