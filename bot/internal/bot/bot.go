@@ -33,7 +33,7 @@ import (
 // Those files receive a special treatment as they're automatically generated.
 var (
 	isCRDRegex               = regexp.MustCompile(`.*/resources\.teleport\.dev_[[:alnum:]]+\.yaml$`)
-	isTerraformSchemaRegexp  = regexp.MustCompile(`integrations/terraform/tfschema/.+_terraform.go`)
+	isTerraformSchemaRegexp  = regexp.MustCompile(`integrations/terraform/tfschema/.+_terraform.go$`)
 	isOperatorDeepCopyRegexp = regexp.MustCompile(`integrations/operator/apis/resources/.+/zz_generated.deepcopy.go$`)
 )
 
