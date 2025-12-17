@@ -44,7 +44,7 @@ func (b *Bot) verifyCloud(ctx context.Context) error {
 //	map[repo]: [...path]
 var migrationConfig = map[string][]string{
 	env.AccessGraphRepo: {"migrations/public", "migrations/tenant"},
-	env.CloudRepo:       {"db/migrations"},
+	env.CloudRepo:       {"db/migrations", "db/redshift/migrations"},
 }
 
 // verifyDBMigrations runs verifyDBMigration for each
