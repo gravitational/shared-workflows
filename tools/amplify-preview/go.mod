@@ -4,6 +4,9 @@ go 1.25.0
 
 toolchain go1.25.5
 
+// TODO(taraspos): remove later
+replace github.com/gravitational/shared-workflows/libs => ../../libs
+
 require (
 	github.com/alecthomas/kingpin/v2 v2.4.0
 	github.com/aws/aws-sdk-go-v2 v1.41.0

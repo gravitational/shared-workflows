@@ -37,6 +37,7 @@ var (
 	errNoJobForBranch    = errors.New("current branch has no jobs")
 	errNilBranch         = errors.New("branch is nil")
 	errJobTimeoutReached = errors.New("job timeout reached")
+	errBranchDeleted     = errors.New("branch deleted")
 )
 
 const (
@@ -147,6 +148,20 @@ func (amp *AmplifyPreview) CreateBranch(ctx context.Context) (*types.Branch, err
 	}
 
 	return nil, failedResp.Error()
+}
+
+func (amp *AmplifyPreview) DeleteBranch(ctx context.Context, branch *types.Branch) error {
+	appID, err := appIDFromBranchARN(*branch.BranchArn)
+	if err != nil {
+		return err
+	}
+
+	_, err = amp.client.DeleteBranch(ctx, &amplify.DeleteBranchInput{
+		AppId:      aws.String(appID),
+		BranchName: aws.String(amp.branchName),
+	})
+
+	return err
 }
 
 func (amp *AmplifyPreview) StartJob(ctx context.Context, branch *types.Branch) (*types.JobSummary, error) {
