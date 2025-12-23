@@ -100,7 +100,7 @@ func setGithubOutputs(kv map[string]string) (err error) {
 }
 
 func isPullRequestOpen() (bool, error) {
-	event, err := github.GetPullRequestEvent()
+	event, err := github.GetEventPayload()
 	if err != nil {
 		// Create preview just in case if error happened
 		return false, fmt.Errorf("failed to get pull request event: %w", err)

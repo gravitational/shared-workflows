@@ -6,9 +6,9 @@ import (
 	"os"
 )
 
-// PullRequestEvent represents the structure of a GitHub Pull Request event payload.
+// Event represents the structure of a GitHub event payload.
 // https://docs.github.com/en/webhooks/webhook-events-and-payloads#pull_request
-type PullRequestEvent struct {
+type EventPayload struct {
 	PullRequest struct {
 		State string `json:"state"`
 	} `json:"pull_request"`
@@ -20,7 +20,7 @@ const (
 	PRStateClosed      = "closed"
 )
 
-func GetPullRequestEvent() (*PullRequestEvent, error) {
+func GetEventPayload() (*EventPayload, error) {
 	eventPath := os.Getenv(EnvGithubEventPath)
 	if eventPath == "" {
 		return nil, fmt.Errorf("%s is not set", EnvGithubEventPath)
@@ -31,7 +31,7 @@ func GetPullRequestEvent() (*PullRequestEvent, error) {
 		return nil, fmt.Errorf("failed to open GitHub event file: %w", err)
 	}
 	defer eventFile.Close()
-	var event PullRequestEvent
+	var event EventPayload
 	if err := json.NewDecoder(eventFile).Decode(&event); err != nil {
 		return nil, fmt.Errorf("failed to decode GitHub event JSON: %w", err)
 	}
