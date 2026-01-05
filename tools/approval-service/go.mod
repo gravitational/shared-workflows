@@ -1,6 +1,6 @@
 module github.com/gravitational/shared-workflows/tools/approval-service
 
-go 1.24
+go 1.25
 
 require (
 	github.com/alecthomas/kong v1.9.0

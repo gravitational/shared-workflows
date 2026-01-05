@@ -1,1 +1,4 @@
 go.work*
+
+# editors
+.idea/

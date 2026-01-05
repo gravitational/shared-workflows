@@ -46,7 +46,7 @@ type Service struct {
 	log *slog.Logger
 }
 
-// EvenrSource provides methods for setting up and running event sources.
+// EventSource provides methods for setting up and running event sources.
 // This is an interface that allows us to abstract different event sources like GitHub webhooks, Teleport access requests, etc.
 // Each event source should implement this interface to provide its own setup and run logic.
 type EventSource interface {
