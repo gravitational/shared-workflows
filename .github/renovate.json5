@@ -1,0 +1,54 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":enableRenovate",
+    ":semanticCommits",
+    ":enableVulnerabilityAlerts",
+    ":ignoreUnstable",
+    ":label(dependency-update)",
+    ":prConcurrentLimitNone",
+    ":prHourlyLimitNone",
+    ":prImmediately",
+    ":rebaseStalePrs",
+    ":renovatePrefix",
+    "helpers:pinGitHubActionDigests", // This ensures that underlying tags are not replaced with a separate commit (tags are immutable but commits are not)
+    "preview:dockerVersions",
+    "regexManagers:githubActionsVersions", // See https://docs.renovatebot.com/presets-regexManagers/#regexmanagersgithubactionsversions for how to use this
+    "github>gravitational/shared-workflows//.github/renovate/commitMessage.json5",
+    "github>gravitational/shared-workflows//.github/renovate/labels.json5",
+    "github>gravitational/shared-workflows//.github/renovate/languages.json5",
+    "github>gravitational/shared-workflows//.github/renovate/renovate.json5",
+    // Presets for each project
+    "github>gravitational/shared-workflows//tools/ami-cleanup/renovate.json5"
+  ],
+  "useBaseBranchConfig": "merge", // This is set to allow for some degree of testing PRs, see https://github.com/renovatebot/renovate/discussions/16108
+  // This is used so that not everything in the entire repo is setup for Renovate at once
+  // Initially this configuration is designed to only support the new GHA EKS clusters
+  "enabledManagers": [
+    "github-actions",
+    "custom.regex",
+    "gomod"
+  ],
+  // Unfortunatly Renovate can only override manager defaults via a blacklist instead of a whitelist
+  "ignorePaths": [
+    // These predate RFD 0001 and are managed by dependabot
+    "bot/**", 
+    ".github/workflows/codeql.yml",
+    ".github/workflows/csv-lint.yaml",
+    ".github/workflows/dependency-review.yaml",
+    ".github/workflows/github-action-lint.yaml",
+    ".github/workflows/govulncheck.yaml",
+    ".github/workflows/json-lint.yaml",
+    ".github/workflows/terraform-lint.yaml",
+    ".github/workflows/trivy.yaml"
+  ],
+  "vulnerabilityAlerts": {
+    "dependencyDashboardApproval": true,
+    "rangeStrategy": "auto",
+    "commitMessageSuffix": "[SECURITY]",
+    "branchTopic": "{{{datasource}}}-{{{depName}}}-vulnerability",
+    "prCreation": "immediate",
+    "enabled": true
+  }
+}
