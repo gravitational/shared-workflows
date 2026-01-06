@@ -1,0 +1,25 @@
+---
+name: CI Normalizer CD
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - tools/ci-normalize
+    tags:
+      - "tools/ci-normalize/v[0-9]+.[0-9]+.[0-9]+**"
+  pull_request:
+    paths:
+      - tools/ci-normalize/workflows/cd.yaml
+      - .github/workflows/ci-normalize-cd.yaml
+      - .github/workflows/reusable-cd.yaml
+
+jobs:
+  release:
+    uses: ./.github/workflows/reusable-cd.yaml
+    permissions:
+      contents: write
+      packages: write
+    with:
+      tool-directory: ./tools/ci-normalize
