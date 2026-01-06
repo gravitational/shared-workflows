@@ -1,0 +1,47 @@
+---
+name: Upload normalized test results
+description: Captures metadata, normalizes the test results and uploads to s3.
+
+inputs:
+  junit-files:
+    required: true
+    description: "junit files for normalization"
+  s3-bucket:
+    description: "S3 bucket for outputs"
+    required: true
+    default: ""
+runs:
+  using: composite
+  steps:
+    - name: Workaround go cache issue
+      # https://github.com/actions/setup-go/issues/467#issuecomment-2551300160
+      shell: bash
+      run: |
+        # Work around setup-go caching issue
+        mkdir -p ${{ github.workspace }}/.tmp/actions/cache/ci-normalize
+        go_sum_path=${{ github.workspace }}/.tmp/actions/cache/ci-normalize/go.sum
+        cp ${{ github.action_path }}/go.sum ${{ github.workspace }}/.tmp/actions/cache/ci-normalize/
+        echo "go_sum_path=${go_sum_path}" >> $GITHUB_OUTPUT
+      id: cache_workaround
+
+    - uses: actions/setup-go@v6
+      if: always()
+      continue-on-error: true
+      with:
+        go-version-file: ${{ github.action_path }}/go.mod
+        cache-dependency-path: ${{ steps.cache_workaround.outputs.go_sum_path }}
+
+    - name: Normalize and push
+      id: normalize_and_push
+      if: always()
+      continue-on-error: true
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: |
+        go run ./cmd junit \
+          --meta "${{ inputs.s3-bucket }}/jsonl/{{META_VERSION}}/jobs/repository={{REPOSITORY}}/year={{YEAR}}/month={{MONTH}}/day={{DAY}}/{{TIMESTAMP}}-job-{{ID}}.json" \
+          --meta - \
+          --tests "${{ inputs.s3-bucket }}/jsonl/{{META_VERSION}}/tests/repository={{REPOSITORY}}/year={{YEAR}}/month={{MONTH}}/day={{DAY}}/{{TIMESTAMP}}-tests-{{ID}}.jsonl" \
+          --suites "${{ inputs.s3-bucket }}/jsonl/{{META_VERSION}}/suites/repository={{REPOSITORY}}/year={{YEAR}}/month={{MONTH}}/day={{DAY}}/{{TIMESTAMP}}-suites-{{ID}}.jsonl" \
+          ${{ inputs.junit-files }}
+
