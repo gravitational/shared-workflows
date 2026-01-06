@@ -1,6 +1,6 @@
 module github.com/gravitational/shared-workflows/tools/amplify-preview
 
-go 1.23.7
+go 1.24
 
 toolchain go1.25.5
 

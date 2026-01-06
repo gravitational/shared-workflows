@@ -1,6 +1,6 @@
 module github.com/gravitational/shared-workflows/tools/release-notes
 
-go 1.23.0
+go 1.24
 
 toolchain go1.25.5
 
