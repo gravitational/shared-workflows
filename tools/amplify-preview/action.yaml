@@ -8,6 +8,10 @@ inputs:
     description: 'Create preview branches using this actions instead of "auto-build" feature on AWS Amplify'
     required: false
     default: "false"
+  delete_branches:
+    description: 'Delete preview branches using this actions when PR is closed'
+    required: false
+    default: "false"
   github_token:
     required: true
     description: "Github token with permissions to read/write comments in pull request"
@@ -51,7 +55,7 @@ runs:
       run: echo "branch=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}" >> $GITHUB_OUTPUT
       id: extract_branch
 
-    - uses: actions/setup-go@v5
+    - uses: actions/setup-go@v6
       with:
         go-version-file: ${{ github.action_path }}/go.mod
         cache-dependency-path: ${{ steps.cache_workaround.outputs.go_sum_path }}
@@ -62,6 +66,7 @@ runs:
         AMPLIFY_APP_IDS: ${{ inputs.app_ids }}
         GIT_BRANCH_NAME: ${{ steps.extract_branch.outputs.branch }}
         CREATE_BRANCHES: ${{ inputs.create_branches }}
+        DELETE_BRANCHES: ${{ inputs.delete_branches }}
         GITHUB_TOKEN: ${{ inputs.github_token }}
         WAIT: ${{ inputs.wait }}
         WAIT_RETRIES: ${{ inputs.wait_retries }}

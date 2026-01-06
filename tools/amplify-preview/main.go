@@ -38,6 +38,8 @@ var (
 	gitBranchName  = kingpin.Flag("git-branch-name", "Git branch name").Envar("GIT_BRANCH_NAME").Required().String()
 	createBranches = kingpin.Flag("create-branches",
 		"Defines whether Amplify branches should be created if missing, or just lookup existing ones").Envar("CREATE_BRANCHES").Default("false").Bool()
+	deleteBranches = kingpin.Flag("delete-branches",
+		"Defines whether Amplify branches should be deleted after the PR is closed").Envar("DELETE_BRANCHES").Default("false").Bool()
 	wait = kingpin.Flag("wait",
 		"Wait for pending/running job to complete").Envar("WAIT").Default("false").Bool()
 	waitRetries = kingpin.Flag("wait-retries",
@@ -84,6 +86,10 @@ func run(ctx context.Context) error {
 
 	branch, err := ensureAmplifyBranch(ctx, amp)
 	if err != nil {
+		if errors.Is(err, errBranchDeleted) {
+			slog.Info("amplify branch deleted as the pull request is closed", logKeyBranchName, amp.branchName)
+			return nil
+		}
 		return err
 	}
 
@@ -127,12 +133,27 @@ func run(ctx context.Context) error {
 // ensureAmplifyBranch checks if git branch is connected to amplify across multiple amplify apps
 // if "create-branch" is enabled, then branch is created if not found, otherwise returns error
 func ensureAmplifyBranch(ctx context.Context, amp AmplifyPreview) (*types.Branch, error) {
-	branch, err := amp.FindExistingBranch(ctx)
-	if err == nil {
-		return branch, nil
-	} else if errors.Is(err, errBranchNotFound) && *createBranches {
-		return amp.CreateBranch(ctx)
+	shouldDeleteBranch := false
+	isPullRequestOpen, err := isPullRequestOpen()
+	if err != nil {
+		slog.Warn("failed to determine pull request state", "error", err)
 	} else {
+		shouldDeleteBranch = !isPullRequestOpen && *deleteBranches
+	}
+
+	branch, err := amp.FindExistingBranch(ctx)
+	switch {
+	case err == nil && shouldDeleteBranch:
+		slog.Info("pull request is closed, deleting amplify branch", logKeyBranchName, amp.branchName)
+		if err := amp.DeleteBranch(ctx, branch); err != nil {
+			return nil, fmt.Errorf("failed to delete amplify branch %q: %w", amp.branchName, err)
+		}
+		return branch, errBranchDeleted
+	case err == nil:
+		return branch, nil
+	case errors.Is(err, errBranchNotFound) && *createBranches:
+		return amp.CreateBranch(ctx)
+	default:
 		return nil, fmt.Errorf("failed to lookup branch %q: %w", amp.branchName, err)
 	}
 }
