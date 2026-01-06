@@ -14,6 +14,12 @@ on:
         required: false
         type: boolean
         default: false
+      terraform_docs_config_path:
+        required: false
+        type: string
+      terraform_docs_find_dir:
+        required: false
+        type: string
 
 # TODO: Add job for `terraform validate`
 jobs:
@@ -33,6 +39,29 @@ jobs:
 
       - name: terraform fmt
         run: terraform fmt -no-color -check -diff -recursive
+  terraform-docs:
+    if: ${{ inputs.terraform_docs_config_path != '' && inputs.terraform_docs_find_dir != '' }}
+    name: terraform module docs
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Set config path
+      run: |
+        echo "TERRAFORM_DOCS_CONFIG_PATH=${{ inputs.terraform_docs_config_path }}" >> $GITHUB_ENV
+        echo "TERRAFORM_DOCS_FIND_DIR=${{ inputs.terraform_docs_find_dir }}" >> $GITHUB_ENV
+
+    - name: Render terraform docs
+      uses: terraform-docs/gh-actions@6de6da0cefcc6b4b7a5cbea4d79d97060733093c #v1.4.1
+      with:
+        config-file: ${{ env.TERRAFORM_DOCS_CONFIG_PATH }}
+        fail-on-diff: true
+        find-dir: ${{ env.TERRAFORM_DOCS_FIND_DIR }}
   tflint:
       name: TFLint
       runs-on: ubuntu-latest
