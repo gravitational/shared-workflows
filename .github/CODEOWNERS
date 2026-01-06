@@ -1,1 +1,5 @@
 * @gravitational/dev-eng-leads
+
+# Cloud team can review Dependabot PRs
+**/go.mod @gravitational/cloud-team
+**/go.sum @gravitational/cloud-team
