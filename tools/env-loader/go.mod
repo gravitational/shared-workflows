@@ -2,6 +2,8 @@ module github.com/gravitational/shared-workflows/tools/env-loader
 
 go 1.24.0
 
+toolchain go1.25.5
+
 require (
 	github.com/alecthomas/kingpin/v2 v2.4.0
 	github.com/getsops/sops/v3 v3.9.4

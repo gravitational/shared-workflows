@@ -1,6 +1,8 @@
 module github.com/gravitational/shared-workflows/tools/find-lost-gha-logs
 
-go 1.24.0
+go 1.24
+
+toolchain go1.25.5
 
 require (
 	github.com/enrichman/gh-iter v0.0.0-20240716154615-c70b8ca2bacf

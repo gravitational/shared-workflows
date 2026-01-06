@@ -1,6 +1,8 @@
 module github.com/gravitational/shared-workflows/tools/amplify-preview
 
-go 1.23.10
+go 1.23.7
+
+toolchain go1.25.5
 
 require (
 	github.com/alecthomas/kingpin/v2 v2.4.0

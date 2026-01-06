@@ -2,6 +2,8 @@ module github.com/gravitational/shared-workflows/tools/approval-service
 
 go 1.25
 
+toolchain go1.25.5
+
 require (
 	github.com/alecthomas/kong v1.9.0
 	github.com/goccy/go-yaml v1.18.0

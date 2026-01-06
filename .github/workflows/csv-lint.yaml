@@ -28,9 +28,9 @@ jobs:
               - added|modified: '**/*.csv'
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
         with:
-          go-version: "^1"
+          go-version: "stable"
 
       - name: Checkout csvlint
         uses: actions/checkout@v4
