@@ -1,8 +1,8 @@
 module github.com/gravitational/shared-workflows/libs
 
-go 1.23.7
+go 1.24
 
-toolchain go1.24.0
+toolchain go1.25.5
 
 require (
 	github.com/cli/go-gh/v2 v2.12.1

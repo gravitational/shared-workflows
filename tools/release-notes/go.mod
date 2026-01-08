@@ -1,6 +1,8 @@
 module github.com/gravitational/shared-workflows/tools/release-notes
 
-go 1.23.2
+go 1.24
+
+toolchain go1.25.5
 
 require (
 	github.com/alecthomas/kingpin/v2 v2.4.0
