@@ -88,7 +88,8 @@ func (c *Client) ListWaitingWorkflowRuns(ctx context.Context, org, repo string) 
 // WorkflowDispatchRequest contains the parameters for triggering a workflow dispatch event.
 type WorkflowDispatchRequest struct {
 	// WorkflowName is the name of the workflow to run.
-	// Workflows are defined in the .github/workflows directory of a repository and are named by their filename .github/workflows/NAME.yaml.
+	// Workflows are defined in the .github/workflows directory of a repository and are named by their filename .github/workflows/<NAME>.
+	// Note that the file extension (.yml or .yaml) should be included when specifying the workflow name.
 	WorkflowName string
 	// Ref is the git reference for the workflow dispatch (branch, tag, or commit SHA).
 	Ref string
@@ -141,7 +142,8 @@ func newWorkflowRunNotFoundError(message string) *WorkflowRunNotFoundError {
 // FindWorkflowRunIDByUniqueStepNameRequest contains the parameters for finding a workflow run ID by a unique step name.
 type FindWorkflowRunIDByUniqueStepNameRequest struct {
 	// WorkflowName is the name of the workflow to search within.
-	// Workflows are defined in the .github/workflows directory of a repository and are named by their filename .github/workflows/NAME.yaml.
+	// Workflows are defined in the .github/workflows directory of a repository and are named by their filename .github/workflows/<NAME>.
+	// Note that the file extension (.yml or .yaml) should be included when specifying the workflow name.
 	WorkflowName string
 	// StepName is the unique name of the step to search for within the workflow runs.
 	StepName string
