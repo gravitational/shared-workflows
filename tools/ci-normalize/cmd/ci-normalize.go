@@ -49,7 +49,7 @@ func run() error {
 		opts = append(opts, multiwriter.WithWriter(&record.Meta{}, *metaOut, *format))
 	}
 
-	w, err := multiwriter.New(*format, opts...)
+	w, err := multiwriter.New(opts...)
 	if err != nil {
 		return trace.Wrap(err)
 	}
