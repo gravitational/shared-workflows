@@ -15,9 +15,8 @@ import (
 type Option func(*JUnitProducer) error
 
 type JUnitProducer struct {
-	file   string
-	meta   record.Common
-	runKey string
+	file string
+	meta record.Common
 }
 
 // regex to match ANSI escape sequences
@@ -53,19 +52,17 @@ func NewJUnitProducer(file string, opts ...Option) (*JUnitProducer, error) {
 		}
 	}
 
-	// This should be fixed for all entries
-	id, err := p.meta.RunKey()
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-
-	p.runKey = id
 	return p, nil
 }
 
-func WithMeta(meta record.Common) Option {
+func WithMetaFile(metafile string) Option {
 	return func(p *JUnitProducer) error {
-		p.meta = meta
+		meta, err := ReadMetaFile(metafile)
+		if err != nil {
+			return trace.Wrap(err, "failed to read metadata file %q", metafile)
+		}
+
+		p.meta = meta.Common
 		return nil
 	}
 }
@@ -93,7 +90,7 @@ func (ts *junitTestSuite) isValid() bool {
 	return ts.Name != "" && len(ts.Testcases) > 0
 }
 
-func (ts *junitTestSuite) toRecord(meta record.Common, runKey string) (*record.Suite, error) {
+func (ts *junitTestSuite) toRecord(meta record.Common) (*record.Suite, error) {
 	t, err := time.Parse(time.RFC3339, ts.Timestamp)
 	if err != nil {
 		t, err = time.Parse("2006-01-02T15:04:05", ts.Timestamp)
@@ -104,7 +101,6 @@ func (ts *junitTestSuite) toRecord(meta record.Common, runKey string) (*record.S
 
 	return &record.Suite{
 		Common:     meta,
-		RunId:      runKey,
 		Name:       ts.Name,
 		Timestamp:  t.Format(time.RFC3339),
 		Tests:      ts.Tests,
@@ -182,10 +178,9 @@ type junitTestCase struct {
 	SystemErr string `xml:"system-err"`
 }
 
-func (tc *junitTestCase) toRecord(meta record.Common, runKey string) (*record.Testcase, error) {
+func (tc *junitTestCase) toRecord(meta record.Common) (*record.Testcase, error) {
 	return &record.Testcase{
 		Common:         meta,
-		RunId:          runKey,
 		Name:           tc.Name,
 		Classname:      tc.Class,
 		DurationMs:     int64(tc.Time * 1000),
@@ -246,7 +241,7 @@ func (p *JUnitProducer) Produce(ctx context.Context, emit func(any) error) error
 					continue
 				}
 
-				suiteInfo, err := ts.toRecord(p.meta, p.runKey)
+				suiteInfo, err := ts.toRecord(p.meta)
 				if err != nil {
 					return trace.Wrap(err)
 				}
@@ -256,7 +251,7 @@ func (p *JUnitProducer) Produce(ctx context.Context, emit func(any) error) error
 				}
 
 				for _, tc := range ts.Testcases {
-					tcRec, err := tc.toRecord(p.meta, p.runKey)
+					tcRec, err := tc.toRecord(p.meta)
 					if err != nil {
 						return trace.Wrap(err)
 					}

@@ -4,46 +4,21 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"strconv"
 
 	"github.com/gravitational/trace"
 )
 
+const RecordSchemaVersion = "v1"
+const CanonicalMetaSchemaVersion = "v1"
+
+// Common metadata for all records
 type Common struct {
-	Repo         string `json:"repo"`        // env:GITHUB_REPOSITORY
-	RunID        string `json:"run_id"`      // env:GITHUB_RUN_ID
-	RunNumber    int    `json:"run_number"`  // env:GITHUB_RUN_NUMBER
-	RunAttempt   int    `json:"run_attempt"` // env:GITHUB_RUN_ATTEMPT
-	JobName      string `json:"job_name"`    // env:GITHUB_JOB
-	WorkflowName string `json:"workflow"`    // env:GITHUB_WORKFLOW
-}
-
-func (c Common) RunKey() (string, error) {
-	data, err := json.Marshal(c)
-	if err != nil {
-		return "", trace.Wrap(err)
-	}
-	hash := sha256.Sum256(data)
-	return hex.EncodeToString(hash[:]), nil
-}
-
-func NewCommonFromMap(env map[string]string) Common {
-	runNumber, _ := strconv.Atoi(env["GITHUB_RUN_NUMBER"])
-	runAttempt, _ := strconv.Atoi(env["GITHUB_RUN_ATTEMPT"])
-
-	return Common{
-		Repo:         env["GITHUB_REPOSITORY"],
-		RunID:        env["GITHUB_RUN_ID"],
-		RunNumber:    runNumber,
-		RunAttempt:   runAttempt,
-		JobName:      env["GITHUB_JOB"],
-		WorkflowName: env["GITHUB_WORKFLOW"],
-	}
+	ID                  string `json:"id"` // Generated from CanonicalMeta
+	RecordSchemaVersion string `json:"record_schema_version"`
 }
 
 type Suite struct {
-	Common        // Common metadata for all records
-	RunId  string `json:"run_id"`
+	Common
 
 	Name       string            `json:"suite_name"`
 	Timestamp  string            `json:"timestamp"` // RFC3339
@@ -57,8 +32,7 @@ type Suite struct {
 
 // TestcaseInfo holds metadata about the individual test case
 type Testcase struct {
-	Common        // Common metadata for all records
-	RunId  string `json:"run_id"`
+	Common
 
 	Name       string `json:"test_name"`
 	SuiteName  string `json:"suite_name"`
@@ -72,55 +46,50 @@ type Testcase struct {
 	FailureMessage string `json:"failure_message,omitempty"`
 }
 
-type Job struct {
+type Meta struct {
 	Common
-	RunId string `json:"run_id"`
-
-	// git stuff
-	CommitSHA string `json:"commit_sha"`         // env:GITHUB_SHA
-	GitRef    string `json:"git_ref"`            // env:GITHUB_REF
-	BaseRef   string `json:"base_ref,omitempty"` // env:GITHUB_BASE_REF
-	HeadRef   string `json:"head_ref,omitempty"` // env:GITHUB_HEAD_REF
-
-	// github
-	GithubActor   string `json:"actor,omitempty"`    // env:GITHUB_ACTOR
-	GithubActorID string `json:"actor_id,omitempty"` // env:GITHUB_ACTOR_ID
-
-	// runner stuff
-	RunnerArch        string `json:"runner_arch,omitempty"` // env:RUNNER_ARCH
-	RunnerOS          string `json:"runner_os,omitempty"`   // env:RUNNER_OS
-	RunnerName        string `json:"runner_name,omitempty"` // env:RUNNER_NAME
-	RunnerEnvironment string `json:"runner_environment"`    // env:RUNNER_ENVIRONMENT
-
-	// TODO: figure out what other metadata to include
+	CanonicalMeta
+	GitMeta
+	ActorMeta
+	RunnerMeta
+	Timestamp string `json:"timestamp"` // RFC3339 timestamp at creation
 }
 
-func NewJobFromMap(env map[string]string) (*Job, error) {
-	common := NewCommonFromMap(env)
+type GitMeta struct {
+	GitRef  string `json:"git_ref,omitempty"`
+	BaseRef string `json:"git_base_ref,omitempty"`
+	HeadRef string `json:"git_head_ref,omitempty"`
+}
 
-	id, err := common.RunKey()
+type ActorMeta struct {
+	Actor   string `json:"actor_name,omitempty"`
+	ActorID string `json:"actor_id,omitempty"`
+}
+
+type RunnerMeta struct {
+	RunnerArch        string `json:"runner_arch,omitempty"`
+	RunnerOS          string `json:"runner_os,omitempty"`
+	RunnerName        string `json:"runner_name,omitempty"`
+	RunnerEnvironment string `json:"runner_environment,omitempty"`
+}
+
+// Used to generate primary index
+type CanonicalMeta struct {
+	CanonicalMetaSchemaVersion string `json:"canonical_meta_schema_version"`
+	Provider                   string `json:"provider"`
+	Repository                 string `json:"repository"`
+	Workflow                   string `json:"workflow"`
+	Job                        string `json:"job"`
+	RunID                      string `json:"run_id"`
+	RunAttempt                 int    `json:"run_attempt"`
+	SHA                        string `json:"git_sha"`
+}
+
+func (c CanonicalMeta) Id() (string, error) {
+	data, err := json.Marshal(c)
 	if err != nil {
-		return nil, trace.Wrap(err)
+		return "", trace.Wrap(err)
 	}
-
-	return &Job{
-		Common: common,
-		RunId:  id,
-
-		// git info
-		CommitSHA: env["GITHUB_SHA"],
-		GitRef:    env["GITHUB_REF"],
-		BaseRef:   env["GITHUB_BASE_REF"],
-		HeadRef:   env["GITHUB_HEAD_REF"],
-
-		// github actor info
-		GithubActor:   env["GITHUB_ACTOR"],
-		GithubActorID: env["GITHUB_ACTOR_ID"],
-
-		// runner info
-		RunnerArch:        env["RUNNER_ARCH"],
-		RunnerOS:          env["RUNNER_OS"],
-		RunnerName:        env["RUNNER_NAME"],
-		RunnerEnvironment: env["RUNNER_ENVIRONMENT"],
-	}, nil
+	hash := sha256.Sum256(data)
+	return hex.EncodeToString(hash[:]), nil
 }

@@ -6,7 +6,6 @@ import (
 	"os"
 
 	kingpin "github.com/alecthomas/kingpin/v2"
-	"github.com/joho/godotenv"
 
 	"github.com/gravitational/shared-workflows/tools/ci-normalize/pkg/input"
 	"github.com/gravitational/shared-workflows/tools/ci-normalize/pkg/multiwriter"
@@ -18,30 +17,24 @@ func run() error {
 	ctx := context.TODO()
 	app := kingpin.New("ci-normalize", "Normalize test artifacts")
 	app.HelpFlag.Short('h')
-	format := app.Flag("format", "Output format").Default("jsonl").Enum("jsonl")
+	format := app.Flag("format", "Output format").Short('f').Default("jsonl").Enum("jsonl")
 
-	// Only supports github actions.
-	githubEnv := app.Flag("github", "Github Env file containing run metadata").Required().ExistingFile()
-
-	// job metadata command (not implemented yet)
-	jobCmd := app.Command("job", "Emit job metadata")
-	jobOut := jobCmd.Flag("out", "Testcase output file ('-' for stdout, /dev/null to ignore)").Short('o').Default("-").String()
+	// metadata command
+	metaCmd := app.Command("meta", "Emit metadata")
+	metaOut := metaCmd.Flag("out", "Testcase output file ('-' for stdout, /dev/null to ignore)").Short('o').Default("-").String()
+	// Only github is supported today.
 
 	// JUnit command
 	junitCmd := app.Command("junit", "Normalize JUnit test results")
 	suiteOut := junitCmd.Flag("suite", "Suite output file ('-' for stdout, /dev/null to ignore)").String()
 	testcaseOut := junitCmd.Flag("testcase", "Testcase output file ('-' for stdout, /dev/null to ignore)").String()
 	junitFiles := junitCmd.Arg("files", "JUnit XML result files").Required().ExistingFiles()
+	metaFile := junitCmd.Flag("meta", "json metadata file").Required().ExistingFile()
 
 	cmd, err := app.Parse(os.Args[1:])
 	if err != nil {
 		return trace.Wrap(err, "failed to parse command line arguments")
 
-	}
-
-	ghEnv, err := godotenv.Read(*githubEnv)
-	if err != nil {
-		return trace.Wrap(err, "failed to read github env file %q", *githubEnv)
 	}
 
 	// Setup output writers
@@ -52,8 +45,8 @@ func run() error {
 	if testcaseOut != nil {
 		opts = append(opts, multiwriter.WithWriter(&record.Testcase{}, *testcaseOut, *format))
 	}
-	if jobOut != nil {
-		opts = append(opts, multiwriter.WithWriter(&record.Job{}, *jobOut, *format))
+	if metaOut != nil {
+		opts = append(opts, multiwriter.WithWriter(&record.Meta{}, *metaOut, *format))
 	}
 
 	w, err := multiwriter.New(*format, opts...)
@@ -63,7 +56,7 @@ func run() error {
 	defer w.Close()
 
 	var producers []input.Producer
-	popts := []input.Option{input.WithMeta(record.NewCommonFromMap(ghEnv))}
+	popts := []input.Option{input.WithMetaFile(*metaFile)}
 
 	switch cmd {
 	case junitCmd.FullCommand():
@@ -75,9 +68,8 @@ func run() error {
 			producers = append(producers, p)
 		}
 
-	case jobCmd.FullCommand():
-		producers = append(producers, input.NewGithubMetaProducer(ghEnv))
-
+	case metaCmd.FullCommand():
+		producers = append(producers, input.NewGithubMetaProducer())
 	default:
 		return trace.NotImplemented("unimplemented command %q", cmd)
 	}

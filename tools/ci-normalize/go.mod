@@ -4,8 +4,8 @@ go 1.25.5
 
 require (
 	github.com/alecthomas/kingpin/v2 v2.4.0
+	github.com/caarlos0/env/v9 v9.0.0
 	github.com/gravitational/trace v1.5.1
-	github.com/joho/godotenv v1.5.1
 )
 
 require (
