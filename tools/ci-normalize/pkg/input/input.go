@@ -25,11 +25,11 @@ func ReadMetaFile(path string) (*record.Meta, error) {
 	}
 
 	// At the very least we need the primary index ID.
-	if meta.Common.ID == "" {
+	if meta.ID == "" {
 		return nil, trace.BadParameter("missing .id field")
 	}
 
 	// Overwrite the record schema used for this producer
-	meta.Common.RecordSchemaVersion = meta.RecordSchemaVersion
+	meta.RecordSchemaVersion = record.RecordSchemaVersion
 	return &meta, nil
 }
