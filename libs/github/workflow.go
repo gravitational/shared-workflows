@@ -155,12 +155,12 @@ type FindWorkflowRunIDByUniqueStepNameRequest struct {
 // It returns the workflow run ID if found, or an error if not found or if any issues occur during the search.
 // The error can be of type [WorkflowRunNotFoundError] if the step name is not found in any workflow run.
 // This error is retryable as the workflow run may not be ready yet.
-func (c *Client) FindWorkflowRunIDByUniqueStepName(ctx context.Context, org, repo string, req FindWorkflowRunIDByUniqueStepNameRequest) (int64, error) {
+func (c *Client) FindWorkflowRunIDByUniqueStepName(ctx context.Context, org, repo string, req FindWorkflowRunIDByUniqueStepNameRequest) (WorkflowRunInfo, error) {
 	if req.WorkflowName == "" {
-		return 0, fmt.Errorf("workflow name is required")
+		return WorkflowRunInfo{}, fmt.Errorf("workflow name is required")
 	}
 	if req.StepName == "" {
-		return 0, fmt.Errorf("step name is required")
+		return WorkflowRunInfo{}, fmt.Errorf("step name is required")
 	}
 
 	runs, _, err := c.client.Actions.ListWorkflowRunsByFileName(ctx, org, repo, req.WorkflowName, &go_github.ListWorkflowRunsOptions{
@@ -169,7 +169,7 @@ func (c *Client) FindWorkflowRunIDByUniqueStepName(ctx context.Context, org, rep
 		},
 	})
 	if err != nil {
-		return 0, fmt.Errorf("listing workflow runs: %w", err)
+		return WorkflowRunInfo{}, fmt.Errorf("listing workflow runs: %w", err)
 	}
 
 	for _, run := range runs.WorkflowRuns {
@@ -184,13 +184,13 @@ func (c *Client) FindWorkflowRunIDByUniqueStepName(ctx context.Context, org, rep
 			},
 		})
 		if err != nil {
-			return 0, fmt.Errorf("listing workflow jobs for run ID %d: %w", run.GetID(), err)
+			return WorkflowRunInfo{}, fmt.Errorf("listing workflow jobs for run ID %d: %w", run.GetID(), err)
 		}
 
 		for _, job := range jobs.Jobs {
 			for _, step := range job.Steps {
 				if step.GetName() == req.StepName { // Happy path: found a matching step
-					return run.GetID(), nil
+					return workflowRunInfoFromObj(run), nil
 				}
 			}
 		}
@@ -198,7 +198,19 @@ func (c *Client) FindWorkflowRunIDByUniqueStepName(ctx context.Context, org, rep
 	}
 
 	// If we reach here, we did not find the step in any run
-	return 0, newWorkflowRunNotFoundError(fmt.Sprintf("could not find workflow run for %q with step name %q", req.WorkflowName, req.StepName))
+	return WorkflowRunInfo{}, newWorkflowRunNotFoundError(fmt.Sprintf("could not find workflow run for %q with step name %q", req.WorkflowName, req.StepName))
+}
+
+// workflowRunInfoFromObj converts a [go_github.WorkflowRun] object to a [WorkflowRunInfo].
+func workflowRunInfoFromObj(githubObj *go_github.WorkflowRun) WorkflowRunInfo {
+	return WorkflowRunInfo{
+		WorkflowID:   githubObj.GetID(),
+		Name:         githubObj.GetName(),
+		HTMLURL:      githubObj.GetHTMLURL(),
+		Requester:    githubObj.GetActor().GetLogin(),
+		Organization: githubObj.GetRepository().GetOwner().GetLogin(),
+		Repository:   githubObj.GetRepository().GetName(),
+	}
 }
 
 // LogValue implements [slog.LogValuer] for WorkflowRunInfo to provide structured logging.
