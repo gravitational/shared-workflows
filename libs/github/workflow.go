@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	go_github "github.com/google/go-github/v71/github"
 )
@@ -191,7 +192,7 @@ func (c *Client) FindWorkflowRunIDByUniqueStepName(ctx context.Context, org, rep
 
 		for _, job := range jobs.Jobs {
 			for _, step := range job.Steps {
-				if step.GetName() == req.StepName { // Happy path: found a matching step
+				if strings.Contains(step.GetName(), req.StepName) { // Happy path: found a matching step
 					return workflowRunInfoFromObj(run), nil
 				}
 			}
