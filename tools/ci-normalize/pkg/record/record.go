@@ -56,9 +56,10 @@ type Meta struct {
 }
 
 type GitMeta struct {
-	GitRef  string `json:"git_ref,omitempty"`
-	BaseRef string `json:"git_base_ref,omitempty"`
-	HeadRef string `json:"git_head_ref,omitempty"`
+	GitRef     string `json:"git_ref,omitempty"`
+	GitRefName string `json:"git_ref_name,omitempty"`
+	BaseRef    string `json:"git_base_ref,omitempty"`
+	HeadRef    string `json:"git_head_ref,omitempty"`
 }
 
 type ActorMeta struct {

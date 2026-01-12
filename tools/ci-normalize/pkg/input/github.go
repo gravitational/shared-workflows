@@ -29,6 +29,7 @@ type GithubMeta struct {
 	GitSHA       string `env:"GITHUB_SHA,notEmpty"`
 
 	GitRef            string `env:"GITHUB_REF"`
+	GitRefName        string `env:"GITHUB_REF_NAME"`
 	BaseRef           string `env:"GITHUB_BASE_REF"`
 	HeadRef           string `env:"GITHUB_HEAD_REF"`
 	GithubActor       string `env:"GITHUB_ACTOR"`
@@ -64,9 +65,10 @@ func metaFromGh(gh GithubMeta) (*record.Meta, error) {
 		},
 		CanonicalMeta: canonical,
 		GitMeta: record.GitMeta{
-			GitRef:  gh.GitRef,
-			BaseRef: gh.BaseRef,
-			HeadRef: gh.HeadRef,
+			GitRef:     gh.GitRef,
+			GitRefName: gh.GitRefName,
+			BaseRef:    gh.BaseRef,
+			HeadRef:    gh.HeadRef,
 		},
 		ActorMeta: record.ActorMeta{
 			Actor:   gh.GithubActor,
