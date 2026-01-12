@@ -119,7 +119,7 @@ func (c *Client) WorkflowDispatch(ctx context.Context, org, repo string, req Wor
 	if err != nil {
 		return fmt.Errorf("CreateWorkflowDispatchEventByFileName API call: %w", err)
 	}
-	return err
+	return nil
 }
 
 // WorkflowRunNotFoundError is a sentinel error returned when a workflow run cannot be found.
@@ -140,30 +140,33 @@ func newWorkflowRunNotFoundError(message string) *WorkflowRunNotFoundError {
 	}
 }
 
-// FindWorkflowRunIDByUniqueStepNameRequest contains the parameters for finding a workflow run ID by a unique step name.
-type FindWorkflowRunIDByUniqueStepNameRequest struct {
+// FindWorkflowRunByCorrelatedStepNameParams contains the parameters for finding a workflow run ID by a 
+// step name containing a correlation ID.
+type FindWorkflowRunByCorrelatedStepNameParams struct {
 	// WorkflowName is the name of the workflow to search within.
 	// Workflows are defined in the .github/workflows directory of a repository and are named by their filename .github/workflows/<NAME>.
-	// Note that the file extension (.yml or .yaml) should be included when specifying the workflow name.
+		// Note that the file extension (.yml or .yaml) should be included when specifying the workflow name.
 	WorkflowName string
-	// StepName is the unique name of the step to search for within the workflow runs.
-	StepName string
+	// CorrelationID is the unique name of the step to search for within the workflow runs.
+	CorrelationID string
 }
 
-// FindWorkflowRunIDByUniqueStepName finds a workflow run ID by searching for a unique step name within the workflow runs of a repository.
+// FindWorkflowRunByCorrelatedStepName finds a workflow run by searching for a step name containing a correlation ID.
 // Workflow Dispatch events can be used to trigger workflows but do not return the workflow run ID directly.
-// This function can be used as a workaround to find the workflow run ID after triggering a workflow dispatch.
-// For this to work, the workflow must include a step with a unique name that can be searched for.
+// This function can be used as a workaround to find the workflow run after triggering a workflow dispatch.
+// For this to work, the workflow should include have an input for a correlation ID that is then used in a step name.
 //
-// It returns the workflow run ID if found, or an error if not found or if any issues occur during the search.
+// It returns the workflow run if found, or an error if not found or if any issues occur during the search.
 // The error can be of type [WorkflowRunNotFoundError] if the step name is not found in any workflow run.
-// This error is retryable as the workflow run may not be ready yet.
-func (c *Client) FindWorkflowRunIDByUniqueStepName(ctx context.Context, org, repo string, req FindWorkflowRunIDByUniqueStepNameRequest) (WorkflowRunInfo, error) {
+//
+// This search does not currently handle pagination of workflow runs or jobs.
+// This means it can only find workflow runs and jobs within the first page of results (up to 100).
+func (c *Client) FindWorkflowRunByCorrelatedStepName(ctx context.Context, org, repo string, req FindWorkflowRunByCorrelatedStepNameParams) (WorkflowRunInfo, error) {
 	if req.WorkflowName == "" {
 		return WorkflowRunInfo{}, fmt.Errorf("workflow name is required")
 	}
-	if req.StepName == "" {
-		return WorkflowRunInfo{}, fmt.Errorf("step name is required")
+	if req.CorrelationID == "" {
+		return WorkflowRunInfo{}, fmt.Errorf("correlation ID is required")
 	}
 
 	runs, _, err := c.client.Actions.ListWorkflowRunsByFileName(ctx, org, repo, req.WorkflowName, &go_github.ListWorkflowRunsOptions{
@@ -192,7 +195,7 @@ func (c *Client) FindWorkflowRunIDByUniqueStepName(ctx context.Context, org, rep
 
 		for _, job := range jobs.Jobs {
 			for _, step := range job.Steps {
-				if strings.Contains(step.GetName(), req.StepName) { // Happy path: found a matching step
+				if strings.Contains(step.GetName(), req.CorrelationID) { // Happy path: found a matching step
 					return workflowRunInfoFromObj(run), nil
 				}
 			}
@@ -201,7 +204,7 @@ func (c *Client) FindWorkflowRunIDByUniqueStepName(ctx context.Context, org, rep
 	}
 
 	// If we reach here, we did not find the step in any run
-	return WorkflowRunInfo{}, newWorkflowRunNotFoundError(fmt.Sprintf("could not find workflow run for %q with step name %q", req.WorkflowName, req.StepName))
+	return WorkflowRunInfo{}, newWorkflowRunNotFoundError(fmt.Sprintf("could not find workflow run for %q with step name %q", req.WorkflowName, req.CorrelationID))
 }
 
 // workflowRunInfoFromObj converts a [go_github.WorkflowRun] object to a [WorkflowRunInfo].
