@@ -1,19 +1,27 @@
 package writer
 
 import (
-	"github.com/gravitational/trace"
+	"io"
+	"os"
+	"strings"
 )
 
-type Writer interface {
-	Write(record any) error
-	Close() error
-}
+func New(path string) (io.WriteCloser, error) {
+	switch path {
+	case "-", "":
+		return nopCloser{os.Stdout}, nil
 
-func New(format string, out string) (Writer, error) {
-	switch format {
-	case "jsonl":
-		return NewJSONLWriter(out)
+	case "/dev/null":
+		return &nopCloser{io.Discard}, nil
+
 	default:
-		return nil, trace.BadParameter("unsupported output format: %q", format)
+		if strings.HasPrefix(path, "s3://") {
+			return newS3Writer(path)
+		}
+		return os.Create(path)
 	}
 }
+
+type nopCloser struct{ io.Writer }
+
+func (nopCloser) Close() error { return nil }

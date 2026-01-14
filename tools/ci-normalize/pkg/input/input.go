@@ -10,7 +10,7 @@ import (
 )
 
 type Producer interface {
-	Produce(ctx context.Context, emit func(any) error) error
+	Produce(ctx context.Context, write func(any) error) error
 }
 
 func ReadMetaFile(path string) (*record.Meta, error) {

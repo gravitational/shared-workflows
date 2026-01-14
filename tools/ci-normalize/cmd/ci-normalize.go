@@ -6,10 +6,14 @@ import (
 	"os"
 
 	kingpin "github.com/alecthomas/kingpin/v2"
+	"golang.org/x/sync/errgroup"
 
+	"github.com/gravitational/shared-workflows/tools/ci-normalize/pkg/dispatch"
+	"github.com/gravitational/shared-workflows/tools/ci-normalize/pkg/encoder"
 	"github.com/gravitational/shared-workflows/tools/ci-normalize/pkg/input"
-	"github.com/gravitational/shared-workflows/tools/ci-normalize/pkg/multiwriter"
 	"github.com/gravitational/shared-workflows/tools/ci-normalize/pkg/record"
+	"github.com/gravitational/shared-workflows/tools/ci-normalize/pkg/record/adapter"
+	"github.com/gravitational/shared-workflows/tools/ci-normalize/pkg/writer"
 	"github.com/gravitational/trace"
 )
 
@@ -38,22 +42,60 @@ func run() error {
 	}
 
 	// Setup output writers
-	opts := []multiwriter.Option{}
-	if suiteOut != nil {
-		opts = append(opts, multiwriter.WithWriter(&record.Suite{}, *suiteOut, *format))
-	}
-	if testcaseOut != nil {
-		opts = append(opts, multiwriter.WithWriter(&record.Testcase{}, *testcaseOut, *format))
-	}
-	if metaOut != nil {
-		opts = append(opts, multiwriter.WithWriter(&record.Meta{}, *metaOut, *format))
+	opts := []dispatch.Option{}
+
+	add := func(proto any, path *string) error {
+		if path == nil || *path == "" {
+			return nil
+		}
+
+		raw, err := writer.New(*path) // io.WriteCloser
+		if err != nil {
+			return err
+		}
+
+		var enc encoder.Encoder
+		switch *format {
+		case "jsonl":
+			enc = encoder.NewJSONLEncoder(raw)
+		default:
+			return trace.BadParameter("unsupported format %q", *format)
+		}
+
+		rw := adapter.New(enc, raw)
+
+		opts = append(opts, dispatch.WithWriter(proto, rw))
+		return nil
 	}
 
-	w, err := multiwriter.New(opts...)
+	if err := add(&record.Suite{}, suiteOut); err != nil {
+		return trace.Wrap(err)
+	}
+	if err := add(&record.Testcase{}, testcaseOut); err != nil {
+		return trace.Wrap(err)
+	}
+	if err := add(&record.Meta{}, metaOut); err != nil {
+		return trace.Wrap(err)
+	}
+
+	defaultRaw, err := writer.New("-")
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	defer w.Close()
+	var defaultEnc encoder.Encoder
+	switch *format {
+	case "jsonl":
+		defaultEnc = encoder.NewJSONLEncoder(defaultRaw)
+	default:
+		return trace.BadParameter("unsupported format %q", *format)
+	}
+	opts = append(opts, dispatch.WithDefaultWriter(adapter.New(defaultEnc, defaultRaw)))
+
+	dispatcher, err := dispatch.New(opts...)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	defer dispatcher.Close()
 
 	var producers []input.Producer
 	popts := []input.Option{input.WithMetaFile(*metaFile)}
@@ -75,16 +117,19 @@ func run() error {
 	}
 
 	if len(producers) == 0 {
-		return trace.BadParameter("no input files to process")
+		return trace.BadParameter("nothing to do")
 	}
 
-	// TODO: handle per file errors.
-	// TODO: look into parsing files in parallel.
-	// For now just process them sequentially.
+	eg, ctx := errgroup.WithContext(ctx)
 	for _, p := range producers {
-		if err := p.Produce(ctx, w.Write); err != nil {
-			return trace.Wrap(err)
-		}
+		p := p // capture
+		eg.Go(func() error {
+			return p.Produce(ctx, dispatcher.Write)
+		})
+	}
+
+	if err := eg.Wait(); err != nil {
+		return trace.Wrap(err)
 	}
 
 	return nil
