@@ -1,0 +1,49 @@
+{
+  "jobs": [
+    {
+      "check_run_url": "https://api.github.com/repos/gravitational/teleport/check-runs/59965035457",
+      "completed_at": "2026-01-09T23:21:35Z",
+      "conclusion": "success",
+      "created_at": "2026-01-09T23:21:30Z",
+      "head_branch": "master",
+      "head_sha": "fd0d4154156cea1f42ee7dbcbf67fe7f291f08f3",
+      "html_url": "https://github.com/gravitational/teleport/actions/runs/20868464257/job/59965035457",
+      "id": 59965035457,
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "name": "Determine what runner the job should be sent to",
+      "node_id": "CR_kwDOBY-CHM8AAAAN9jHTwQ",
+      "run_attempt": 1,
+      "run_id": 20868464257,
+      "run_url": "https://api.github.com/repos/gravitational/teleport/actions/runs/20868464257",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions",
+      "runner_id": 1001485656,
+      "runner_name": "GitHub Actions 1001485656",
+      "started_at": "2026-01-09T23:21:32Z",
+      "status": "completed",
+      "steps": [
+        {
+          "completed_at": "2026-01-09T23:21:33Z",
+          "conclusion": "success",
+          "name": "Set up job",
+          "number": 1,
+          "started_at": "2026-01-09T23:21:33Z",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-01-09T23:21:34Z",
+          "conclusion": "success",
+          "name": "Set the label output",
+          "number": 2,
+          "started_at": "2026-01-09T23:21:33Z",
+          "status": "completed"
+        }
+      ],
+      "url": "https://api.github.com/repos/gravitational/teleport/actions/jobs/59965035457",
+      "workflow_name": "Deploy"
+    }
+  ],
+  "total_count": 1
+}
