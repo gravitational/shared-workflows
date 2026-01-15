@@ -13,6 +13,13 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Checkout action repository
+      uses: actions/checkout@v4
+      with:
+        repository: ${{ github.action_repository }}
+        ref: ${{ github.action_ref }}
+        path: ${{ github.action_path }}
+
     - name: Workaround go cache issue
       # https://github.com/actions/setup-go/issues/467#issuecomment-2551300160
       shell: bash
