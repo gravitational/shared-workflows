@@ -2,8 +2,12 @@ package writer
 
 import (
 	"io"
+	"net/url"
 	"os"
 	"strings"
+	"time"
+
+	"github.com/gravitational/shared-workflows/tools/ci-normalize/pkg/record"
 )
 
 // RecordWriter accepts records and writes them to a sink.
@@ -13,7 +17,9 @@ type KeyedWriter interface {
 	SinkKey() string
 }
 
-func New(path string) (KeyedWriter, error) {
+func New(path string, metadata *record.Meta) (KeyedWriter, error) {
+	path = renderJinjaPathFromMeta(path, metadata)
+
 	switch path {
 	case "-", "":
 		return &fileWriter{
@@ -40,6 +46,41 @@ func New(path string) (KeyedWriter, error) {
 			sink:        path,
 		}, nil
 	}
+}
+
+func renderJinjaPathFromMeta(template string, meta *record.Meta) string {
+	if template == "" || meta == nil {
+		return template
+	}
+
+	ts := time.Now().UTC()
+	if meta.Timestamp != "" {
+		if t, err := time.Parse(time.RFC3339, meta.Timestamp); err == nil {
+			ts = t.UTC()
+		}
+	}
+
+	path := template
+
+	replacements := map[string]string{
+		"REPOSITORY":   meta.Repository,
+		"YEAR":         ts.Format("2006"),
+		"MONTH":        ts.Format("01"),
+		"DAY":          ts.Format("02"),
+		"TIMESTAMP":    ts.Format("20060102T150405Z"),
+		"ID":           meta.ID,
+		"WORKFLOW":     meta.Workflow,
+		"SHA":          meta.SHA,
+		"JOB":          meta.Job,
+		"META_VERSION": meta.RecordSchemaVersion,
+	}
+
+	for k, v := range replacements {
+		placeholder := "{{" + k + "}}"
+		path = strings.ReplaceAll(path, placeholder, url.PathEscape(v))
+	}
+
+	return path
 }
 
 type fileWriter struct {

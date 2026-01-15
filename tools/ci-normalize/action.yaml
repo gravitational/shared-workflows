@@ -6,7 +6,10 @@ inputs:
   junit-files:
     required: true
     description: "junit files for normalization"
-
+  s3-bucket:
+    description: "S3 bucket for outputs"
+    required: true
+    default: ""
 runs:
   using: composite
   steps:
@@ -34,6 +37,12 @@ runs:
       shell: bash
       working-directory: ${{ github.action_path }}
       run: |
-        meta_file=$(mktemp)
-        go run ./cmd meta --out $meta_file --out s3://
-        # TODO: implement me
+        # Partitions are populated based on metadata.
+        # Also prints meta data to stdout for debugging.
+        go run ./cmd junit \
+          --meta "s3://${{ inputs.s3-bucket }}/ci-metrics/jsonl/{{META_VERSION}}/jobs/repository={{REPOSITORY}}/year={{YEAR}}/month={{MONTH}}/day={{DAY}}/{{TIMESTAMP}}-job-{{ID}}.json" \
+          --meta - \
+          --tests "s3://${{ inputs.s3-bucket }}/ci-metrics/jsonl/{{META_VERSION}}/tests/repository={{REPOSITORY}}/year={{YEAR}}/month={{MONTH}}/day={{DAY}}/{{TIMESTAMP}}-tests-{{ID}}.jsonl" \
+          --suite "s3://${{ inputs.s3-bucket }}/ci-metrics/jsonl/{{META_VERSION}}/suites/repository={{REPOSITORY}}/year={{YEAR}}/month={{MONTH}}/day={{DAY}}/{{TIMESTAMP}}-suites-{{ID}}.jsonl" \
+          ${{ inputs.junit-files }}
+

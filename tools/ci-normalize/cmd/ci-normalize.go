@@ -55,7 +55,7 @@ func run() error {
 
 	add := func(proto any, paths []string) error {
 		for _, path := range paths {
-			raw, err := writer.New(path)
+			raw, err := writer.New(path, metadata)
 			if err != nil {
 				return err
 			}
@@ -83,7 +83,7 @@ func run() error {
 		return trace.Wrap(err)
 	}
 
-	defaultRaw, err := writer.New("-")
+	defaultRaw, err := writer.New("-", nil)
 	if err != nil {
 		return trace.Wrap(err)
 	}
