@@ -25,13 +25,16 @@ func run() error {
 
 	// metadata command
 	metaCmd := app.Command("meta", "Emit metadata")
-	metaOut := metaCmd.Flag("out", "Testcase output file ('-' for stdout, /dev/null to ignore)").Short('o').Default("-").String()
-	// Only github is supported today.
+	metaOuts := metaCmd.Flag(
+		"out",
+		"Metadata output ('-' for stdout, /dev/null to ignore)",
+	).Short('o').Default("-").Strings()
 
 	// JUnit command
 	junitCmd := app.Command("junit", "Normalize JUnit test results")
-	suiteOut := junitCmd.Flag("suite", "Suite output file ('-' for stdout, /dev/null to ignore)").String()
-	testcaseOut := junitCmd.Flag("testcase", "Testcase output file ('-' for stdout, /dev/null to ignore)").String()
+	suiteOuts := junitCmd.Flag("suites", "Testsuite output(s) ('-' for stdout, /dev/null to ignore)").Default("-").Strings()
+	testOuts := junitCmd.Flag("tests", "Testcase output(s) ('-' for stdout, /dev/null to ignore)").Default("-").Strings()
+
 	junitFiles := junitCmd.Arg("files", "JUnit XML result files").Required().ExistingFiles()
 	metaFile := junitCmd.Flag("meta", "json metadata file").Required().ExistingFile()
 
@@ -44,37 +47,33 @@ func run() error {
 	// Setup output writers
 	opts := []dispatch.Option{}
 
-	add := func(proto any, path *string) error {
-		if path == nil || *path == "" {
-			return nil
+	add := func(proto any, paths []string) error {
+		for _, path := range paths {
+			raw, err := writer.New(path)
+			if err != nil {
+				return err
+			}
+			var enc encoder.Encoder
+			switch *format {
+			case "jsonl":
+				enc = encoder.NewJSONLEncoder(raw)
+			default:
+				return trace.BadParameter("unsupported format %q", *format)
+			}
+			rw := adapter.New(enc, raw)
+			opts = append(opts, dispatch.WithWriter(proto, rw))
 		}
-
-		raw, err := writer.New(*path) // io.WriteCloser
-		if err != nil {
-			return err
-		}
-
-		var enc encoder.Encoder
-		switch *format {
-		case "jsonl":
-			enc = encoder.NewJSONLEncoder(raw)
-		default:
-			return trace.BadParameter("unsupported format %q", *format)
-		}
-
-		rw := adapter.New(enc, raw)
-
-		opts = append(opts, dispatch.WithWriter(proto, rw))
 		return nil
 	}
 
-	if err := add(&record.Suite{}, suiteOut); err != nil {
+	if err := add(&record.Suite{}, *suiteOuts); err != nil {
 		return trace.Wrap(err)
 	}
-	if err := add(&record.Testcase{}, testcaseOut); err != nil {
+	if err := add(&record.Testcase{}, *testOuts); err != nil {
 		return trace.Wrap(err)
 	}
-	if err := add(&record.Meta{}, metaOut); err != nil {
+
+	if err := add(&record.Meta{}, *metaOuts); err != nil {
 		return trace.Wrap(err)
 	}
 

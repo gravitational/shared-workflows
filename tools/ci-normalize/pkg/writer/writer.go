@@ -6,20 +6,49 @@ import (
 	"strings"
 )
 
-func New(path string) (io.WriteCloser, error) {
+// RecordWriter accepts records and writes them to a sink.
+// Implemented by the encoded writer adapter.
+type KeyedWriter interface {
+	io.WriteCloser
+	SinkKey() string
+}
+
+func New(path string) (KeyedWriter, error) {
 	switch path {
 	case "-", "":
-		return nopCloser{os.Stdout}, nil
+		return &fileWriter{
+			WriteCloser: nopCloser{os.Stdout},
+			sink:        "stdout",
+		}, nil
 
 	case "/dev/null":
-		return &nopCloser{io.Discard}, nil
+		return &fileWriter{
+			WriteCloser: nopCloser{io.Discard},
+			sink:        "null",
+		}, nil
 
 	default:
 		if strings.HasPrefix(path, "s3://") {
 			return newS3Writer(path)
 		}
-		return os.Create(path)
+		f, err := os.Create(path)
+		if err != nil {
+			return nil, err
+		}
+		return &fileWriter{
+			WriteCloser: f,
+			sink:        path,
+		}, nil
 	}
+}
+
+type fileWriter struct {
+	io.WriteCloser
+	sink string
+}
+
+func (w *fileWriter) SinkKey() string {
+	return w.sink
 }
 
 type nopCloser struct{ io.Writer }

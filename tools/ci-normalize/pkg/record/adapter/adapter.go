@@ -1,18 +1,18 @@
 package adapter
 
 import (
-	"io"
-
+	"github.com/gravitational/shared-workflows/tools/ci-normalize/pkg/dispatch"
 	"github.com/gravitational/shared-workflows/tools/ci-normalize/pkg/encoder"
+	"github.com/gravitational/shared-workflows/tools/ci-normalize/pkg/writer"
 )
 
 // Writer accepts records and writes them via an Encoder.
 type Adapter struct {
 	enc encoder.Encoder
-	out io.WriteCloser
+	out writer.KeyedWriter
 }
 
-func New(enc encoder.Encoder, out io.WriteCloser) *Adapter {
+func New(enc encoder.Encoder, out writer.KeyedWriter) *Adapter {
 	return &Adapter{
 		enc: enc,
 		out: out,
@@ -26,3 +26,9 @@ func (w *Adapter) Write(record any) error {
 func (w *Adapter) Close() error {
 	return w.out.Close()
 }
+
+func (w *Adapter) SinkKey() string {
+	return w.out.SinkKey()
+}
+
+var _ dispatch.RecordWriter = (*Adapter)(nil)

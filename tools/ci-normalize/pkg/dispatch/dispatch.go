@@ -8,10 +8,9 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// RecordWriter accepts records and writes them to a sink.
-// Implemented by the encoded writer adapter.
 type RecordWriter interface {
 	Write(any) error
+	SinkKey() string
 	Close() error
 }
 
@@ -48,6 +47,9 @@ func newSafeWriter(w RecordWriter) *safeWriter {
 type Dispatcher struct {
 	byType map[reflect.Type][]*safeWriter
 	def    []*safeWriter // default writers if type not registered
+
+	mu     sync.Mutex             // Protects below:
+	bySink map[string]*safeWriter // Output format is a global flag, dedup on destination for interleaved files.
 }
 
 // Option configures Dispatcher.
@@ -55,54 +57,76 @@ type Option func(*Dispatcher) error
 
 // New creates a new Dispatcher.
 func New(opts ...Option) (*Dispatcher, error) {
-	mw := &Dispatcher{
+	d := &Dispatcher{
 		byType: make(map[reflect.Type][]*safeWriter),
+		bySink: make(map[string]*safeWriter),
 	}
 
 	for _, opt := range opts {
-		if err := opt(mw); err != nil {
+		if err := opt(d); err != nil {
 			return nil, err
 		}
 	}
 
-	return mw, nil
+	return d, nil
 }
 
 // WithWriter registers a writer for a specific record type.
 func WithWriter(recordPrototype any, w RecordWriter) Option {
-	return func(mw *Dispatcher) error {
+	return func(d *Dispatcher) error {
 		t := reflect.TypeOf(recordPrototype)
-		safe := newSafeWriter(w)
-		mw.byType[t] = append(mw.byType[t], safe)
+		sw := d.getSafeWriter(w)
+		d.byType[t] = append(d.byType[t], sw)
 		return nil
 	}
 }
 
 // WithDefaultWriter registers a writer for unmatched record types.
 func WithDefaultWriter(w RecordWriter) Option {
-	return func(mw *Dispatcher) error {
-		mw.def = append(mw.def, newSafeWriter(w))
+	return func(d *Dispatcher) error {
+		d.def = append(d.def, d.getSafeWriter(w))
 		return nil
 	}
 }
 
+func (d *Dispatcher) getSafeWriter(w RecordWriter) *safeWriter {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	key := w.SinkKey()
+
+	if sw, ok := d.bySink[key]; ok {
+		return sw
+	}
+
+	sw := newSafeWriter(w)
+	d.bySink[key] = sw
+	return sw
+}
+
 // Write routes a record to its writer(s).
-func (mw *Dispatcher) Write(record any) error {
+func (d *Dispatcher) Write(record any) error {
 	t := reflect.TypeOf(record)
 
-	writers := mw.byType[t]
+	writers := d.byType[t]
 	if len(writers) == 0 {
-		writers = mw.def
+		writers = d.def
 	}
 
 	if len(writers) == 0 {
 		return fmt.Errorf("no writer registered for record type %v", t)
 	}
 
-	for _, l := range writers {
+	seen := map[*safeWriter]struct{}{}
+	for _, sw := range writers {
+		if _, ok := seen[sw]; ok {
+			continue
+		}
+		seen[sw] = struct{}{}
+
 		select {
-		case l.ch <- record:
-		case err := <-l.err:
+		case sw.ch <- record:
+		case err := <-sw.err:
 			return err
 		}
 	}
@@ -112,28 +136,26 @@ func (mw *Dispatcher) Write(record any) error {
 
 // Close gracefully shuts down all writers concurrently.
 // Blocks until all queued records are written.
-func (mw *Dispatcher) Close() error {
+func (d *Dispatcher) Close() error {
 	var g errgroup.Group
-
 	seen := map[*safeWriter]struct{}{}
 
-	for _, loops := range mw.byType {
-		for _, l := range loops {
-			seen[l] = struct{}{}
+	for _, ws := range d.byType {
+		for _, sw := range ws {
+			seen[sw] = struct{}{}
 		}
 	}
-
-	for _, l := range mw.def {
-		seen[l] = struct{}{}
+	for _, sw := range d.def {
+		seen[sw] = struct{}{}
 	}
 
-	for l := range seen {
-		l := l // capture for closure
+	for sw := range seen {
+		sw := sw
 		g.Go(func() error {
-			l.once.Do(func() {
-				close(l.ch)
+			sw.once.Do(func() {
+				close(sw.ch)
 			})
-			return <-l.err
+			return <-sw.err
 		})
 	}
 

@@ -26,7 +26,7 @@ type S3Writer struct {
 }
 
 // NewS3Writer creates a streaming writer to an S3 object
-func NewS3Writer(client *s3.Client, bucket, key string) io.WriteCloser {
+func NewS3Writer(client *s3.Client, bucket, key string) KeyedWriter {
 	pr, pw := io.Pipe()
 	done := make(chan error, 1)
 
@@ -75,7 +75,11 @@ func (w *S3Writer) Close() error {
 	return <-w.done      // wait for upload to complete
 }
 
-func newS3Writer(path string) (io.WriteCloser, error) {
+func (w *S3Writer) SinkKey() string {
+	return "s3://" + w.bucket + "/" + w.key
+}
+
+func newS3Writer(path string) (KeyedWriter, error) {
 	cfg, err := config.LoadDefaultConfig(context.TODO())
 	if err != nil {
 		return nil, trace.Wrap(err)
