@@ -13,28 +13,22 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Checkout action repository
-      uses: actions/checkout@v4
-      with:
-        repository: ${{ github.action_repository }}
-        ref: ${{ github.action_ref }}
-        path: ${{ github.action_path }}
-
-    - name: Workaround go cache issue
-      # https://github.com/actions/setup-go/issues/467#issuecomment-2551300160
-      shell: bash
-      run: |
-        # Work around setup-go caching issue
-        mkdir -p ${{ github.workspace }}/.tmp/actions/cache/ci-normalize
-        go_sum_path=${{ github.workspace }}/.tmp/actions/cache/ci-normalize/go.sum
-        cp ${{ github.action_path }}/go.sum ${{ github.workspace }}/.tmp/actions/cache/ci-normalize/
-        echo "go_sum_path=${go_sum_path}" >> $GITHUB_OUTPUT
-      id: cache_workaround
+    # - name: Workaround go cache issue
+    #   # https://github.com/actions/setup-go/issues/467#issuecomment-2551300160
+    #   shell: bash
+    #   run: |
+    #     # Work around setup-go caching issue
+    #     mkdir -p ${{ github.workspace }}/.tmp/actions/cache/ci-normalize
+    #     go_sum_path=${{ github.workspace }}/.tmp/actions/cache/ci-normalize/go.sum
+    #     cp ${{ github.action_path }}/go.sum ${{ github.workspace }}/.tmp/actions/cache/ci-normalize/
+    #     echo "go_sum_path=${go_sum_path}" >> $GITHUB_OUTPUT
+    #   id: cache_workaround
 
     - uses: actions/setup-go@v6
       with:
         go-version-file: ${{ github.action_path }}/go.mod
-        cache-dependency-path: ${{ steps.cache_workaround.outputs.go_sum_path }}
+        # cache-dependency-path: ${{ steps.cache_workaround.outputs.go_sum_path }}
+        cache-dependency-path: ${{ github.action_path }}/go.sum
 
     - name: Normalize and push
       id: normalize_and_push
