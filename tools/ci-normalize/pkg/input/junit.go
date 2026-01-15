@@ -19,27 +19,6 @@ type JUnitProducer struct {
 	meta record.Common
 }
 
-// regex to match ANSI escape sequences
-var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
-
-// SanitizeMessage removes ANSI color codes, non-printable characters, and trims whitespace
-func sanitize(msg string) string {
-	if msg == "" {
-		return ""
-	}
-
-	msg = ansiEscape.ReplaceAllString(msg, "")
-	msg = strings.ReplaceAll(msg, "\r\n", "\n")
-	msg = strings.Map(func(r rune) rune {
-		if r == '\n' || r == '\t' || r >= 32 {
-			return r
-		}
-		return -1
-	}, msg)
-
-	return strings.TrimSpace(msg)
-}
-
 func NewJUnitProducer(file string, opts ...Option) (*JUnitProducer, error) {
 	if _, err := os.Stat(file); err != nil {
 		return nil, trace.NotFound("junit file %q does not exist: %v", file, err)
@@ -123,6 +102,27 @@ type junitFailure struct {
 	Message string `xml:"message,attr"`
 	Type    string `xml:"type,attr"`
 	Text    string `xml:",chardata"`
+}
+
+// regex to match ANSI escape sequences
+var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+
+// SanitizeMessage removes ANSI color codes, non-printable characters, and trims whitespace
+func sanitize(msg string) string {
+	if msg == "" {
+		return ""
+	}
+
+	msg = ansiEscape.ReplaceAllString(msg, "")
+	msg = strings.ReplaceAll(msg, "\r\n", "\n")
+	msg = strings.Map(func(r rune) rune {
+		if r == '\n' || r == '\t' || r >= 32 {
+			return r
+		}
+		return -1
+	}, msg)
+
+	return strings.TrimSpace(msg)
 }
 
 func (jf *junitFailure) safeString() string {

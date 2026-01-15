@@ -9,8 +9,6 @@ import (
 	"github.com/gravitational/trace"
 )
 
-// GithubMeta is the envrioment read from github, this should before the test job to capture the metadata.
-// Currently only supports reading from env, could consider reading from env file in the future.
 type GithubMeta struct {
 	// Required for canonical ids:
 	Repository   string `env:"GITHUB_REPOSITORY,notEmpty"`

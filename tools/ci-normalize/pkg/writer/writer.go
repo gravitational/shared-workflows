@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gravitational/shared-workflows/tools/ci-normalize/pkg/record"
+	"github.com/gravitational/trace"
 )
 
 // RecordWriter accepts records and writes them to a sink.
@@ -37,10 +38,12 @@ func New(path string, metadata *record.Meta) (KeyedWriter, error) {
 		if strings.HasPrefix(path, "s3://") {
 			return newS3Writer(path)
 		}
+
 		f, err := os.Create(path)
 		if err != nil {
-			return nil, err
+			return nil, trace.Wrap(err)
 		}
+
 		return &fileWriter{
 			WriteCloser: f,
 			sink:        path,

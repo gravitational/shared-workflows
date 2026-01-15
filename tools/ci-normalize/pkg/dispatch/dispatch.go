@@ -1,10 +1,10 @@
 package dispatch
 
 import (
-	"fmt"
 	"reflect"
 	"sync"
 
+	"github.com/gravitational/trace"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -52,10 +52,8 @@ type Dispatcher struct {
 	bySink map[string]*safeWriter // Output format is a global flag, dedup on destination for interleaved files.
 }
 
-// Option configures Dispatcher.
 type Option func(*Dispatcher) error
 
-// New creates a new Dispatcher.
 func New(opts ...Option) (*Dispatcher, error) {
 	d := &Dispatcher{
 		byType: make(map[reflect.Type][]*safeWriter),
@@ -71,7 +69,6 @@ func New(opts ...Option) (*Dispatcher, error) {
 	return d, nil
 }
 
-// WithWriter registers a writer for a specific record type.
 func WithWriter(recordPrototype any, w RecordWriter) Option {
 	return func(d *Dispatcher) error {
 		t := reflect.TypeOf(recordPrototype)
@@ -81,7 +78,6 @@ func WithWriter(recordPrototype any, w RecordWriter) Option {
 	}
 }
 
-// WithDefaultWriter registers a writer for unmatched record types.
 func WithDefaultWriter(w RecordWriter) Option {
 	return func(d *Dispatcher) error {
 		d.def = append(d.def, d.getSafeWriter(w))
@@ -104,7 +100,6 @@ func (d *Dispatcher) getSafeWriter(w RecordWriter) *safeWriter {
 	return sw
 }
 
-// Write routes a record to its writer(s).
 func (d *Dispatcher) Write(record any) error {
 	t := reflect.TypeOf(record)
 
@@ -114,9 +109,10 @@ func (d *Dispatcher) Write(record any) error {
 	}
 
 	if len(writers) == 0 {
-		return fmt.Errorf("no writer registered for record type %v", t)
+		return trace.BadParameter("no writer registered for record type %v", t)
 	}
 
+	var errs []error
 	seen := map[*safeWriter]struct{}{}
 	for _, sw := range writers {
 		if _, ok := seen[sw]; ok {
@@ -127,11 +123,11 @@ func (d *Dispatcher) Write(record any) error {
 		select {
 		case sw.ch <- record:
 		case err := <-sw.err:
-			return err
+			errs = append(errs, err)
 		}
 	}
 
-	return nil
+	return trace.NewAggregate(errs...)
 }
 
 // Close gracefully shuts down all writers concurrently.
@@ -150,7 +146,7 @@ func (d *Dispatcher) Close() error {
 	}
 
 	for sw := range seen {
-		sw := sw
+		sw := sw // capture
 		g.Go(func() error {
 			sw.once.Do(func() {
 				close(sw.ch)

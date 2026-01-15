@@ -18,6 +18,21 @@ import (
 	"github.com/gravitational/trace"
 )
 
+func makeDefaultWriter(format *string) (dispatch.RecordWriter, error) {
+	defaultRaw, err := writer.New("-", nil)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	var defaultEnc encoder.Encoder
+	switch *format {
+	case "jsonl":
+		defaultEnc = encoder.NewJSONLEncoder(defaultRaw)
+	default:
+		return nil, trace.BadParameter("unsupported format %q", *format)
+	}
+	return adapter.New(defaultEnc, defaultRaw), nil
+}
+
 func run() error {
 	ctx := context.TODO()
 	app := kingpin.New("ci-normalize", "Normalize test artifacts")
@@ -35,7 +50,6 @@ func run() error {
 	junitCmd := app.Command("junit", "Normalize JUnit test results")
 	suiteOuts := junitCmd.Flag("suites", "Testsuite output(s) ('-' for stdout, /dev/null to ignore)").Default("-").Strings()
 	testOuts := junitCmd.Flag("tests", "Testcase output(s) ('-' for stdout, /dev/null to ignore)").Default("-").Strings()
-
 	junitFiles := junitCmd.Arg("files", "JUnit XML result files").Required().ExistingFiles()
 	metaFile := junitCmd.Flag("from-meta", "Optionally provide existing metadata").ExistingFile()
 
@@ -48,11 +62,10 @@ func run() error {
 	metadata, err := meta.New(metaFile)
 	if err != nil {
 		return trace.Wrap(err, "reading metadata")
-
 	}
+
 	// Setup output writers
 	opts := []dispatch.Option{}
-
 	add := func(proto any, paths []string) error {
 		for _, path := range paths {
 			raw, err := writer.New(path, metadata)
@@ -78,23 +91,14 @@ func run() error {
 	if err := add(&record.Testcase{}, *testOuts); err != nil {
 		return trace.Wrap(err)
 	}
-
 	if err := add(&record.Meta{}, *metaOuts); err != nil {
 		return trace.Wrap(err)
 	}
-
-	defaultRaw, err := writer.New("-", nil)
+	defWriter, err := makeDefaultWriter(format)
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	var defaultEnc encoder.Encoder
-	switch *format {
-	case "jsonl":
-		defaultEnc = encoder.NewJSONLEncoder(defaultRaw)
-	default:
-		return trace.BadParameter("unsupported format %q", *format)
-	}
-	opts = append(opts, dispatch.WithDefaultWriter(adapter.New(defaultEnc, defaultRaw)))
+	opts = append(opts, dispatch.WithDefaultWriter(defWriter))
 
 	dispatcher, err := dispatch.New(opts...)
 	if err != nil {

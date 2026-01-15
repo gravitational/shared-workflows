@@ -2,7 +2,6 @@ package writer
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"strings"
 	"sync"
@@ -14,8 +13,7 @@ import (
 	"github.com/gravitational/trace"
 )
 
-// S3Writer streams all bytes written into a single S3 object via a pipe
-type S3Writer struct {
+type s3Writer struct {
 	client *s3.Client
 	bucket string
 	key    string
@@ -46,7 +44,7 @@ func NewS3Writer(client *s3.Client, bucket, key string) KeyedWriter {
 		close(done)
 	}()
 
-	return &S3Writer{
+	return &s3Writer{
 		client:     client,
 		bucket:     bucket,
 		key:        key,
@@ -55,19 +53,17 @@ func NewS3Writer(client *s3.Client, bucket, key string) KeyedWriter {
 	}
 }
 
-// Write implements io.Writer (concurrent-safe)
-func (w *S3Writer) Write(p []byte) (int, error) {
+func (w *s3Writer) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.closed {
-		return 0, trace.BadParameter("write on closed S3Writer")
+		return 0, io.ErrClosedPipe
 	}
 
 	return w.pipeWriter.Write(p)
 }
 
-// Close closes the pipe and waits for upload to finish
-func (w *S3Writer) Close() error {
+func (w *s3Writer) Close() error {
 	w.mu.Lock()
 	if w.closed {
 		w.mu.Unlock()
@@ -80,7 +76,7 @@ func (w *S3Writer) Close() error {
 	return <-w.done      // wait for upload to complete
 }
 
-func (w *S3Writer) SinkKey() string {
+func (w *s3Writer) SinkKey() string {
 	return "s3://" + w.bucket + "/" + w.key
 }
 
@@ -95,7 +91,7 @@ func newS3Writer(path string) (KeyedWriter, error) {
 	trimmed := strings.TrimPrefix(path, "s3://")
 	parts := strings.SplitN(trimmed, "/", 2)
 	if len(parts) != 2 {
-		return nil, fmt.Errorf("invalid s3 path: %q", path)
+		return nil, trace.BadParameter("invalid s3 path: %q", path)
 	}
 	bucket, key := parts[0], parts[1]
 
