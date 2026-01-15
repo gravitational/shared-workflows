@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	go_github "github.com/google/go-github/v71/github"
 )
@@ -83,6 +84,139 @@ func (c *Client) ListWaitingWorkflowRuns(ctx context.Context, org, repo string) 
 	}
 
 	return allRuns, nil
+}
+
+// WorkflowDispatchRequest contains the parameters for triggering a workflow dispatch event.
+type WorkflowDispatchRequest struct {
+	// WorkflowName is the name of the workflow to run.
+	// Workflows are defined in the .github/workflows directory of a repository and are named by their filename .github/workflows/<NAME>.
+	// Note that the file extension (.yml or .yaml) should be included when specifying the workflow name.
+	WorkflowName string
+	// Ref is the git reference for the workflow dispatch (branch, tag, or commit SHA).
+	Ref string
+	// Inputs are the input parameters for the workflow dispatch.
+	// Great care should be taken to ensure that no sensitive information or malicious data is passed via inputs.
+	// Inputs should be validated and sanitized before being used in the workflow. Never pass untrusted data via inputs.
+	Inputs map[string]any
+}
+
+// WorkflowDispatch triggers a workflow dispatch event.
+// Care should be taken when using this function as it can trigger arbitrary workflows in the target repository.
+// Ensure that the workflow being triggered is safe and does not execute untrusted code.
+// Always validate and sanitize any inputs passed to the workflow.
+func (c *Client) WorkflowDispatch(ctx context.Context, org, repo string, req WorkflowDispatchRequest) error {
+	if req.WorkflowName == "" {
+		return fmt.Errorf("workflow name is required")
+	}
+	if req.Ref == "" {
+		return fmt.Errorf("ref is required")
+	}
+
+	_, err := c.client.Actions.CreateWorkflowDispatchEventByFileName(ctx, org, repo, req.WorkflowName, go_github.CreateWorkflowDispatchEventRequest{
+		Ref:    req.Ref,
+		Inputs: req.Inputs,
+	})
+	if err != nil {
+		return fmt.Errorf("CreateWorkflowDispatchEventByFileName API call: %w", err)
+	}
+	return nil
+}
+
+// WorkflowRunNotFoundError is a sentinel error returned when a workflow run cannot be found.
+// This is typically used for tying workflow dispatch events to their resulting workflow runs.
+// We have to use heuristic based searching to be able to reliably find the correct run.
+// So this error indicates that our search did not yield any results, but may succeed if retried later.
+type WorkflowRunNotFoundError struct {
+	Message string
+}
+
+func (e *WorkflowRunNotFoundError) Error() string {
+	return e.Message
+}
+
+func newWorkflowRunNotFoundError(message string) *WorkflowRunNotFoundError {
+	return &WorkflowRunNotFoundError{
+		Message: message,
+	}
+}
+
+// FindWorkflowRunByCorrelatedStepNameParams contains the parameters for finding a workflow run ID by a 
+// step name containing a correlation ID.
+type FindWorkflowRunByCorrelatedStepNameParams struct {
+	// WorkflowName is the name of the workflow to search within.
+	// Workflows are defined in the .github/workflows directory of a repository and are named by their filename .github/workflows/<NAME>.
+		// Note that the file extension (.yml or .yaml) should be included when specifying the workflow name.
+	WorkflowName string
+	// CorrelationID is the unique name of the step to search for within the workflow runs.
+	CorrelationID string
+}
+
+// FindWorkflowRunByCorrelatedStepName finds a workflow run by searching for a step name containing a correlation ID.
+// Workflow Dispatch events can be used to trigger workflows but do not return the workflow run ID directly.
+// This function can be used as a workaround to find the workflow run after triggering a workflow dispatch.
+// For this to work, the workflow should include have an input for a correlation ID that is then used in a step name.
+//
+// It returns the workflow run if found, or an error if not found or if any issues occur during the search.
+// The error can be of type [WorkflowRunNotFoundError] if the step name is not found in any workflow run.
+//
+// This search does not currently handle pagination of workflow runs or jobs.
+// This means it can only find workflow runs and jobs within the first page of results (up to 100).
+func (c *Client) FindWorkflowRunByCorrelatedStepName(ctx context.Context, org, repo string, req FindWorkflowRunByCorrelatedStepNameParams) (WorkflowRunInfo, error) {
+	if req.WorkflowName == "" {
+		return WorkflowRunInfo{}, fmt.Errorf("workflow name is required")
+	}
+	if req.CorrelationID == "" {
+		return WorkflowRunInfo{}, fmt.Errorf("correlation ID is required")
+	}
+
+	runs, _, err := c.client.Actions.ListWorkflowRunsByFileName(ctx, org, repo, req.WorkflowName, &go_github.ListWorkflowRunsOptions{
+		ListOptions: go_github.ListOptions{
+			PerPage: 100,
+		},
+	})
+	if err != nil {
+		return WorkflowRunInfo{}, fmt.Errorf("listing workflow runs: %w", err)
+	}
+
+	for _, run := range runs.WorkflowRuns {
+		// Pending runs do not have steps yet, so skip them
+		if run.GetStatus() == "pending" {
+			continue
+		}
+
+		jobs, _, err := c.client.Actions.ListWorkflowJobs(ctx, org, repo, run.GetID(), &go_github.ListWorkflowJobsOptions{
+			ListOptions: go_github.ListOptions{
+				PerPage: 100,
+			},
+		})
+		if err != nil {
+			return WorkflowRunInfo{}, fmt.Errorf("listing workflow jobs for run ID %d: %w", run.GetID(), err)
+		}
+
+		for _, job := range jobs.Jobs {
+			for _, step := range job.Steps {
+				if strings.Contains(step.GetName(), req.CorrelationID) { // Happy path: found a matching step
+					return workflowRunInfoFromObj(run), nil
+				}
+			}
+		}
+
+	}
+
+	// If we reach here, we did not find the step in any run
+	return WorkflowRunInfo{}, newWorkflowRunNotFoundError(fmt.Sprintf("could not find workflow run for %q with step name %q", req.WorkflowName, req.CorrelationID))
+}
+
+// workflowRunInfoFromObj converts a [go_github.WorkflowRun] object to a [WorkflowRunInfo].
+func workflowRunInfoFromObj(githubObj *go_github.WorkflowRun) WorkflowRunInfo {
+	return WorkflowRunInfo{
+		WorkflowID:   githubObj.GetID(),
+		Name:         githubObj.GetName(),
+		HTMLURL:      githubObj.GetHTMLURL(),
+		Requester:    githubObj.GetActor().GetLogin(),
+		Organization: githubObj.GetRepository().GetOwner().GetLogin(),
+		Repository:   githubObj.GetRepository().GetName(),
+	}
 }
 
 // LogValue implements [slog.LogValuer] for WorkflowRunInfo to provide structured logging.
