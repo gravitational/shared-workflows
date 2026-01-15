@@ -35,5 +35,5 @@ runs:
       working-directory: ${{ github.action_path }}
       run: |
         meta_file=$(mktemp)
-        go run ./cmd meta | tee $meta_file
+        go run ./cmd meta --out $meta_file --out s3://
         # TODO: implement me

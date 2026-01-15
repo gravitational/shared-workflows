@@ -55,14 +55,9 @@ func NewJUnitProducer(file string, opts ...Option) (*JUnitProducer, error) {
 	return p, nil
 }
 
-func WithMetaFile(metafile string) Option {
+func WithMeta(metadata *record.Meta) Option {
 	return func(p *JUnitProducer) error {
-		meta, err := ReadMetaFile(metafile)
-		if err != nil {
-			return trace.Wrap(err, "failed to read metadata file %q", metafile)
-		}
-
-		p.meta = meta.Common
+		p.meta = metadata.Common
 		return nil
 	}
 }

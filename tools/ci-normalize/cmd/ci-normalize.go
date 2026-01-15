@@ -11,6 +11,7 @@ import (
 	"github.com/gravitational/shared-workflows/tools/ci-normalize/pkg/dispatch"
 	"github.com/gravitational/shared-workflows/tools/ci-normalize/pkg/encoder"
 	"github.com/gravitational/shared-workflows/tools/ci-normalize/pkg/input"
+	"github.com/gravitational/shared-workflows/tools/ci-normalize/pkg/meta"
 	"github.com/gravitational/shared-workflows/tools/ci-normalize/pkg/record"
 	"github.com/gravitational/shared-workflows/tools/ci-normalize/pkg/record/adapter"
 	"github.com/gravitational/shared-workflows/tools/ci-normalize/pkg/writer"
@@ -22,13 +23,13 @@ func run() error {
 	app := kingpin.New("ci-normalize", "Normalize test artifacts")
 	app.HelpFlag.Short('h')
 	format := app.Flag("format", "Output format").Short('f').Default("jsonl").Enum("jsonl")
+	metaOuts := app.Flag(
+		"meta",
+		"Metadata output ('-' for stdout, /dev/null to ignore)",
+	).Short('o').Default("-").Strings()
 
 	// metadata command
 	metaCmd := app.Command("meta", "Emit metadata")
-	metaOuts := metaCmd.Flag(
-		"out",
-		"Metadata output ('-' for stdout, /dev/null to ignore)",
-	).Short('o').Default("-").Strings()
 
 	// JUnit command
 	junitCmd := app.Command("junit", "Normalize JUnit test results")
@@ -36,7 +37,7 @@ func run() error {
 	testOuts := junitCmd.Flag("tests", "Testcase output(s) ('-' for stdout, /dev/null to ignore)").Default("-").Strings()
 
 	junitFiles := junitCmd.Arg("files", "JUnit XML result files").Required().ExistingFiles()
-	metaFile := junitCmd.Flag("meta", "json metadata file").Required().ExistingFile()
+	metaFile := junitCmd.Flag("from-meta", "Optionally provide existing metadata").ExistingFile()
 
 	cmd, err := app.Parse(os.Args[1:])
 	if err != nil {
@@ -44,6 +45,11 @@ func run() error {
 
 	}
 
+	metadata, err := meta.New(metaFile)
+	if err != nil {
+		return trace.Wrap(err, "reading metadata")
+
+	}
 	// Setup output writers
 	opts := []dispatch.Option{}
 
@@ -97,7 +103,8 @@ func run() error {
 	defer dispatcher.Close()
 
 	var producers []input.Producer
-	popts := []input.Option{input.WithMetaFile(*metaFile)}
+	popts := []input.Option{input.WithMeta(metadata)}
+	producers = append(producers, input.NewPassthroughProducer(metadata))
 
 	switch cmd {
 	case junitCmd.FullCommand():
@@ -110,7 +117,6 @@ func run() error {
 		}
 
 	case metaCmd.FullCommand():
-		producers = append(producers, input.NewGithubMetaProducer())
 	default:
 		return trace.NotImplemented("unimplemented command %q", cmd)
 	}
