@@ -40,9 +40,9 @@ runs:
         # Partitions are populated based on metadata.
         # Also prints meta data to stdout for debugging.
         go run ./cmd junit \
-          --meta "s3://${{ inputs.s3-bucket }}/ci-metrics/jsonl/{{META_VERSION}}/jobs/repository={{REPOSITORY}}/year={{YEAR}}/month={{MONTH}}/day={{DAY}}/{{TIMESTAMP}}-job-{{ID}}.json" \
+          --meta "s3://${{ inputs.s3-bucket }}/jsonl/{{META_VERSION}}/jobs/repository={{REPOSITORY}}/year={{YEAR}}/month={{MONTH}}/day={{DAY}}/{{TIMESTAMP}}-job-{{ID}}.json" \
           --meta - \
-          --tests "s3://${{ inputs.s3-bucket }}/ci-metrics/jsonl/{{META_VERSION}}/tests/repository={{REPOSITORY}}/year={{YEAR}}/month={{MONTH}}/day={{DAY}}/{{TIMESTAMP}}-tests-{{ID}}.jsonl" \
-          --suite "s3://${{ inputs.s3-bucket }}/ci-metrics/jsonl/{{META_VERSION}}/suites/repository={{REPOSITORY}}/year={{YEAR}}/month={{MONTH}}/day={{DAY}}/{{TIMESTAMP}}-suites-{{ID}}.jsonl" \
+          --tests "s3://${{ inputs.s3-bucket }}/jsonl/{{META_VERSION}}/tests/repository={{REPOSITORY}}/year={{YEAR}}/month={{MONTH}}/day={{DAY}}/{{TIMESTAMP}}-tests-{{ID}}.jsonl" \
+          --suites "s3://${{ inputs.s3-bucket }}/jsonl/{{META_VERSION}}/suites/repository={{REPOSITORY}}/year={{YEAR}}/month={{MONTH}}/day={{DAY}}/{{TIMESTAMP}}-suites-{{ID}}.jsonl" \
           ${{ inputs.junit-files }}
 
