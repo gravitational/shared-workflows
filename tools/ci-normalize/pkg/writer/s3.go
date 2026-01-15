@@ -6,6 +6,7 @@ import (
 	"io"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
@@ -31,8 +32,12 @@ func NewS3Writer(client *s3.Client, bucket, key string) KeyedWriter {
 	done := make(chan error, 1)
 
 	go func() {
+		// Hardcode 20m timeout for now, if it takes longer to push the results we have some serious issues.
+		ctx, cancel := context.WithTimeout(context.TODO(), time.Minute*20)
+		defer cancel()
+
 		uploader := manager.NewUploader(client)
-		_, err := uploader.Upload(context.TODO(), &s3.PutObjectInput{
+		_, err := uploader.Upload(ctx, &s3.PutObjectInput{
 			Bucket: &bucket,
 			Key:    &key,
 			Body:   pr,

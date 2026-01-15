@@ -11,10 +11,11 @@ ci-normalize meta \
   --meta s3://bucket/meta.jsonl \
   --meta - | jq
 
-# Generate junit normalized results:
-go run ./cmd junit --from-meta meta.json  \
+# Generate junit normalized results from existing metadata file:
+ci-normalize junit --from-meta meta.json  \
   --tests testcase.jsonl \
   --suites suite.jsonl \
   --suites s3://bucket/suite.jsonl \
+  --meta /dev/null \
   junit/*.xml
 ```

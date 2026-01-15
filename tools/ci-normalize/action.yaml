@@ -18,9 +18,9 @@ runs:
       shell: bash
       run: |
         # Work around setup-go caching issue
-        mkdir -p ${{ github.workspace }}/.tmp/actions/cache/amplify-preview
-        go_sum_path=${{ github.workspace }}/.tmp/actions/cache/amplify-preview/go.sum
-        cp ${{ github.action_path }}/go.sum ${{ github.workspace }}/.tmp/actions/cache/amplify-preview/
+        mkdir -p ${{ github.workspace }}/.tmp/actions/cache/ci-normalize
+        go_sum_path=${{ github.workspace }}/.tmp/actions/cache/ci-normalize/go.sum
+        cp ${{ github.action_path }}/go.sum ${{ github.workspace }}/.tmp/actions/cache/ci-normalize/
         echo "go_sum_path=${go_sum_path}" >> $GITHUB_OUTPUT
       id: cache_workaround
 
