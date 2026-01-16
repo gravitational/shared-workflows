@@ -10,6 +10,7 @@ import (
 )
 
 func TestJUnitProducer_produceFromReader(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string // description of this test case
 		xml         string

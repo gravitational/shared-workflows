@@ -2,6 +2,7 @@ package meta
 
 import (
 	"encoding/json"
+	"io"
 	"os"
 
 	"github.com/gravitational/shared-workflows/tools/ci-normalize/pkg/record"
@@ -9,13 +10,19 @@ import (
 )
 
 func newFromFile(path string) (*record.Meta, error) {
-	data, err := os.ReadFile(path)
+	f, err := os.Open(path)
 	if err != nil {
 		return nil, trace.Wrap(err, "could not read metadata file")
 	}
+	defer f.Close()
+	return newFromReader(f)
+}
 
+func newFromReader(r io.Reader) (*record.Meta, error) {
 	var meta record.Meta
-	if err := json.Unmarshal(data, &meta); err != nil {
+
+	decoder := json.NewDecoder(r)
+	if err := decoder.Decode(&meta); err != nil {
 		return nil, trace.Wrap(err)
 	}
 
@@ -27,5 +34,4 @@ func newFromFile(path string) (*record.Meta, error) {
 	// Overwrite the record schema used for this producer
 	meta.RecordSchemaVersion = record.RecordSchemaVersion
 	return &meta, nil
-
 }
