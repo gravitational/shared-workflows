@@ -143,8 +143,12 @@ func newWorkflowRunNotFoundError(message string) *WorkflowRunNotFoundError {
 }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 // FindWorkflowRunByCorrelatedStepNameParams contains the parameters for finding a workflow run ID by a 
+=======
+// FindWorkflowRunByCorrelatedStepNameParams contains the parameters for finding a workflow run ID by a
+>>>>>>> 832d8c8 (Formatting)
 // step name containing a correlation ID.
 type FindWorkflowRunByCorrelatedStepNameParams struct {
 	// WorkflowName is the name of the workflow to search within.
