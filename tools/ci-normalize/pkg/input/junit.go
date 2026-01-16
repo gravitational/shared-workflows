@@ -48,17 +48,15 @@ type junitTestSuite struct {
 	Name       string          `xml:"name,attr"`
 	Properties []junitProperty `xml:"properties>property"`
 	Testcases  []junitTestCase `xml:"testcase"`
-
-	// Fields not used. Included for completeness.
-	Tests     int     `xml:"tests,attr"`
-	Failures  int     `xml:"failures,attr"`
-	Errors    int     `xml:"errors,attr"`
-	Skipped   int     `xml:"skipped,attr"`
-	Time      float64 `xml:"time,attr"`
-	Timestamp string  `xml:"timestamp,attr"`
-	Hostname  string  `xml:"hostname,attr"`
-	SystemOut string  `xml:"system-out"`
-	SystemErr string  `xml:"system-err"`
+	Tests      int             `xml:"tests,attr"`
+	Failures   int             `xml:"failures,attr"`
+	Errors     int             `xml:"errors,attr"`
+	Skipped    int             `xml:"skipped,attr"`
+	Time       float64         `xml:"time,attr"`
+	Timestamp  string          `xml:"timestamp,attr"`
+	Hostname   string          `xml:"hostname,attr"`
+	SystemOut  string          `xml:"system-out"`
+	SystemErr  string          `xml:"system-err"`
 }
 
 func (ts *junitTestSuite) isEmpty() bool {
@@ -162,16 +160,14 @@ func (js *junitSkipped) safeString() string {
 }
 
 type junitTestCase struct {
-	Name    string        `xml:"name,attr"`
-	Time    float64       `xml:"time,attr"`
-	Error   *junitFailure `xml:"error"`
-	Failure *junitFailure `xml:"failure"`
-	Skipped *junitSkipped `xml:"skipped"`
-
-	// Fields not used. Included for completeness.
-	Class     string `xml:"classname,attr"`
-	SystemOut string `xml:"system-out"`
-	SystemErr string `xml:"system-err"`
+	Name      string        `xml:"name,attr"`
+	Time      float64       `xml:"time,attr"`
+	Error     *junitFailure `xml:"error"`
+	Failure   *junitFailure `xml:"failure"`
+	Skipped   *junitSkipped `xml:"skipped"`
+	Class     string        `xml:"classname,attr"`
+	SystemOut string        `xml:"system-out"`
+	SystemErr string        `xml:"system-err"`
 }
 
 func (tc *junitTestCase) toRecord(meta record.Common) *record.Testcase {
