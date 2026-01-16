@@ -17,26 +17,47 @@ type RecordWriter interface {
 type safeWriter struct {
 	w    RecordWriter
 	ch   chan any
-	err  chan error
 	once sync.Once
+	done chan struct{} // closed when writer goroutine exits
+	err  error         // last error (nil if finished successfully)
+
+}
+
+func (sw *safeWriter) Write(record any) error {
+	select {
+	case <-sw.done:
+		return sw.err
+	case sw.ch <- record:
+		return nil
+	}
+}
+
+func (sw *safeWriter) Close() error {
+	sw.once.Do(func() {
+		close(sw.ch)
+	})
+	<-sw.done
+	return sw.err
 }
 
 func newSafeWriter(w RecordWriter) *safeWriter {
 	safe := &safeWriter{
-		w:   w,
-		ch:  make(chan any, 256),
-		err: make(chan error, 1),
+		w:  w,
+		ch: make(chan any, 256),
+		// err: make(chan error, 1),
+		done: make(chan struct{}),
 	}
 
 	go func() {
+		var err error
 		for r := range safe.ch {
-			if err := w.Write(r); err != nil {
-				safe.err <- err
-				return
+			if err = w.Write(r); err != nil {
+				break
 			}
 		}
-
-		safe.err <- w.Close()
+		safe.err = err
+		w.Close()
+		close(safe.done)
 	}()
 
 	return safe
@@ -119,10 +140,7 @@ func (d *Dispatcher) Write(record any) error {
 			continue
 		}
 		seen[sw] = struct{}{}
-
-		select {
-		case sw.ch <- record:
-		case err := <-sw.err:
+		if err := sw.Write(record); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -148,10 +166,7 @@ func (d *Dispatcher) Close() error {
 	for sw := range seen {
 		sw := sw // capture
 		g.Go(func() error {
-			sw.once.Do(func() {
-				close(sw.ch)
-			})
-			return <-sw.err
+			return sw.Close()
 		})
 	}
 
