@@ -30,15 +30,15 @@ To use within another workflow:
 
   - name: Configure AWS Credentials
     uses: aws-actions/configure-aws-credentials@a03048d87541d1d9fcf2ecf528a4a65ba9bd7838
+    id: aws-setup
     if: always()
-    continue-on-error: true
     with:
       aws-region: <region>
       role-to-assume: <role with bucket access>
 
   - name: Normalize test results and push to s3
     uses: gravitational/shared-workflows/tools/ci-normalize@<SHA>
-    if: always()
+    if: always() && steps.aws-setup.outcome == 'success'
     continue-on-error: true
     with:
       s3-bucket: "s3://<bucket to use>/ci-metrics"
