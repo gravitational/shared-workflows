@@ -4,6 +4,8 @@ CI utility to normalize test results and capture runner metadata.
 
 ## Usage
 
+### cli
+
 ```sh
 # Generate metadata from GH run and write to multiple destinations:
 ci-normalize meta \
@@ -11,18 +13,21 @@ ci-normalize meta \
   --meta s3://bucket/meta.jsonl \
   --meta - | jq
 
-# Generate junit normalized results from existing metadata file:
+# Generate normalized results from junit xml:
 ci-normalize junit --from-meta meta.json  \
-  --tests testcase.jsonl \
-  --suites suite.jsonl \
-  --suites s3://bucket/suite.jsonl \
+  --tests tests.jsonl \
+  --suites suites.jsonl \
+  --suites s3://bucket/suites.jsonl \
   --meta /dev/null \
   junit/*.xml
 ```
 
+### Github Action
 
 To use within another workflow:
 ```yaml
+  - name: User test step
+
   - name: Configure AWS Credentials
     uses: aws-actions/configure-aws-credentials@a03048d87541d1d9fcf2ecf528a4a65ba9bd7838
     if: always()
@@ -39,3 +44,13 @@ To use within another workflow:
       s3-bucket: "s3://<bucket to use>/ci-metrics"
       junit-files: "$GITHUB_WORKSPACE/test-logs/*.xml"
 ```
+
+## Supported Formats
+
+Inputs:
+- [x] JUnit XML
+
+Output:
+- [x] jsonl
+
+The output file schema can be found in `pkg/record/record.go`.
