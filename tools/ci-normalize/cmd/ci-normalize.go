@@ -152,7 +152,10 @@ func run() error {
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	defer dispatcher.Close()
+	defer func() {
+		// Clean up path, ignore the err
+		_ = dispatcher.Close()
+	}()
 
 	producers, err := createProducers(cmd, junitCmd, metadata, junitFiles)
 	if err != nil {
@@ -171,7 +174,7 @@ func run() error {
 		return trace.Wrap(err)
 	}
 
-	return nil
+	return dispatcher.Close() // flush and check for errors
 }
 
 func main() {

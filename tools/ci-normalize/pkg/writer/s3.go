@@ -72,8 +72,8 @@ func (w *s3Writer) Close() error {
 	w.closed = true
 	w.mu.Unlock()
 
-	w.pipeWriter.Close() // signal EOF to S3
-	return <-w.done      // wait for upload to complete
+	_ = w.pipeWriter.Close() // signal EOF to S3
+	return <-w.done          // wait for upload to complete
 }
 
 func (w *s3Writer) SinkKey() string {

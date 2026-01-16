@@ -55,7 +55,7 @@ func newSafeWriter(w RecordWriter) *safeWriter {
 			}
 		}
 		safe.err = err
-		w.Close()
+		_ = w.Close()
 		close(safe.done)
 	}()
 

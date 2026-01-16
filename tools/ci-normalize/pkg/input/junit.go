@@ -259,6 +259,8 @@ func (p *JUnitProducer) Produce(ctx context.Context, emit func(any) error) error
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	defer f.Close()
+	defer func() {
+		_ = f.Close()
+	}()
 	return p.produceFromReader(ctx, f, emit)
 }

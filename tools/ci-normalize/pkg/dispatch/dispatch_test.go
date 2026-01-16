@@ -129,7 +129,7 @@ func TestDispatcher_WriteFailureOnFlush(t *testing.T) {
 	disp, err := New(WithWriter(R{}, writer))
 	require.NoError(t, err)
 
-	disp.Write(R{"oops"})
+	_ = disp.Write(R{"oops"})
 	err = disp.Close()
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "fail write")
@@ -141,10 +141,10 @@ func TestDispatcher_WriteFailure(t *testing.T) {
 	writer := &mockWriter{sink: "fail", failNext: true}
 	disp, err := New(WithWriter(R{}, writer))
 	require.NoError(t, err)
-	t.Cleanup(func() { disp.Close() })
+	t.Cleanup(func() { _ = disp.Close() })
 
 	for range 512 {
-		disp.Write(R{"oops"})
+		_ = disp.Write(R{"oops"})
 	}
 	err = disp.Write(R{"oops"})
 	require.Error(t, err)
@@ -158,6 +158,6 @@ func TestDispatcher_NoWriters(t *testing.T) {
 
 	disp, err := New()
 	require.NoError(t, err)
-	t.Cleanup(func() { disp.Close() })
+	t.Cleanup(func() { _ = disp.Close() })
 	assert.ErrorContains(t, disp.Write(MyRecord{"rec"}), "no writer registered")
 }

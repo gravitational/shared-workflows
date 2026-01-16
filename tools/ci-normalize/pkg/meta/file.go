@@ -14,7 +14,9 @@ func newFromFile(path string) (*record.Meta, error) {
 	if err != nil {
 		return nil, trace.Wrap(err, "could not read metadata file")
 	}
-	defer f.Close()
+	defer func() {
+		_ = f.Close()
+	}()
 	return newFromReader(f)
 }
 
