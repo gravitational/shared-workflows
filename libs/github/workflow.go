@@ -41,6 +41,12 @@ type WorkflowRunInfo struct {
 	Organization string
 	// Repository is the name of the repository where the workflow run occurred.
 	Repository string
+	// Status is the current status of the workflow run.
+	// GitHub's Workflow API uses check run statuses for workflow runs.
+	Status CheckStatus
+	// Conclusion is the conclusion of the workflow run (only set when status is "completed").
+	// GitHub's Workflow API uses check run conclusions for workflow runs.
+	Conclusion CheckConclusion
 }
 
 // GetWorkflowRunInfo retrieves information about a specific workflow run by its ID.
@@ -50,14 +56,7 @@ func (c *Client) GetWorkflowRunInfo(ctx context.Context, org, repo string, runID
 		return WorkflowRunInfo{}, fmt.Errorf("GetWorkflowRunByID API call: %w", err)
 	}
 
-	return WorkflowRunInfo{
-		WorkflowID:   workflow.GetID(),
-		Name:         workflow.GetName(),
-		HTMLURL:      workflow.GetHTMLURL(),
-		Requester:    workflow.GetActor().GetLogin(),
-		Organization: org,
-		Repository:   repo,
-	}, nil
+	return workflowRunInfoFromObj(workflow), nil
 }
 
 // ListWaitingWorkflowRuns lists all workflow runs in a repository that are currently waiting for approval.
@@ -72,14 +71,7 @@ func (c *Client) ListWaitingWorkflowRuns(ctx context.Context, org, repo string) 
 
 	allRuns := []WorkflowRunInfo{}
 	for _, run := range data.WorkflowRuns {
-		allRuns = append(allRuns, WorkflowRunInfo{
-			WorkflowID:   run.GetID(),
-			Name:         run.GetName(),
-			HTMLURL:      run.GetHTMLURL(),
-			Requester:    run.GetActor().GetLogin(),
-			Organization: org,
-			Repository:   repo,
-		})
+		allRuns = append(allRuns, workflowRunInfoFromObj(run))
 	}
 
 	return allRuns, nil
@@ -150,6 +142,76 @@ func newWorkflowRunNotFoundError(message string) *WorkflowRunNotFoundError {
 	}
 }
 
+<<<<<<< HEAD
+=======
+// FindWorkflowRunByCorrelatedStepNameParams contains the parameters for finding a workflow run ID by a 
+// step name containing a correlation ID.
+type FindWorkflowRunByCorrelatedStepNameParams struct {
+	// WorkflowName is the name of the workflow to search within.
+	// Workflows are defined in the .github/workflows directory of a repository and are named by their filename .github/workflows/<NAME>.
+	// Note that the file extension (.yml or .yaml) should be included when specifying the workflow name.
+	WorkflowName string
+	// CorrelationID is the unique name of the step to search for within the workflow runs.
+	CorrelationID string
+}
+
+// FindWorkflowRunByCorrelatedStepName finds a workflow run by searching for a step name containing a correlation ID.
+// Workflow Dispatch events can be used to trigger workflows but do not return the workflow run ID directly.
+// This function can be used as a workaround to find the workflow run after triggering a workflow dispatch.
+// For this to work, the workflow should include have an input for a correlation ID that is then used in a step name.
+//
+// It returns the workflow run if found, or an error if not found or if any issues occur during the search.
+// The error can be of type [WorkflowRunNotFoundError] if the step name is not found in any workflow run.
+//
+// This search does not currently handle pagination of workflow runs or jobs.
+// This means it can only find workflow runs and jobs within the first page of results (up to 100).
+func (c *Client) FindWorkflowRunByCorrelatedStepName(ctx context.Context, org, repo string, req FindWorkflowRunByCorrelatedStepNameParams) (WorkflowRunInfo, error) {
+	if req.WorkflowName == "" {
+		return WorkflowRunInfo{}, fmt.Errorf("workflow name is required")
+	}
+	if req.CorrelationID == "" {
+		return WorkflowRunInfo{}, fmt.Errorf("correlation ID is required")
+	}
+
+	runs, _, err := c.client.Actions.ListWorkflowRunsByFileName(ctx, org, repo, req.WorkflowName, &go_github.ListWorkflowRunsOptions{
+		ListOptions: go_github.ListOptions{
+			PerPage: 100,
+		},
+	})
+	if err != nil {
+		return WorkflowRunInfo{}, fmt.Errorf("listing workflow runs: %w", err)
+	}
+
+	for _, run := range runs.WorkflowRuns {
+		// Pending runs do not have steps yet, so skip them
+		if run.GetStatus() == "pending" {
+			continue
+		}
+
+		jobs, _, err := c.client.Actions.ListWorkflowJobs(ctx, org, repo, run.GetID(), &go_github.ListWorkflowJobsOptions{
+			ListOptions: go_github.ListOptions{
+				PerPage: 100,
+			},
+		})
+		if err != nil {
+			return WorkflowRunInfo{}, fmt.Errorf("listing workflow jobs for run ID %d: %w", run.GetID(), err)
+		}
+
+		for _, job := range jobs.Jobs {
+			for _, step := range job.Steps {
+				if strings.Contains(step.GetName(), req.CorrelationID) { // Happy path: found a matching step
+					return workflowRunInfoFromObj(run), nil
+				}
+			}
+		}
+
+	}
+
+	// If we reach here, we did not find the step in any run
+	return WorkflowRunInfo{}, newWorkflowRunNotFoundError(fmt.Sprintf("could not find workflow run for %q with step name %q", req.WorkflowName, req.CorrelationID))
+}
+
+>>>>>>> dbd485f (Support for workflow status and conclusions)
 // workflowRunInfoFromObj converts a [go_github.WorkflowRun] object to a [WorkflowRunInfo].
 func workflowRunInfoFromObj(githubObj *go_github.WorkflowRun) WorkflowRunInfo {
 	return WorkflowRunInfo{
@@ -159,6 +221,8 @@ func workflowRunInfoFromObj(githubObj *go_github.WorkflowRun) WorkflowRunInfo {
 		Requester:    githubObj.GetActor().GetLogin(),
 		Organization: githubObj.GetRepository().GetOwner().GetLogin(),
 		Repository:   githubObj.GetRepository().GetName(),
+		Status:       CheckStatus(githubObj.GetStatus()),
+		Conclusion:   CheckConclusion(githubObj.GetConclusion()),
 	}
 }
 
@@ -168,5 +232,7 @@ func (w WorkflowRunInfo) LogValue() slog.Value {
 		slog.String("organization", w.Organization),
 		slog.String("repository", w.Repository),
 		slog.Int64("workflow_id", w.WorkflowID),
+		slog.String("status", string(w.Status)),
+		slog.String("conclusion", string(w.Conclusion)),
 	)
 }
