@@ -3,6 +3,7 @@ package input
 import (
 	"context"
 	"encoding/xml"
+	"io"
 	"os"
 	"regexp"
 	"strings"
@@ -173,7 +174,7 @@ type junitTestCase struct {
 	SystemErr string `xml:"system-err"`
 }
 
-func (tc *junitTestCase) toRecord(meta record.Common) (*record.Testcase, error) {
+func (tc *junitTestCase) toRecord(meta record.Common) *record.Testcase {
 	return &record.Testcase{
 		Common:         meta,
 		Name:           tc.Name,
@@ -183,7 +184,7 @@ func (tc *junitTestCase) toRecord(meta record.Common) (*record.Testcase, error) 
 		FailureMessage: tc.Failure.safeString(),
 		ErrorMessage:   tc.Error.safeString(),
 		SkipMessage:    tc.Skipped.safeString(),
-	}, nil
+	}
 }
 
 // safeStatusAndMessage returns the test status and message
@@ -205,14 +206,12 @@ type junitProperty struct {
 	Value string `xml:"value,attr"`
 }
 
-func (p *JUnitProducer) Produce(ctx context.Context, emit func(any) error) error {
-	f, err := os.Open(p.file)
-	if err != nil {
-		return trace.Wrap(err)
-	}
-	defer f.Close()
-
-	decoder := xml.NewDecoder(f)
+func (p *JUnitProducer) produceFromReader(
+	_ context.Context,
+	r io.Reader,
+	emit func(any) error,
+) error {
+	decoder := xml.NewDecoder(r)
 
 	for {
 		tok, err := decoder.Token()
@@ -246,10 +245,7 @@ func (p *JUnitProducer) Produce(ctx context.Context, emit func(any) error) error
 				}
 
 				for _, tc := range ts.Testcases {
-					tcRec, err := tc.toRecord(p.meta)
-					if err != nil {
-						return trace.Wrap(err)
-					}
+					tcRec := tc.toRecord(p.meta)
 					tcRec.SuiteName = ts.Name
 					if err := emit(tcRec); err != nil {
 						return trace.Wrap(err)
@@ -261,4 +257,13 @@ func (p *JUnitProducer) Produce(ctx context.Context, emit func(any) error) error
 	}
 
 	return nil
+}
+
+func (p *JUnitProducer) Produce(ctx context.Context, emit func(any) error) error {
+	f, err := os.Open(p.file)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	defer f.Close()
+	return p.produceFromReader(ctx, f, emit)
 }
