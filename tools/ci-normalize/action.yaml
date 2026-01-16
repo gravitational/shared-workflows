@@ -25,16 +25,12 @@ runs:
       id: cache_workaround
 
     - uses: actions/setup-go@v6
-      if: always()
-      continue-on-error: true
       with:
         go-version-file: ${{ github.action_path }}/go.mod
         cache-dependency-path: ${{ steps.cache_workaround.outputs.go_sum_path }}
 
     - name: Normalize and push
       id: normalize_and_push
-      if: always()
-      continue-on-error: true
       shell: bash
       working-directory: ${{ github.action_path }}
       run: |
