@@ -66,7 +66,7 @@ func renderJinjaPathFromMeta(template string, meta *record.Meta) string {
 	path := template
 
 	replacements := map[string]string{
-		"REPOSITORY":   meta.Repository,
+		"REPOSITORY":   meta.RepositoryName,
 		"YEAR":         ts.Format("2006"),
 		"MONTH":        ts.Format("01"),
 		"DAY":          ts.Format("02"),

@@ -73,7 +73,7 @@ func TestRenderJinjaPathFromMeta(t *testing.T) {
 			RecordSchemaVersion: "v1",
 		},
 		CanonicalMeta: record.CanonicalMeta{
-			Repository: "repo/test",
+			RepositoryName: "repo/test",
 		},
 		Timestamp: ts.Format(time.RFC3339),
 	}

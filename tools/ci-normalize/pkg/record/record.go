@@ -78,7 +78,7 @@ type RunnerMeta struct {
 type CanonicalMeta struct {
 	CanonicalMetaSchemaVersion string `json:"canonical_meta_schema_version"`
 	Provider                   string `json:"provider"`
-	Repository                 string `json:"repository"`
+	RepositoryName             string `json:"repository_name"` // Human readable name of the repository
 	Workflow                   string `json:"workflow"`
 	Job                        string `json:"job"`
 	RunID                      string `json:"run_id"`

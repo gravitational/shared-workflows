@@ -20,7 +20,7 @@ func Test_newFromReader(t *testing.T) {
 		{
 			name: "all fields",
 			jsonMeta: `
-{"id":"foobar","record_schema_version":"v1","canonical_meta_schema_version":"v1","provider":"github.com","repository":"foo/bar","workflow":"example test workflow","job":"job","run_id":"123123123123","run_attempt":1,"git_sha":"deadbeef","git_ref":"ref","git_base_ref":"base","git_head_ref":"head","actor_name":"foo","actor_id":"9090909090","timestamp":"2026-01-15T13:19:35Z"}
+{"id":"foobar","record_schema_version":"v1","canonical_meta_schema_version":"v1","provider":"github.com","repository_name":"foo/bar","workflow":"example test workflow","job":"job","run_id":"123123123123","run_attempt":1,"git_sha":"deadbeef","git_ref":"ref","git_base_ref":"base","git_head_ref":"head","actor_name":"foo","actor_id":"9090909090","timestamp":"2026-01-15T13:19:35Z"}
 `,
 			errFn: func(tt require.TestingT, err error, i ...interface{}) {
 				assert.NoError(tt, err)
@@ -33,7 +33,7 @@ func Test_newFromReader(t *testing.T) {
 				CanonicalMeta: record.CanonicalMeta{
 					CanonicalMetaSchemaVersion: "v1",
 					Provider:                   "github.com",
-					Repository:                 "foo/bar",
+					RepositoryName:             "foo/bar",
 					Workflow:                   "example test workflow",
 					Job:                        "job",
 					RunID:                      "123123123123",
