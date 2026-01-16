@@ -1,6 +1,7 @@
 package meta
 
 import (
+	"net/url"
 	"strings"
 	"time"
 
@@ -41,7 +42,7 @@ func newFromGithubEnv() (*record.Meta, error) {
 	canonical := record.CanonicalMeta{
 		CanonicalMetaSchemaVersion: record.CanonicalMetaSchemaVersion,
 		Provider:                   "github.com",
-		Repository:                 strings.ToLower(gh.Repository),
+		Repository:                 url.PathEscape(strings.ToLower(gh.Repository)), // Used for paritioning
 		Workflow:                   strings.ToLower(gh.WorkflowName),
 		Job:                        strings.ToLower(gh.JobName),
 		RunID:                      gh.RunID,

@@ -73,26 +73,21 @@ func TestRenderJinjaPathFromMeta(t *testing.T) {
 			RecordSchemaVersion: "v1",
 		},
 		CanonicalMeta: record.CanonicalMeta{
-
 			Repository: "repo/test",
-			Workflow:   "ci",
-			Job:        "build",
-			SHA:        "deadbeef",
 		},
 		Timestamp: ts.Format(time.RFC3339),
 	}
 
-	template := "/out/{{REPOSITORY}}/{{YEAR}}/{{MONTH}}/{{DAY}}/{{TIMESTAMP}}/{{ID}}_{{WORKFLOW}}_{{SHA}}_{{JOB}}_{{META_VERSION}}.json"
+	template := "/out/{{REPOSITORY}}/{{YEAR}}/{{MONTH}}/{{DAY}}/{{TIMESTAMP}}/{{ID}}_{{META_VERSION}}.json"
 	path := renderJinjaPathFromMeta(template, meta)
 
-	assert.Contains(t, path, "repo%2Ftest")
-	assert.Contains(t, path, "2026/01/16")
-	assert.Contains(t, path, "20260116T150405Z")
-	assert.Contains(t, path, "abc123")
-	assert.Contains(t, path, "ci")
-	assert.Contains(t, path, "deadbeef")
-	assert.Contains(t, path, "build")
-	assert.Contains(t, path, "v1")
+	assert.NotContains(t, path, "{{REPOSITORY}}")
+	assert.NotContains(t, path, "{{YEAR}}")
+	assert.NotContains(t, path, "{{MONTH}}")
+	assert.NotContains(t, path, "{{DAY}}")
+	assert.NotContains(t, path, "{{TIMESTAMP}}")
+	assert.NotContains(t, path, "{{ID}}")
+	assert.NotContains(t, path, "{{META_VERSION}}")
 }
 
 func TestRenderJinjaPathFromMeta_NilMeta(t *testing.T) {

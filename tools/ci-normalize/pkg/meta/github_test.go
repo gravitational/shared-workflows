@@ -34,7 +34,7 @@ func TestNewFromGithubEnv(t *testing.T) {
 				assert.NotEmpty(t, meta.Common.ID)
 
 				assert.Equal(t, "github.com", meta.CanonicalMeta.Provider)
-				assert.Equal(t, "example/repo", meta.CanonicalMeta.Repository)
+				assert.Equal(t, "example%2Frepo", meta.CanonicalMeta.Repository)
 				assert.Equal(t, "ci", meta.CanonicalMeta.Workflow)
 				assert.Equal(t, "test", meta.CanonicalMeta.Job)
 				assert.Equal(t, "abcdef123456", meta.CanonicalMeta.SHA)

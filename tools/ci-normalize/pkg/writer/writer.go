@@ -72,9 +72,6 @@ func renderJinjaPathFromMeta(template string, meta *record.Meta) string {
 		"DAY":          ts.Format("02"),
 		"TIMESTAMP":    ts.Format("20060102T150405Z"),
 		"ID":           meta.ID,
-		"WORKFLOW":     meta.Workflow,
-		"SHA":          meta.SHA,
-		"JOB":          meta.Job,
 		"META_VERSION": meta.RecordSchemaVersion,
 	}
 
