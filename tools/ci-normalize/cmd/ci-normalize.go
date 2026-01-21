@@ -8,13 +8,13 @@ import (
 	kingpin "github.com/alecthomas/kingpin/v2"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/gravitational/shared-workflows/tools/ci-normalize/pkg/dispatch"
-	"github.com/gravitational/shared-workflows/tools/ci-normalize/pkg/dispatch/adapter"
-	"github.com/gravitational/shared-workflows/tools/ci-normalize/pkg/encoder"
-	"github.com/gravitational/shared-workflows/tools/ci-normalize/pkg/input"
-	"github.com/gravitational/shared-workflows/tools/ci-normalize/pkg/meta"
-	"github.com/gravitational/shared-workflows/tools/ci-normalize/pkg/record"
-	"github.com/gravitational/shared-workflows/tools/ci-normalize/pkg/writer"
+	"github.com/gravitational/shared-workflows/tools/ci-normalize/dispatch"
+	"github.com/gravitational/shared-workflows/tools/ci-normalize/dispatch/adapter"
+	"github.com/gravitational/shared-workflows/tools/ci-normalize/encoder"
+	"github.com/gravitational/shared-workflows/tools/ci-normalize/input"
+	"github.com/gravitational/shared-workflows/tools/ci-normalize/meta"
+	"github.com/gravitational/shared-workflows/tools/ci-normalize/record"
+	"github.com/gravitational/shared-workflows/tools/ci-normalize/writer"
 	"github.com/gravitational/trace"
 )
 

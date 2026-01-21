@@ -1,9 +1,9 @@
 package adapter
 
 import (
-	"github.com/gravitational/shared-workflows/tools/ci-normalize/pkg/dispatch"
-	"github.com/gravitational/shared-workflows/tools/ci-normalize/pkg/encoder"
-	"github.com/gravitational/shared-workflows/tools/ci-normalize/pkg/writer"
+	"github.com/gravitational/shared-workflows/tools/ci-normalize/dispatch"
+	"github.com/gravitational/shared-workflows/tools/ci-normalize/encoder"
+	"github.com/gravitational/shared-workflows/tools/ci-normalize/writer"
 )
 
 // Writer accepts records and writes them via an Encoder.

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gravitational/shared-workflows/tools/ci-normalize/pkg/record"
+	"github.com/gravitational/shared-workflows/tools/ci-normalize/record"
 	"github.com/gravitational/trace"
 )
 

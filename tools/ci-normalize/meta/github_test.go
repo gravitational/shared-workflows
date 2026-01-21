@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gravitational/shared-workflows/tools/ci-normalize/pkg/record"
+	"github.com/gravitational/shared-workflows/tools/ci-normalize/record"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
