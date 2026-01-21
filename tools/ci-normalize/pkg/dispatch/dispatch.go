@@ -65,8 +65,6 @@ func newBufferedWriter(w RecordWriter) *bufferedWriter {
 // Dispatcher routes records to writers based on record type.
 type Dispatcher struct {
 	byType map[reflect.Type][]*bufferedWriter
-	// def are the default writers when no match is found in byType
-	def []*bufferedWriter
 
 	// mu protects below:
 	mu sync.Mutex
@@ -100,13 +98,6 @@ func WithWriter(recordPrototype any, w RecordWriter) Option {
 	}
 }
 
-func WithDefaultWriter(w RecordWriter) Option {
-	return func(d *Dispatcher) error {
-		d.def = append(d.def, d.getBufferedWriter(w))
-		return nil
-	}
-}
-
 func (d *Dispatcher) getBufferedWriter(w RecordWriter) *bufferedWriter {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -126,10 +117,6 @@ func (d *Dispatcher) Write(record any) error {
 	t := reflect.TypeOf(record)
 
 	writers := d.byType[t]
-	if len(writers) == 0 {
-		writers = d.def
-	}
-
 	if len(writers) == 0 {
 		return trace.BadParameter("no writer registered for record type %v", t)
 	}
@@ -159,9 +146,6 @@ func (d *Dispatcher) Close() error {
 		for _, sw := range ws {
 			seen[sw] = struct{}{}
 		}
-	}
-	for _, sw := range d.def {
-		seen[sw] = struct{}{}
 	}
 
 	for sw := range seen {

@@ -48,12 +48,10 @@ func TestDispatcher_WriteAndClose(t *testing.T) {
 	// Prepare writers
 	writerA := &mockWriter{sink: "A"}
 	writerB := &mockWriter{sink: "B"}
-	defaultWriter := &mockWriter{sink: "default"}
 
 	disp, err := New(
 		WithWriter(MyRecord{}, writerA),
 		WithWriter(MyRecord{}, writerB), // two writers for same type
-		WithDefaultWriter(defaultWriter),
 	)
 	require.NoError(t, err)
 
@@ -71,34 +69,24 @@ func TestDispatcher_WriteAndClose(t *testing.T) {
 	assert.Equal(t, []any{rec1, rec2}, writerA.records)
 	assert.Equal(t, []any{rec1, rec2}, writerB.records)
 
-	// Default writer should NOT receive type-registered records
-	assert.Empty(t, defaultWriter.records)
-
 	// All writers closed and flushed
 	assert.True(t, writerA.closed)
 	assert.True(t, writerB.closed)
-	assert.True(t, defaultWriter.closed)
 }
 
-func TestDispatcher_DefaultWriterFallback(t *testing.T) {
+func TestDispatcher_UnregisteredTypeFails(t *testing.T) {
 	type UnknownRecord struct{ ID int }
 
-	defaultWriter := &mockWriter{sink: "default"}
-
-	disp, err := New(
-		WithDefaultWriter(defaultWriter),
-	)
+	disp, err := New()
 	require.NoError(t, err)
 
 	rec := UnknownRecord{42}
-	require.NoError(t, disp.Write(rec))
+	err = disp.Write(rec)
+	require.ErrorContains(t, err, "no writer registered")
 
 	// Close to flush
 	require.NoError(t, disp.Close())
 
-	// Default writer should receive record
-	assert.Equal(t, []any{rec}, defaultWriter.records)
-	assert.True(t, defaultWriter.closed)
 }
 
 func TestDispatcher_DedupWriters(t *testing.T) {
@@ -108,8 +96,7 @@ func TestDispatcher_DedupWriters(t *testing.T) {
 
 	disp, err := New(
 		WithWriter(R{}, writer),
-		WithWriter(R{}, writer),   // duplicate writer for same type
-		WithDefaultWriter(writer), // also default
+		WithWriter(R{}, writer), // duplicate writer for same type
 	)
 	require.NoError(t, err)
 

@@ -39,23 +39,6 @@ func makeWriter[T any](paths []string, format string, metadata *record.Meta) ([]
 	return opts, nil
 }
 
-func makeDefaultWriter(format string) (dispatch.RecordWriter, error) {
-	raw, err := writer.New("-", nil)
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-
-	var enc encoder.Encoder
-	switch format {
-	case "jsonl":
-		enc = encoder.NewJSONLEncoder(raw)
-	default:
-		return nil, trace.BadParameter("unsupported format %q", format)
-	}
-
-	return adapter.New(enc, raw), nil
-}
-
 func setupDispatcher(format string, metadata *record.Meta, suiteOuts, testOuts, metaOuts []string) (*dispatch.Dispatcher, error) {
 	opts := []dispatch.Option{}
 
@@ -76,12 +59,6 @@ func setupDispatcher(format string, metadata *record.Meta, suiteOuts, testOuts, 
 		return nil, trace.Wrap(err)
 	}
 	opts = append(opts, metaOpts...)
-
-	defWriter, err := makeDefaultWriter(format)
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-	opts = append(opts, dispatch.WithDefaultWriter(defWriter))
 
 	d, err := dispatch.New(opts...)
 	if err != nil {
