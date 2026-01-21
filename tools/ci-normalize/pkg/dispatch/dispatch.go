@@ -59,7 +59,10 @@ func newBufferedWriter(ctx context.Context, w RecordWriter) *bufferedWriter {
 
 	go func() {
 		defer close(bw.done)
-		defer w.Close()
+		defer func() {
+			// Clean up path, ignore the error from underlying writer.
+			_ = w.Close()
+		}()
 		var err error
 
 		for {
