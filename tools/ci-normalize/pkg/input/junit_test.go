@@ -77,9 +77,7 @@ func TestJUnitProducer_produceFromReader(t *testing.T) {
     </system-err>
 </testsuite>
 `,
-			errFn: func(tt require.TestingT, err error, i ...interface{}) {
-				assert.NoError(tt, err, i...)
-			},
+			errFn: require.NoError,
 			wantRecords: []any{
 				&record.Suite{
 					Name:       "full-junit-suite",
@@ -149,9 +147,7 @@ func TestJUnitProducer_produceFromReader(t *testing.T) {
 				ID:                  "deadbeef",
 				RecordSchemaVersion: "v13",
 			},
-			errFn: func(tt require.TestingT, err error, i ...interface{}) {
-				assert.NoError(tt, err, i...)
-			},
+			errFn: require.NoError,
 			wantRecords: []any{
 				&record.Suite{
 					Name:       "full-junit-suite",
@@ -220,9 +216,7 @@ func TestJUnitProducer_produceFromReader(t *testing.T) {
 <testsuite name="full-junit-suite" timestamp="ooops">
 </testsuite>
 `,
-			errFn: func(tt require.TestingT, err error, i ...interface{}) {
-				assert.NoError(tt, err)
-			},
+			errFn: require.NoError,
 		},
 	}
 	for _, tt := range tests {
