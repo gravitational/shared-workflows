@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 
@@ -10,7 +11,6 @@ import (
 
 	"github.com/gravitational/shared-workflows/tools/ci-normalize/dispatch"
 	"github.com/gravitational/shared-workflows/tools/ci-normalize/dispatch/adapter"
-	"github.com/gravitational/shared-workflows/tools/ci-normalize/encoder"
 	"github.com/gravitational/shared-workflows/tools/ci-normalize/input"
 	"github.com/gravitational/shared-workflows/tools/ci-normalize/meta"
 	"github.com/gravitational/shared-workflows/tools/ci-normalize/record"
@@ -18,7 +18,7 @@ import (
 	"github.com/gravitational/trace"
 )
 
-func makeWriter[T any](ctx context.Context, paths []string, format string, metadata *record.Meta) ([]dispatch.Option, error) {
+func makeWriter[T any](ctx context.Context, paths []string, _ string, metadata *record.Meta) ([]dispatch.Option, error) {
 	var opts []dispatch.Option
 	for _, path := range paths {
 		raw, err := writer.New(ctx, path, metadata)
@@ -26,15 +26,7 @@ func makeWriter[T any](ctx context.Context, paths []string, format string, metad
 			return nil, trace.Wrap(err)
 		}
 
-		var enc encoder.Encoder
-		switch format {
-		case "jsonl":
-			enc = encoder.NewJSONLEncoder(raw)
-		default:
-			return nil, trace.BadParameter("unsupported format %q", format)
-		}
-
-		opts = append(opts, dispatch.WithWriter(new(T), adapter.New(enc, raw)))
+		opts = append(opts, dispatch.WithWriter(new(T), adapter.New(json.NewEncoder(raw), raw)))
 	}
 	return opts, nil
 }

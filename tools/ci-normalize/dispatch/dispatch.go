@@ -9,12 +9,16 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// RecordWriter defines an interface for writing records to a sink.
 type RecordWriter interface {
 	Write(any) error
 	SinkKey() string
 	Close() error
 }
 
+// bufferedWriter wraps a RecordWriter with a buffered channel.
+// Each bufferedWriter starts a goroutine that reads from the channel
+// and writes to the underlying RecordWriter.
 type bufferedWriter struct {
 	ctx  context.Context
 	w    RecordWriter
@@ -87,7 +91,9 @@ func newBufferedWriter(ctx context.Context, w RecordWriter) *bufferedWriter {
 	return bw
 }
 
-// Dispatcher routes records to writers based on record type.
+// Dispatcher routes records to appropriate writers based on their type.
+// It supports multiple writers for the same record type.
+// Writers are deduplicated based on their SinkKey.
 type Dispatcher struct {
 	ctx    context.Context
 	byType map[reflect.Type][]*bufferedWriter
@@ -100,6 +106,7 @@ type Dispatcher struct {
 
 type Option func(*Dispatcher) error
 
+// New creates a new [Dispatcher] with the given options.
 func New(ctx context.Context, opts ...Option) (*Dispatcher, error) {
 	d := &Dispatcher{
 		ctx:    ctx,
@@ -116,6 +123,13 @@ func New(ctx context.Context, opts ...Option) (*Dispatcher, error) {
 	return d, nil
 }
 
+// WithWriter registers a RecordWriter for the given record type.
+// Example:
+//
+//	disp, err := New(t.Context(),
+//		WithWriter(FooRecord{}, writerA),
+//		WithWriter(BarRecord{}, writerB),
+//	)
 func WithWriter(recordPrototype any, w RecordWriter) Option {
 	return func(d *Dispatcher) error {
 		t := reflect.TypeOf(recordPrototype)
