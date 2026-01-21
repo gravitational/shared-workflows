@@ -81,8 +81,6 @@ func createProducers(cmd string, junitCmd *kingpin.CmdClause, metadata *record.M
 			}
 			producers = append(producers, p)
 		}
-	case "meta":
-		// No additional producers needed
 	default:
 		return nil, trace.NotImplemented("unimplemented command %q", cmd)
 	}
@@ -99,17 +97,10 @@ func run() error {
 	app := kingpin.New("ci-normalize", "Normalize test artifacts")
 	app.HelpFlag.Short('h')
 	format := app.Flag("format", "Output format").Short('f').Default("jsonl").Enum("jsonl")
-	metaOuts := app.Flag(
-		"meta",
-		"Metadata output ('-' for stdout, /dev/null to ignore)",
-	).Short('o').Default("-").Strings()
 	timeout := app.Flag(
 		"timeout",
 		"Maximum execution time (e.g. 30s, 2m); 0 means no timeout",
 	).Default("0").Duration()
-
-	// metadata command
-	app.Command("meta", "Emit metadata")
 
 	// JUnit command
 	junitCmd := app.Command("junit", "Normalize JUnit test results")
@@ -117,6 +108,10 @@ func run() error {
 	testOuts := junitCmd.Flag("tests", "Testcase output(s) ('-' for stdout, /dev/null to ignore)").Default("-").Strings()
 	junitFiles := junitCmd.Arg("files", "JUnit XML result files").Required().ExistingFiles()
 	metaFile := junitCmd.Flag("from-meta", "Optionally provide existing metadata").ExistingFile()
+	metaOuts := junitCmd.Flag(
+		"meta",
+		"Metadata output ('-' for stdout, /dev/null to ignore)",
+	).Short('o').Default("-").Strings()
 
 	cmd, err := app.Parse(os.Args[1:])
 	if err != nil {

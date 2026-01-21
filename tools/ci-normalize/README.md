@@ -7,12 +7,6 @@ CI utility to normalize test results and capture runner metadata.
 ### cli
 
 ```sh
-# Generate metadata from GH run and write to multiple destinations:
-ci-normalize meta \
-  --meta meta.jsonl \
-  --meta s3://bucket/meta.jsonl \
-  --meta - | jq
-
 # Generate normalized results from junit xml:
 ci-normalize junit --from-meta meta.json  \
   --tests tests.jsonl \
