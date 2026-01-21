@@ -1,6 +1,7 @@
 package dispatch
 
 import (
+	"context"
 	"reflect"
 	"sync"
 
@@ -15,6 +16,7 @@ type RecordWriter interface {
 }
 
 type bufferedWriter struct {
+	ctx  context.Context
 	w    RecordWriter
 	ch   chan any
 	once sync.Once
@@ -25,6 +27,8 @@ type bufferedWriter struct {
 
 func (sw *bufferedWriter) Write(record any) error {
 	select {
+	case <-sw.ctx.Done():
+		return sw.ctx.Err()
 	case <-sw.done:
 		return sw.err
 	case sw.ch <- record:
@@ -36,34 +40,53 @@ func (sw *bufferedWriter) Close() error {
 	sw.once.Do(func() {
 		close(sw.ch)
 	})
-	<-sw.done
-	return sw.err
+
+	select {
+	case <-sw.done:
+		return sw.err
+	case <-sw.ctx.Done():
+		return sw.ctx.Err()
+	}
 }
 
-func newBufferedWriter(w RecordWriter) *bufferedWriter {
-	safe := &bufferedWriter{
+func newBufferedWriter(ctx context.Context, w RecordWriter) *bufferedWriter {
+	bw := &bufferedWriter{
+		ctx:  ctx,
 		w:    w,
 		ch:   make(chan any, 256),
 		done: make(chan struct{}),
 	}
 
 	go func() {
+		defer close(bw.done)
+		defer w.Close()
 		var err error
-		for r := range safe.ch {
-			if err = w.Write(r); err != nil {
-				break
+
+		for {
+			select {
+			case <-ctx.Done():
+				err = ctx.Err()
+				bw.err = err
+				return
+
+			case r, ok := <-bw.ch:
+				if !ok {
+					return
+				}
+				if err = w.Write(r); err != nil {
+					bw.err = err
+					return
+				}
 			}
 		}
-		safe.err = err
-		_ = w.Close()
-		close(safe.done)
 	}()
 
-	return safe
+	return bw
 }
 
 // Dispatcher routes records to writers based on record type.
 type Dispatcher struct {
+	ctx    context.Context
 	byType map[reflect.Type][]*bufferedWriter
 
 	// mu protects below:
@@ -74,8 +97,9 @@ type Dispatcher struct {
 
 type Option func(*Dispatcher) error
 
-func New(opts ...Option) (*Dispatcher, error) {
+func New(ctx context.Context, opts ...Option) (*Dispatcher, error) {
 	d := &Dispatcher{
+		ctx:    ctx,
 		byType: make(map[reflect.Type][]*bufferedWriter),
 		bySink: make(map[string]*bufferedWriter),
 	}
@@ -108,12 +132,18 @@ func (d *Dispatcher) getBufferedWriter(w RecordWriter) *bufferedWriter {
 		return sw
 	}
 
-	sw := newBufferedWriter(w)
+	sw := newBufferedWriter(d.ctx, w)
 	d.bySink[key] = sw
 	return sw
 }
 
 func (d *Dispatcher) Write(record any) error {
+	select {
+	case <-d.ctx.Done():
+		return d.ctx.Err()
+	default:
+	}
+
 	t := reflect.TypeOf(record)
 
 	writers := d.byType[t]
@@ -155,5 +185,10 @@ func (d *Dispatcher) Close() error {
 		})
 	}
 
-	return g.Wait()
+	select {
+	case <-d.ctx.Done():
+		return d.ctx.Err()
+	default:
+		return g.Wait()
+	}
 }

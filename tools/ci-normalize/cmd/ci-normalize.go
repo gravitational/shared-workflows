@@ -18,10 +18,10 @@ import (
 	"github.com/gravitational/trace"
 )
 
-func makeWriter[T any](paths []string, format string, metadata *record.Meta) ([]dispatch.Option, error) {
+func makeWriter[T any](ctx context.Context, paths []string, format string, metadata *record.Meta) ([]dispatch.Option, error) {
 	var opts []dispatch.Option
 	for _, path := range paths {
-		raw, err := writer.New(path, metadata)
+		raw, err := writer.New(ctx, path, metadata)
 		if err != nil {
 			return nil, trace.Wrap(err)
 		}
@@ -39,28 +39,28 @@ func makeWriter[T any](paths []string, format string, metadata *record.Meta) ([]
 	return opts, nil
 }
 
-func setupDispatcher(format string, metadata *record.Meta, suiteOuts, testOuts, metaOuts []string) (*dispatch.Dispatcher, error) {
+func setupDispatcher(ctx context.Context, format string, metadata *record.Meta, suiteOuts, testOuts, metaOuts []string) (*dispatch.Dispatcher, error) {
 	opts := []dispatch.Option{}
 
-	suiteOpts, err := makeWriter[record.Suite](suiteOuts, format, metadata)
+	suiteOpts, err := makeWriter[record.Suite](ctx, suiteOuts, format, metadata)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 	opts = append(opts, suiteOpts...)
 
-	testOpts, err := makeWriter[record.Testcase](testOuts, format, metadata)
+	testOpts, err := makeWriter[record.Testcase](ctx, testOuts, format, metadata)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 	opts = append(opts, testOpts...)
 
-	metaOpts, err := makeWriter[record.Meta](metaOuts, format, metadata)
+	metaOpts, err := makeWriter[record.Meta](ctx, metaOuts, format, metadata)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 	opts = append(opts, metaOpts...)
 
-	d, err := dispatch.New(opts...)
+	d, err := dispatch.New(ctx, opts...)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -95,7 +95,7 @@ func createProducers(cmd string, junitCmd *kingpin.CmdClause, metadata *record.M
 }
 
 func run() error {
-	ctx := context.TODO()
+	ctx := context.Background()
 	app := kingpin.New("ci-normalize", "Normalize test artifacts")
 	app.HelpFlag.Short('h')
 	format := app.Flag("format", "Output format").Short('f').Default("jsonl").Enum("jsonl")
@@ -103,6 +103,10 @@ func run() error {
 		"meta",
 		"Metadata output ('-' for stdout, /dev/null to ignore)",
 	).Short('o').Default("-").Strings()
+	timeout := app.Flag(
+		"timeout",
+		"Maximum execution time (e.g. 30s, 2m); 0 means no timeout",
+	).Default("0").Duration()
 
 	// metadata command
 	app.Command("meta", "Emit metadata")
@@ -120,12 +124,21 @@ func run() error {
 
 	}
 
+	// setup timeout context
+	var cancel context.CancelFunc
+	if *timeout > 0 {
+		ctx, cancel = context.WithTimeout(ctx, *timeout)
+	} else {
+		ctx, cancel = context.WithCancel(ctx)
+	}
+	defer cancel()
+
 	metadata, err := meta.New(metaFile)
 	if err != nil {
 		return trace.Wrap(err, "reading metadata")
 	}
 
-	dispatcher, err := setupDispatcher(*format, metadata, *suiteOuts, *testOuts, *metaOuts)
+	dispatcher, err := setupDispatcher(ctx, *format, metadata, *suiteOuts, *testOuts, *metaOuts)
 	if err != nil {
 		return trace.Wrap(err)
 	}

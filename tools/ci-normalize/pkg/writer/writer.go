@@ -1,6 +1,7 @@
 package writer
 
 import (
+	"context"
 	"io"
 	"net/url"
 	"os"
@@ -18,7 +19,7 @@ type KeyedWriter interface {
 	SinkKey() string
 }
 
-func New(path string, metadata *record.Meta) (KeyedWriter, error) {
+func New(ctx context.Context, path string, metadata *record.Meta) (KeyedWriter, error) {
 	path = renderJinjaPathFromMeta(path, metadata)
 
 	switch path {
@@ -36,7 +37,7 @@ func New(path string, metadata *record.Meta) (KeyedWriter, error) {
 
 	default:
 		if strings.HasPrefix(path, "s3://") {
-			return newS3Writer(path)
+			return newS3Writer(ctx, path)
 		}
 
 		f, err := os.Create(path)

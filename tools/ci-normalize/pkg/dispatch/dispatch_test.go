@@ -49,7 +49,7 @@ func TestDispatcher_WriteAndClose(t *testing.T) {
 	writerA := &mockWriter{sink: "A"}
 	writerB := &mockWriter{sink: "B"}
 
-	disp, err := New(
+	disp, err := New(t.Context(),
 		WithWriter(MyRecord{}, writerA),
 		WithWriter(MyRecord{}, writerB), // two writers for same type
 	)
@@ -77,7 +77,7 @@ func TestDispatcher_WriteAndClose(t *testing.T) {
 func TestDispatcher_UnregisteredTypeFails(t *testing.T) {
 	type UnknownRecord struct{ ID int }
 
-	disp, err := New()
+	disp, err := New(t.Context())
 	require.NoError(t, err)
 
 	rec := UnknownRecord{42}
@@ -94,7 +94,7 @@ func TestDispatcher_DedupWriters(t *testing.T) {
 
 	writer := &mockWriter{sink: "same"}
 
-	disp, err := New(
+	disp, err := New(t.Context(),
 		WithWriter(R{}, writer),
 		WithWriter(R{}, writer), // duplicate writer for same type
 	)
@@ -113,7 +113,7 @@ func TestDispatcher_WriteFailureOnFlush(t *testing.T) {
 	type R struct{ V string }
 
 	writer := &mockWriter{sink: "fail", failNext: true}
-	disp, err := New(WithWriter(R{}, writer))
+	disp, err := New(t.Context(), WithWriter(R{}, writer))
 	require.NoError(t, err)
 
 	_ = disp.Write(R{"oops"})
@@ -126,7 +126,7 @@ func TestDispatcher_WriteFailure(t *testing.T) {
 	type R struct{ V string }
 
 	writer := &mockWriter{sink: "fail", failNext: true}
-	disp, err := New(WithWriter(R{}, writer))
+	disp, err := New(t.Context(), WithWriter(R{}, writer))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = disp.Close() })
 
@@ -143,7 +143,7 @@ func TestDispatcher_NoWriters(t *testing.T) {
 		Value string
 	}
 
-	disp, err := New()
+	disp, err := New(t.Context())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = disp.Close() })
 	assert.ErrorContains(t, disp.Write(MyRecord{"rec"}), "no writer registered")

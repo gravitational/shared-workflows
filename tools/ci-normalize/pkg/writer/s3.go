@@ -5,7 +5,6 @@ import (
 	"io"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
@@ -25,15 +24,11 @@ type s3Writer struct {
 }
 
 // NewS3Writer creates a streaming writer to an S3 object
-func NewS3Writer(client *s3.Client, bucket, key string) KeyedWriter {
+func NewS3Writer(ctx context.Context, client *s3.Client, bucket, key string) KeyedWriter {
 	pr, pw := io.Pipe()
 	done := make(chan error, 1)
 
 	go func() {
-		// Hardcode 20m timeout for now, if it takes longer to push the results we have some serious issues.
-		ctx, cancel := context.WithTimeout(context.TODO(), time.Minute*20)
-		defer cancel()
-
 		uploader := manager.NewUploader(client)
 		_, err := uploader.Upload(ctx, &s3.PutObjectInput{
 			Bucket: &bucket,
@@ -80,8 +75,8 @@ func (w *s3Writer) SinkKey() string {
 	return "s3://" + w.bucket + "/" + w.key
 }
 
-func newS3Writer(path string) (KeyedWriter, error) {
-	cfg, err := config.LoadDefaultConfig(context.TODO())
+func newS3Writer(ctx context.Context, path string) (KeyedWriter, error) {
+	cfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -95,5 +90,5 @@ func newS3Writer(path string) (KeyedWriter, error) {
 	}
 	bucket, key := parts[0], parts[1]
 
-	return NewS3Writer(client, bucket, key), nil
+	return NewS3Writer(ctx, client, bucket, key), nil
 }

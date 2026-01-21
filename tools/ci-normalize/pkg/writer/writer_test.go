@@ -43,7 +43,7 @@ func TestNew_WriterOutputs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			w, err := New(tt.path, nil)
+			w, err := New(t.Context(), tt.path, nil)
 			require.NoError(t, err)
 			require.NotNil(t, w)
 
