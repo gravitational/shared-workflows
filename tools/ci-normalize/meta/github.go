@@ -9,6 +9,7 @@ import (
 	"github.com/gravitational/trace"
 )
 
+// GithubMeta holds GitHub Actions environment metadata.
 type GithubMeta struct {
 	// Required for canonical ids:
 	Repository   string `env:"GITHUB_REPOSITORY,notEmpty"`
@@ -31,6 +32,7 @@ type GithubMeta struct {
 	RunnerEnvironment string `env:"RUNNER_ENVIRONMENT"`
 }
 
+// newFromGithubEnv reads metadata from GitHub Actions environment variables and maps them to a [record.Meta].
 func newFromGithubEnv() (*record.Meta, error) {
 	now := time.Now()
 	var gh GithubMeta

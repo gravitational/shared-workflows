@@ -15,11 +15,13 @@ import (
 
 type Option func(*JUnitProducer) error
 
+// JUnitProducer produces records from a JUnit XML file.
 type JUnitProducer struct {
 	file string
 	meta record.Common
 }
 
+// NewJUnitProducer creates a new JUnitProducer.
 func NewJUnitProducer(file string, opts ...Option) (*JUnitProducer, error) {
 	if _, err := os.Stat(file); err != nil {
 		return nil, trace.NotFound("junit file %q does not exist: %v", file, err)
@@ -35,6 +37,7 @@ func NewJUnitProducer(file string, opts ...Option) (*JUnitProducer, error) {
 	return p, nil
 }
 
+// WithMeta sets the metadata for the JUnitProducer.
 func WithMeta(metadata *record.Meta) Option {
 	return func(p *JUnitProducer) error {
 		p.meta = metadata.Common
@@ -254,6 +257,7 @@ func (p *JUnitProducer) produceFromReader(
 	return nil
 }
 
+// Produce reads the JUnit XML file and emits [record.Testcase] and [record.Suite] from a file.
 func (p *JUnitProducer) Produce(ctx context.Context, emit func(any) error) error {
 	f, err := os.Open(p.file)
 	if err != nil {

@@ -9,6 +9,7 @@ import (
 	"github.com/gravitational/trace"
 )
 
+// newFromFile reads metadata from the specified JSON file.
 func newFromFile(path string) (*record.Meta, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -20,6 +21,7 @@ func newFromFile(path string) (*record.Meta, error) {
 	return newFromReader(f)
 }
 
+// newFromReader reads metadata from the provided reader in JSON format.
 func newFromReader(r io.Reader) (*record.Meta, error) {
 	var meta record.Meta
 

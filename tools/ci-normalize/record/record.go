@@ -11,12 +11,13 @@ import (
 const RecordSchemaVersion = "v1"
 const CanonicalMetaSchemaVersion = "v1"
 
-// Common metadata for all records
+// Common holds fields common to all record types.
 type Common struct {
 	ID                  string `json:"id"` // Generated from CanonicalMeta
 	RecordSchemaVersion string `json:"record_schema_version"`
 }
 
+// Suite represents a test suite containing multiple test cases.
 type Suite struct {
 	Common
 
@@ -30,7 +31,7 @@ type Suite struct {
 	Properties map[string]string `json:"properties,omitempty"`
 }
 
-// TestcaseInfo holds metadata about the individual test case
+// Testcase represents a single test case within a test suite.
 type Testcase struct {
 	Common
 
@@ -46,6 +47,7 @@ type Testcase struct {
 	FailureMessage string `json:"failure_message,omitempty"`
 }
 
+// Meta holds metadata about the CI workflow run.
 type Meta struct {
 	Common
 	CanonicalMeta
@@ -55,6 +57,7 @@ type Meta struct {
 	Timestamp string `json:"timestamp"` // RFC3339 timestamp at creation
 }
 
+// GitMeta holds Git-related metadata.
 type GitMeta struct {
 	GitRef     string `json:"git_ref,omitempty"`
 	GitRefName string `json:"git_ref_name,omitempty"`
@@ -62,11 +65,13 @@ type GitMeta struct {
 	HeadRef    string `json:"git_head_ref,omitempty"`
 }
 
+// ActorMeta holds information about the actor who triggered the workflow.
 type ActorMeta struct {
 	Actor   string `json:"actor_name,omitempty"`
 	ActorID string `json:"actor_id,omitempty"`
 }
 
+// RunnerMeta holds information about the CI runner environment.
 type RunnerMeta struct {
 	RunnerArch        string `json:"runner_arch,omitempty"`
 	RunnerOS          string `json:"runner_os,omitempty"`
@@ -74,7 +79,7 @@ type RunnerMeta struct {
 	RunnerEnvironment string `json:"runner_environment,omitempty"`
 }
 
-// Used to generate primary index
+// CanonicalMeta holds information used to generate a unique ID for the CI workflow run.
 type CanonicalMeta struct {
 	CanonicalMetaSchemaVersion string `json:"canonical_meta_schema_version"`
 	Provider                   string `json:"provider"`
@@ -86,6 +91,7 @@ type CanonicalMeta struct {
 	SHA                        string `json:"git_sha"`
 }
 
+// Id generates a unique identifier for the CanonicalMeta.
 func (c CanonicalMeta) Id() (string, error) {
 	data, err := json.Marshal(c)
 	if err != nil {

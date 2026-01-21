@@ -5,6 +5,9 @@ import (
 	"github.com/gravitational/trace"
 )
 
+// New creates a new metadata record.
+// If a metaFile is provided, it is used as the source of metadata.
+// Otherwise, metadata is read from GitHub environment variables.
 func New(metaFile *string) (*record.Meta, error) {
 	var meta *record.Meta
 
