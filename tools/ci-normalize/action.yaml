@@ -13,7 +13,7 @@ inputs:
 runs:
   using: composite
   steps:
-      # Once released once we can switch to use the binary directly, cache is flaky for actions but the build and download is
+      # Once released we can switch to use the binary directly, cache is flaky for actions but the build and download is
       # very fast for this binary so for now this should suffice. Consider cache or binary in the future to save bandwidth and time.
     - uses: actions/setup-go@v6
       with:
