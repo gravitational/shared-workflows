@@ -14,7 +14,7 @@ type RecordWriter interface {
 	Close() error
 }
 
-type safeWriter struct {
+type bufferedWriter struct {
 	w    RecordWriter
 	ch   chan any
 	once sync.Once
@@ -23,7 +23,7 @@ type safeWriter struct {
 
 }
 
-func (sw *safeWriter) Write(record any) error {
+func (sw *bufferedWriter) Write(record any) error {
 	select {
 	case <-sw.done:
 		return sw.err
@@ -32,7 +32,7 @@ func (sw *safeWriter) Write(record any) error {
 	}
 }
 
-func (sw *safeWriter) Close() error {
+func (sw *bufferedWriter) Close() error {
 	sw.once.Do(func() {
 		close(sw.ch)
 	})
@@ -40,8 +40,8 @@ func (sw *safeWriter) Close() error {
 	return sw.err
 }
 
-func newSafeWriter(w RecordWriter) *safeWriter {
-	safe := &safeWriter{
+func newBufferedWriter(w RecordWriter) *bufferedWriter {
+	safe := &bufferedWriter{
 		w:    w,
 		ch:   make(chan any, 256),
 		done: make(chan struct{}),
@@ -64,22 +64,22 @@ func newSafeWriter(w RecordWriter) *safeWriter {
 
 // Dispatcher routes records to writers based on record type.
 type Dispatcher struct {
-	byType map[reflect.Type][]*safeWriter
+	byType map[reflect.Type][]*bufferedWriter
 	// def are the default writers when no match is found in byType
-	def []*safeWriter
+	def []*bufferedWriter
 
 	// mu protects below:
 	mu sync.Mutex
 	// bySink map of sink keys to writers
-	bySink map[string]*safeWriter
+	bySink map[string]*bufferedWriter
 }
 
 type Option func(*Dispatcher) error
 
 func New(opts ...Option) (*Dispatcher, error) {
 	d := &Dispatcher{
-		byType: make(map[reflect.Type][]*safeWriter),
-		bySink: make(map[string]*safeWriter),
+		byType: make(map[reflect.Type][]*bufferedWriter),
+		bySink: make(map[string]*bufferedWriter),
 	}
 
 	for _, opt := range opts {
@@ -94,7 +94,7 @@ func New(opts ...Option) (*Dispatcher, error) {
 func WithWriter(recordPrototype any, w RecordWriter) Option {
 	return func(d *Dispatcher) error {
 		t := reflect.TypeOf(recordPrototype)
-		sw := d.getSafeWriter(w)
+		sw := d.getBufferedWriter(w)
 		d.byType[t] = append(d.byType[t], sw)
 		return nil
 	}
@@ -102,12 +102,12 @@ func WithWriter(recordPrototype any, w RecordWriter) Option {
 
 func WithDefaultWriter(w RecordWriter) Option {
 	return func(d *Dispatcher) error {
-		d.def = append(d.def, d.getSafeWriter(w))
+		d.def = append(d.def, d.getBufferedWriter(w))
 		return nil
 	}
 }
 
-func (d *Dispatcher) getSafeWriter(w RecordWriter) *safeWriter {
+func (d *Dispatcher) getBufferedWriter(w RecordWriter) *bufferedWriter {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -117,7 +117,7 @@ func (d *Dispatcher) getSafeWriter(w RecordWriter) *safeWriter {
 		return sw
 	}
 
-	sw := newSafeWriter(w)
+	sw := newBufferedWriter(w)
 	d.bySink[key] = sw
 	return sw
 }
@@ -135,7 +135,7 @@ func (d *Dispatcher) Write(record any) error {
 	}
 
 	var errs []error
-	seen := map[*safeWriter]struct{}{}
+	seen := map[*bufferedWriter]struct{}{}
 	for _, sw := range writers {
 		if _, ok := seen[sw]; ok {
 			continue
@@ -153,7 +153,7 @@ func (d *Dispatcher) Write(record any) error {
 // Blocks until all queued records are written.
 func (d *Dispatcher) Close() error {
 	var g errgroup.Group
-	seen := map[*safeWriter]struct{}{}
+	seen := map[*bufferedWriter]struct{}{}
 
 	for _, ws := range d.byType {
 		for _, sw := range ws {
