@@ -140,7 +140,7 @@ func New(ctx context.Context, opts ...Option) (*Dispatcher, error) {
 // WithWriter registers a RecordWriter for the given record type.
 // Example:
 //
-//	disp, err := New(t.Context(),
+//	disp, err := New(context.Background(),
 //		WithWriter(FooRecord{}, writerA),
 //		WithWriter(BarRecord{}, writerB),
 //	)
