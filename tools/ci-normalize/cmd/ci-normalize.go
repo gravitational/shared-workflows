@@ -75,7 +75,7 @@ func setupDispatcher(ctx context.Context, format string, metadata *record.Meta, 
 }
 
 func createProducers(cmd string, junitCmd *kingpin.CmdClause, metadata *record.Meta, junitFiles *[]string) ([]input.Producer, error) {
-	producers := []input.Producer{input.NewPassthroughProducer(metadata)}
+	producers := []input.Producer{}
 	opts := []input.Option{input.WithMeta(metadata)}
 
 	switch cmd {
@@ -150,6 +150,12 @@ func run() error {
 	}
 
 	eg, ctx := errgroup.WithContext(ctx)
+
+	eg.Go(func() error {
+		// Always emit metadata record
+		return dispatcher.Write(metadata)
+	})
+
 	for _, p := range producers {
 		p := p // capture
 		eg.Go(func() error {
