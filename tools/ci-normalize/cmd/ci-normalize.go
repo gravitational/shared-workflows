@@ -91,10 +91,6 @@ func createProducers(cmd string, junitCmd *kingpin.CmdClause, metadata *record.M
 		return nil, trace.NotImplemented("unimplemented command %q", cmd)
 	}
 
-	if len(producers) == 0 {
-		return nil, trace.BadParameter("nothing to do")
-	}
-
 	return producers, nil
 }
 
