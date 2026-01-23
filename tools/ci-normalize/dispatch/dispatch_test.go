@@ -106,14 +106,38 @@ func TestDispatcher_UnregisteredTypeFails(t *testing.T) {
 
 }
 
-func TestDispatcher_DedupWriters(t *testing.T) {
+func TestDispatcher_SameTypeDifferentSink(t *testing.T) {
+	type R struct{ Val string }
+
+	writerA := &mockWriter{sink: "a"}
+	writerB := &mockWriter{sink: "b"}
+
+	disp, err := New(t.Context(),
+		WithWriter(R{}, writerA),
+		WithWriter(R{}, writerB),
+	)
+	require.NoError(t, err)
+
+	rec := R{"x"}
+	require.NoError(t, disp.Write(rec))
+	require.NoError(t, disp.Close())
+
+	assert.Equal(t, []any{rec}, writerA.records)
+	assert.True(t, writerA.closed)
+	assert.Equal(t, []any{rec}, writerB.records)
+	assert.True(t, writerB.closed)
+	assert.Equal(t, writerA.records, writerB.records)
+}
+
+func TestDispatcher_DedupWritersSameSink(t *testing.T) {
 	type R struct{ Val string }
 
 	writer := &mockWriter{sink: "same"}
 
 	disp, err := New(t.Context(),
+		// This will only register one writer since both have the same SinkKey and type
 		WithWriter(R{}, writer),
-		WithWriter(R{}, writer), // duplicate writer for same type
+		WithWriter(R{}, writer),
 	)
 	require.NoError(t, err)
 

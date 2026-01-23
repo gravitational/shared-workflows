@@ -17,6 +17,7 @@ package dispatch
 import (
 	"context"
 	"reflect"
+	"slices"
 	"sync"
 
 	"github.com/gravitational/trace"
@@ -152,6 +153,11 @@ func WithWriter(recordPrototype any, w RecordWriter) Option {
 	return func(d *Dispatcher) error {
 		t := reflect.TypeOf(recordPrototype)
 		sw := d.getBufferedWriter(w)
+
+		if slices.Contains(d.byType[t], sw) {
+			return nil
+		}
+
 		d.byType[t] = append(d.byType[t], sw)
 		return nil
 	}
@@ -189,9 +195,6 @@ func (d *Dispatcher) Write(record any) error {
 	var errs []error
 	seen := map[*bufferedWriter]struct{}{}
 	for _, sw := range writers {
-		if _, ok := seen[sw]; ok {
-			continue
-		}
 		seen[sw] = struct{}{}
 		if err := sw.Write(record); err != nil {
 			errs = append(errs, err)
