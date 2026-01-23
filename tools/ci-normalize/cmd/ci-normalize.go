@@ -32,35 +32,64 @@ import (
 	"github.com/gravitational/trace"
 )
 
-func makeWriter[T any](ctx context.Context, paths []string, _ string, metadata *record.Meta) ([]dispatch.Option, error) {
+func makeWriter[T any](
+	ctx context.Context,
+	paths []string,
+	metadata *record.Meta,
+	with func(dispatch.RecordWriter) dispatch.Option,
+) ([]dispatch.Option, error) {
+
 	var opts []dispatch.Option
+
 	for _, path := range paths {
 		raw, err := writer.New(ctx, path, metadata)
 		if err != nil {
 			return nil, trace.Wrap(err)
 		}
 
-		opts = append(opts, dispatch.WithWriter(new(T), adapter.New(json.NewEncoder(raw), raw)))
+		w := adapter.New(json.NewEncoder(raw), raw)
+		opts = append(opts, with(w))
 	}
+
 	return opts, nil
 }
 
-func setupDispatcher(ctx context.Context, format string, metadata *record.Meta, suiteOuts, testOuts, metaOuts []string) (*dispatch.Dispatcher, error) {
-	opts := []dispatch.Option{}
+func setupDispatcher(
+	ctx context.Context,
+	metadata *record.Meta,
+	suiteOuts, testOuts, metaOuts []string,
+) (*dispatch.Dispatcher, error) {
 
-	suiteOpts, err := makeWriter[record.Suite](ctx, suiteOuts, format, metadata)
+	var opts []dispatch.Option
+
+	suiteOpts, err := makeWriter[record.Suite](
+		ctx,
+		suiteOuts,
+		metadata,
+		dispatch.WithSuiteWriter,
+	)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 	opts = append(opts, suiteOpts...)
 
-	testOpts, err := makeWriter[record.Testcase](ctx, testOuts, format, metadata)
+	testOpts, err := makeWriter[record.Testcase](
+		ctx,
+		testOuts,
+		metadata,
+		dispatch.WithTestcaseWriter,
+	)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 	opts = append(opts, testOpts...)
 
-	metaOpts, err := makeWriter[record.Meta](ctx, metaOuts, format, metadata)
+	metaOpts, err := makeWriter[record.Meta](
+		ctx,
+		metaOuts,
+		metadata,
+		dispatch.WithMetaWriter,
+	)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -98,7 +127,6 @@ func run() error {
 	ctx := context.Background()
 	app := kingpin.New("ci-normalize", "Normalize test artifacts")
 	app.HelpFlag.Short('h')
-	format := app.Flag("format", "Output format").Short('f').Default("jsonl").Enum("jsonl")
 	timeout := app.Flag(
 		"timeout",
 		"Maximum execution time (e.g. 30s, 2m); 0 means no timeout",
@@ -135,7 +163,7 @@ func run() error {
 		return trace.Wrap(err, "reading metadata")
 	}
 
-	dispatcher, err := setupDispatcher(ctx, *format, metadata, *suiteOuts, *testOuts, *metaOuts)
+	dispatcher, err := setupDispatcher(ctx, metadata, *suiteOuts, *testOuts, *metaOuts)
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -153,13 +181,13 @@ func run() error {
 
 	eg.Go(func() error {
 		// Always emit metadata record
-		return dispatcher.Write(metadata)
+		return dispatcher.WriteMeta(metadata)
 	})
 
 	for _, p := range producers {
 		p := p // capture
 		eg.Go(func() error {
-			return p.Produce(ctx, dispatcher.Write)
+			return p.Produce(ctx, dispatcher)
 		})
 	}
 

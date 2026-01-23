@@ -23,15 +23,38 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type mockTypedWriter struct {
+	Suites    []*record.Suite
+	Testcases []*record.Testcase
+	Metas     []*record.Meta
+}
+
+func (m *mockTypedWriter) WriteSuite(s *record.Suite) error {
+	m.Suites = append(m.Suites, s)
+	return nil
+}
+
+func (m *mockTypedWriter) WriteTestcase(tc *record.Testcase) error {
+	m.Testcases = append(m.Testcases, tc)
+	return nil
+}
+
+func (m *mockTypedWriter) WriteMeta(md *record.Meta) error {
+	m.Metas = append(m.Metas, md)
+	return nil
+}
+
 func TestJUnitProducer_produceFromReader(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name        string // description of this test case
-		xml         string
-		meta        record.Common
-		wantRecords []any
-		errFn       require.ErrorAssertionFunc
-		wantErr     bool
+		name       string // description of this test case
+		xml        string
+		meta       record.Common
+		wantSuites []*record.Suite
+		wantCases  []*record.Testcase
+		wantMetas  []*record.Meta
+		errFn      require.ErrorAssertionFunc
+		wantErr    bool
 	}{
 		{
 			name: "junit coverage",
@@ -92,7 +115,7 @@ func TestJUnitProducer_produceFromReader(t *testing.T) {
 </testsuite>
 `,
 			errFn: require.NoError,
-			wantRecords: []any{
+			wantSuites: []*record.Suite{
 				&record.Suite{
 					Name:       "full-junit-suite",
 					Timestamp:  "2024-01-02T15:04:05Z",
@@ -107,6 +130,8 @@ func TestJUnitProducer_produceFromReader(t *testing.T) {
 						"os":         "linux",
 					},
 				},
+			},
+			wantCases: []*record.Testcase{
 				&record.Testcase{
 					Name:       "test-pass",
 					SuiteName:  "full-junit-suite",
@@ -162,7 +187,7 @@ func TestJUnitProducer_produceFromReader(t *testing.T) {
 				RecordSchemaVersion: "v13",
 			},
 			errFn: require.NoError,
-			wantRecords: []any{
+			wantSuites: []*record.Suite{
 				&record.Suite{
 					Name:       "full-junit-suite",
 					Timestamp:  "2024-01-02T15:04:05Z",
@@ -176,6 +201,8 @@ func TestJUnitProducer_produceFromReader(t *testing.T) {
 						RecordSchemaVersion: "v13",
 					},
 				},
+			},
+			wantCases: []*record.Testcase{
 				&record.Testcase{
 					Name:       "tc1",
 					SuiteName:  "full-junit-suite",
@@ -236,14 +263,14 @@ func TestJUnitProducer_produceFromReader(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			p := &JUnitProducer{meta: tt.meta}
-			var emitted []any
-			emit := func(v any) error {
-				emitted = append(emitted, v)
-				return nil
-			}
-			gotErr := p.produceFromReader(t.Context(), strings.NewReader(tt.xml), emit)
+			writer := &mockTypedWriter{}
+
+			gotErr := p.produceFromReader(t.Context(), strings.NewReader(tt.xml), writer)
 			tt.errFn(t, gotErr)
-			assert.Equal(t, tt.wantRecords, emitted)
+			assert.Equal(t, tt.wantSuites, writer.Suites)
+			assert.Equal(t, tt.wantCases, writer.Testcases)
+			assert.Equal(t, tt.wantMetas, writer.Metas)
+
 		})
 	}
 }

@@ -114,3 +114,9 @@ func (c CanonicalMeta) Id() (string, error) {
 	hash := sha256.Sum256(data)
 	return hex.EncodeToString(hash[:]), nil
 }
+
+type Writer interface {
+	WriteSuite(*Suite) error
+	WriteTestcase(*Testcase) error
+	WriteMeta(*Meta) error
+}

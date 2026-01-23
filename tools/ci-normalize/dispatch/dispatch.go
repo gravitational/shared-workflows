@@ -16,10 +16,10 @@ package dispatch
 
 import (
 	"context"
-	"reflect"
 	"slices"
 	"sync"
 
+	"github.com/gravitational/shared-workflows/tools/ci-normalize/record"
 	"github.com/gravitational/trace"
 	"golang.org/x/sync/errgroup"
 )
@@ -108,8 +108,11 @@ func newBufferedWriter(ctx context.Context, w RecordWriter) *bufferedWriter {
 // It supports multiple writers for the same record type.
 // Writers are deduplicated based on their SinkKey.
 type Dispatcher struct {
-	ctx    context.Context
-	byType map[reflect.Type][]*bufferedWriter
+	ctx context.Context
+
+	suiteWriters []*bufferedWriter
+	testWriters  []*bufferedWriter
+	metaWriters  []*bufferedWriter
 
 	// mu protects below:
 	mu sync.Mutex
@@ -117,13 +120,14 @@ type Dispatcher struct {
 	bySink map[string]*bufferedWriter
 }
 
+var _ record.Writer = (*Dispatcher)(nil)
+
 type Option func(*Dispatcher) error
 
 // New creates a new [Dispatcher] with the given options.
 func New(ctx context.Context, opts ...Option) (*Dispatcher, error) {
 	d := &Dispatcher{
 		ctx:    ctx,
-		byType: make(map[reflect.Type][]*bufferedWriter),
 		bySink: make(map[string]*bufferedWriter),
 	}
 
@@ -133,30 +137,60 @@ func New(ctx context.Context, opts ...Option) (*Dispatcher, error) {
 		}
 	}
 
-	if len(d.byType) == 0 {
+	if len(d.suiteWriters) == 0 &&
+		len(d.testWriters) == 0 &&
+		len(d.metaWriters) == 0 {
 		return nil, trace.BadParameter("no writers registered")
 	}
 
 	return d, nil
 }
 
-// WithWriter registers a RecordWriter for the given record type.
+// WithSuiteWriter registers a RecordWriter for suite records.
 // Example:
 //
 //	disp, err := New(context.Background(),
-//		WithWriter(FooRecord{}, writerA),
-//		WithWriter(BarRecord{}, writerB),
+//		WithSuiteWriter(writerA),
+//		WithSuiteWriter(writerB),
 //	)
-func WithWriter(recordPrototype any, w RecordWriter) Option {
+func WithSuiteWriter(w RecordWriter) Option {
 	return func(d *Dispatcher) error {
-		t := reflect.TypeOf(recordPrototype)
 		sw := d.getBufferedWriter(w)
-
-		if slices.Contains(d.byType[t], sw) {
-			return trace.BadParameter("attempting to register duplicate writer for record type %v and sink %q", t, w.SinkKey())
+		if slices.Contains(d.suiteWriters, sw) {
+			return trace.BadParameter(
+				"duplicate suite writer for sink %q",
+				w.SinkKey(),
+			)
 		}
+		d.suiteWriters = append(d.suiteWriters, sw)
+		return nil
+	}
+}
 
-		d.byType[t] = append(d.byType[t], sw)
+func WithTestcaseWriter(w RecordWriter) Option {
+	return func(d *Dispatcher) error {
+		sw := d.getBufferedWriter(w)
+		if slices.Contains(d.testWriters, sw) {
+			return trace.BadParameter(
+				"duplicate testcase writer for sink %q",
+				w.SinkKey(),
+			)
+		}
+		d.testWriters = append(d.testWriters, sw)
+		return nil
+	}
+}
+
+func WithMetaWriter(w RecordWriter) Option {
+	return func(d *Dispatcher) error {
+		sw := d.getBufferedWriter(w)
+		if slices.Contains(d.metaWriters, sw) {
+			return trace.BadParameter(
+				"duplicate meta writer for sink %q",
+				w.SinkKey(),
+			)
+		}
+		d.metaWriters = append(d.metaWriters, sw)
 		return nil
 	}
 }
@@ -176,25 +210,32 @@ func (d *Dispatcher) getBufferedWriter(w RecordWriter) *bufferedWriter {
 	return sw
 }
 
-func (d *Dispatcher) Write(record any) error {
+func (d *Dispatcher) WriteSuite(r *record.Suite) error {
+	return writeAll(d.ctx, d.suiteWriters, r)
+}
+
+func (d *Dispatcher) WriteTestcase(r *record.Testcase) error {
+	return writeAll(d.ctx, d.testWriters, r)
+}
+
+func (d *Dispatcher) WriteMeta(r *record.Meta) error {
+	return writeAll(d.ctx, d.metaWriters, r)
+}
+
+func writeAll(ctx context.Context, writers []*bufferedWriter, record any) error {
 	select {
-	case <-d.ctx.Done():
-		return d.ctx.Err()
+	case <-ctx.Done():
+		return ctx.Err()
 	default:
 	}
 
-	t := reflect.TypeOf(record)
-
-	writers := d.byType[t]
 	if len(writers) == 0 {
-		return trace.BadParameter("no writer registered for record type %v", t)
+		return trace.BadParameter("no writers registered")
 	}
 
 	var errs []error
-	seen := map[*bufferedWriter]struct{}{}
-	for _, sw := range writers {
-		seen[sw] = struct{}{}
-		if err := sw.Write(record); err != nil {
+	for _, bw := range writers {
+		if err := bw.Write(record); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -208,16 +249,20 @@ func (d *Dispatcher) Close() error {
 	var g errgroup.Group
 	seen := map[*bufferedWriter]struct{}{}
 
-	for _, ws := range d.byType {
-		for _, sw := range ws {
-			seen[sw] = struct{}{}
-		}
+	for _, bw := range d.suiteWriters {
+		seen[bw] = struct{}{}
+	}
+	for _, bw := range d.testWriters {
+		seen[bw] = struct{}{}
+	}
+	for _, bw := range d.metaWriters {
+		seen[bw] = struct{}{}
 	}
 
-	for sw := range seen {
-		sw := sw // capture
+	for bw := range seen {
+		bw := bw
 		g.Go(func() error {
-			return sw.Close()
+			return bw.Close()
 		})
 	}
 

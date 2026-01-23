@@ -16,9 +16,11 @@ package input
 
 import (
 	"context"
+
+	"github.com/gravitational/shared-workflows/tools/ci-normalize/record"
 )
 
 // Producer defines an interface for producing records.
 type Producer interface {
-	Produce(ctx context.Context, write func(any) error) error
+	Produce(context.Context, record.Writer) error
 }

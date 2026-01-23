@@ -222,7 +222,7 @@ type junitProperty struct {
 func (p *JUnitProducer) produceFromReader(
 	_ context.Context,
 	r io.Reader,
-	emit func(any) error,
+	writer record.Writer,
 ) error {
 	decoder := xml.NewDecoder(r)
 
@@ -252,14 +252,14 @@ func (p *JUnitProducer) produceFromReader(
 					return trace.Wrap(err)
 				}
 
-				if err := emit(suiteInfo); err != nil {
+				if err := writer.WriteSuite(suiteInfo); err != nil {
 					return trace.Wrap(err)
 				}
 
 				for _, tc := range ts.Testcases {
 					tcRec := tc.toRecord(p.meta)
 					tcRec.SuiteName = ts.Name
-					if err := emit(tcRec); err != nil {
+					if err := writer.WriteTestcase(tcRec); err != nil {
 						return trace.Wrap(err)
 					}
 				}
@@ -272,7 +272,7 @@ func (p *JUnitProducer) produceFromReader(
 }
 
 // Produce reads the JUnit XML file and emits [record.Testcase] and [record.Suite] from a file.
-func (p *JUnitProducer) Produce(ctx context.Context, emit func(any) error) error {
+func (p *JUnitProducer) Produce(ctx context.Context, writer record.Writer) error {
 	f, err := os.Open(p.file)
 	if err != nil {
 		return trace.Wrap(err)
@@ -280,5 +280,5 @@ func (p *JUnitProducer) Produce(ctx context.Context, emit func(any) error) error
 	defer func() {
 		_ = f.Close()
 	}()
-	return p.produceFromReader(ctx, f, emit)
+	return p.produceFromReader(ctx, f, writer)
 }
