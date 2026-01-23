@@ -43,6 +43,7 @@ func NewS3Writer(ctx context.Context, client *s3.Client, bucket, key string) Key
 	done := make(chan error, 1)
 
 	go func() {
+		defer close(done)
 		uploader := manager.NewUploader(client)
 		_, err := uploader.Upload(ctx, &s3.PutObjectInput{
 			Bucket: &bucket,
@@ -50,7 +51,6 @@ func NewS3Writer(ctx context.Context, client *s3.Client, bucket, key string) Key
 			Body:   pr,
 		})
 		done <- err
-		close(done)
 	}()
 
 	return &s3Writer{
