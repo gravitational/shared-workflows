@@ -174,10 +174,6 @@ func TestDispatcher_WriteFailure(t *testing.T) {
 }
 
 func TestDispatcher_NoWriters(t *testing.T) {
-	type MyRecord struct {
-		Value string
-	}
-
 	disp, err := New(t.Context())
 	assert.ErrorContains(t, err, "no writers registered")
 	assert.Nil(t, disp)
