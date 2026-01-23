@@ -155,7 +155,7 @@ func WithWriter(recordPrototype any, w RecordWriter) Option {
 		sw := d.getBufferedWriter(w)
 
 		if slices.Contains(d.byType[t], sw) {
-			return nil
+			return trace.BadParameter("attempting to register duplicate writer for record type %v and sink %q", t, w.SinkKey())
 		}
 
 		d.byType[t] = append(d.byType[t], sw)

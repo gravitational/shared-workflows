@@ -135,19 +135,13 @@ func TestDispatcher_DedupWritersSameSink(t *testing.T) {
 	writer := &mockWriter{sink: "same"}
 
 	disp, err := New(t.Context(),
-		// This will only register one writer since both have the same SinkKey and type
 		WithWriter(R{}, writer),
 		WithWriter(R{}, writer),
 	)
-	require.NoError(t, err)
+	require.Error(t, err)
+	require.Nil(t, disp)
+	require.ErrorContains(t, err, "attempting to register duplicate writer")
 
-	rec := R{"x"}
-	require.NoError(t, disp.Write(rec))
-	require.NoError(t, disp.Close())
-
-	// Writer should only receive record once per Write call
-	assert.Equal(t, []any{rec}, writer.records)
-	assert.True(t, writer.closed)
 }
 
 func TestDispatcher_WriteFailureOnFlush(t *testing.T) {
