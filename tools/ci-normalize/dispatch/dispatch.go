@@ -134,6 +134,10 @@ func New(ctx context.Context, opts ...Option) (*Dispatcher, error) {
 		}
 	}
 
+	if len(d.byType) == 0 {
+		return nil, trace.BadParameter("no writers registered")
+	}
+
 	return d, nil
 }
 

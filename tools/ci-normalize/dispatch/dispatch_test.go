@@ -90,12 +90,15 @@ func TestDispatcher_WriteAndClose(t *testing.T) {
 
 func TestDispatcher_UnregisteredTypeFails(t *testing.T) {
 	type UnknownRecord struct{ ID int }
+	type knownRecord struct{ ID int }
+	writer := &mockWriter{sink: "known"}
 
-	disp, err := New(t.Context())
+	disp, err := New(t.Context(),
+		WithWriter(knownRecord{}, writer),
+	)
 	require.NoError(t, err)
 
-	rec := UnknownRecord{42}
-	err = disp.Write(rec)
+	err = disp.Write(UnknownRecord{42})
 	require.ErrorContains(t, err, "no writer registered")
 
 	// Close to flush
@@ -158,7 +161,6 @@ func TestDispatcher_NoWriters(t *testing.T) {
 	}
 
 	disp, err := New(t.Context())
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = disp.Close() })
-	assert.ErrorContains(t, disp.Write(MyRecord{"rec"}), "no writer registered")
+	assert.ErrorContains(t, err, "no writers registered")
+	assert.Nil(t, disp)
 }
