@@ -82,20 +82,18 @@ func newBufferedWriter(ctx context.Context, w RecordWriter) *bufferedWriter {
 			// Clean up path, ignore the error from underlying writer.
 			_ = w.Close()
 		}()
-		var err error
 
 		for {
 			select {
 			case <-ctx.Done():
-				err = ctx.Err()
-				bw.err = err
+				bw.err = ctx.Err()
 				return
 
 			case r, ok := <-bw.ch:
 				if !ok {
 					return
 				}
-				if err = w.Write(r); err != nil {
+				if err := w.Write(r); err != nil {
 					bw.err = err
 					return
 				}
