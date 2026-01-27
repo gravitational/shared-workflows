@@ -124,8 +124,8 @@ var _ record.Writer = (*Dispatcher)(nil)
 
 type Option func(*Dispatcher) error
 
-// New creates a new [Dispatcher] with the given options.
-func New(ctx context.Context, opts ...Option) (*Dispatcher, error) {
+// New creates a new [Dispatcher] with the given writers.
+func New(ctx context.Context, suiteWriters, testWriters, metaWriters []RecordWriter) (*Dispatcher, error) {
 	d := &Dispatcher{
 		ctx:    ctx,
 		bySink: make(map[string]*bufferedWriter),
