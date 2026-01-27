@@ -206,21 +206,7 @@ func writeAll(ctx context.Context, writers []*bufferedWriter, record any) error 
 func (d *Dispatcher) Close() error {
 	var g errgroup.Group
 
-	for _, w := range d.suiteWriters {
-		w := w
-		g.Go(func() error {
-			return w.Close()
-		})
-	}
-
-	for _, w := range d.testWriters {
-		w := w
-		g.Go(func() error {
-			return w.Close()
-		})
-	}
-
-	for _, w := range d.metaWriters {
+	for _, w := range d.bySink {
 		w := w
 		g.Go(func() error {
 			return w.Close()
