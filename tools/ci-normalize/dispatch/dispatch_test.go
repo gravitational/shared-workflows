@@ -12,20 +12,15 @@ import (
 )
 
 type mockWriter struct {
-	mu       sync.Mutex
-	records  []any
-	sink     string
-	failNext bool
-	closed   bool
+	mu      sync.Mutex
+	records []any
+	sink    string
+	closed  bool
 }
 
 func (m *mockWriter) Write(r any) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
-	if m.failNext {
-		return trace.BadParameter("fail write")
-	}
 
 	m.records = append(m.records, r)
 	return nil
@@ -41,6 +36,12 @@ func (m *mockWriter) Close() error {
 	m.closed = true
 	return nil
 }
+
+type failWriter struct{}
+
+func (w *failWriter) Write(any) error { return trace.BadParameter("fail write") }
+func (w *failWriter) Close() error    { return nil }
+func (w *failWriter) SinkKey() string { return "fail" }
 
 func TestDispatcher_WriteAndClose(t *testing.T) {
 	writerA := &mockWriter{sink: "A"}
@@ -119,19 +120,21 @@ func TestDispatcher_DedupWritersSameSink(t *testing.T) {
 }
 
 func TestDispatcher_WriteFailureOnFlush(t *testing.T) {
-	writers := []RecordWriter{&mockWriter{sink: "fail", failNext: true}}
+	ctx := t.Context()
 
-	disp, err := New(t.Context(), writers, writers, writers)
+	failing := []RecordWriter{&failWriter{}}
+	mock := []RecordWriter{&mockWriter{sink: "ok"}}
+	disp, err := New(ctx, failing, mock, mock)
 	require.NoError(t, err)
+	require.NoError(t, disp.WriteSuite(&record.Suite{}))
 
-	_ = disp.WriteSuite(&record.Suite{})
 	err = disp.Close()
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "fail write")
 }
 
 func TestDispatcher_WriteFailure(t *testing.T) {
-	writers := []RecordWriter{&mockWriter{sink: "fail", failNext: true}}
+	writers := []RecordWriter{&failWriter{}}
 
 	disp, err := New(t.Context(), writers, writers, writers)
 	require.NoError(t, err)
