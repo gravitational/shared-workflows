@@ -83,9 +83,7 @@ func Test_newFromReader(t *testing.T) {
 			jsonMeta: `
 {"id":"foobar"}
 `,
-			errFn: func(tt require.TestingT, err error, i ...interface{}) {
-				assert.NoError(tt, err)
-			},
+			errFn: assert.NoError,
 			wantMeta: &record.Meta{
 				Common: record.Common{ID: "foobar", RecordSchemaVersion: "v1"}},
 		},
