@@ -73,6 +73,12 @@ func newS3Writer(ctx context.Context, path string) (io.WriteCloser, error) {
 	}
 	bucket, key := parts[0], parts[1]
 
+	if _, err := client.HeadBucket(ctx, &s3.HeadBucketInput{
+		Bucket: &bucket,
+	}); err != nil {
+		return nil, trace.Wrap(err, "unable to access s3 bucket %q", bucket)
+	}
+
 	pr, pw := io.Pipe()
 	done := make(chan error, 1)
 
