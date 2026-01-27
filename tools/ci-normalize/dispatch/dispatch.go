@@ -148,22 +148,16 @@ func (d *Dispatcher) createUniqueBufferedWriters(writers []RecordWriter) ([]*buf
 		return nil, trace.BadParameter("no writers provided")
 	}
 
-	seen := make(map[string]struct{})
 	out := make([]*bufferedWriter, 0, len(writers))
-
 	for _, w := range writers {
 		key := w.SinkKey()
-		if _, ok := seen[key]; ok {
-			return nil, trace.BadParameter(
-				"duplicate writer for sink %q",
-				key,
-			)
+		if bw, ok := d.bySink[key]; ok {
+			out = append(out, bw)
+		} else {
+			bw := newBufferedWriter(d.ctx, w)
+			d.bySink[key] = bw
+			out = append(out, bw)
 		}
-		seen[key] = struct{}{}
-
-		bw := newBufferedWriter(d.ctx, w)
-		d.bySink[key] = bw
-		out = append(out, bw)
 	}
 	return out, nil
 }

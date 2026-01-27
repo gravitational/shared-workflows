@@ -107,16 +107,15 @@ func TestDispatcher_SameTypeDifferentSink(t *testing.T) {
 }
 
 func TestDispatcher_DedupWritersSameSink(t *testing.T) {
-	writer := &mockWriter{sink: "same"}
-	unique := []RecordWriter{writer}
-	duplicated := []RecordWriter{writer, writer}
+	writerA := &mockWriter{sink: "same"}
+	writerB := &mockWriter{sink: "same"}
 
-	disp, err := New(t.Context(), unique, duplicated, unique)
+	disp, err := New(t.Context(), []RecordWriter{writerA}, []RecordWriter{writerB}, []RecordWriter{writerB})
+	require.NoError(t, err)
 
-	require.Error(t, err)
-	require.Nil(t, disp)
-	require.ErrorContains(t, err, "duplicate writer")
-	require.ErrorContains(t, err, "testcase")
+	// The dispatcher will reuse the exisiting buffered writer for the same sink
+	assert.Equal(t, disp.suiteWriters, disp.testWriters)
+	assert.Equal(t, disp.suiteWriters, disp.metaWriters)
 }
 
 func TestDispatcher_WriteFailureOnFlush(t *testing.T) {
