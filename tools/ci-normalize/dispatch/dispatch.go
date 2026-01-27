@@ -204,8 +204,7 @@ func writeAll(ctx context.Context, writers []*bufferedWriter, record any) error 
 // Close gracefully shuts down all writers concurrently.
 // Blocks until all queued records are written.
 func (d *Dispatcher) Close() error {
-
-	var g errgroup.Group
+	g, _ := errgroup.WithContext(d.ctx)
 
 	for _, w := range d.bySink {
 		g.Go(func() error {
@@ -213,10 +212,5 @@ func (d *Dispatcher) Close() error {
 		})
 	}
 
-	select {
-	case <-d.ctx.Done():
-		return d.ctx.Err()
-	default:
-		return g.Wait()
-	}
+	return g.Wait()
 }
