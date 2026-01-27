@@ -49,8 +49,8 @@ func TestDispatcher_WriteAndClose(t *testing.T) {
 	disp, err := New(
 		t.Context(),
 		[]RecordWriter{writerA, writerB},
-		[]RecordWriter{},
-		[]RecordWriter{},
+		[]RecordWriter{writerA},
+		[]RecordWriter{writerA},
 	)
 	require.NoError(t, err)
 
@@ -70,20 +70,17 @@ func TestDispatcher_WriteAndClose(t *testing.T) {
 }
 
 func TestDispatcher_UnregisteredTypeFails(t *testing.T) {
-	writer := &mockWriter{sink: "suite"}
+	writer := &mockWriter{sink: "a"}
 
 	disp, err := New(
 		t.Context(),
 		[]RecordWriter{writer},
-		[]RecordWriter{},
+		[]RecordWriter{writer},
 		[]RecordWriter{},
 	)
-	require.NoError(t, err)
-
-	err = disp.WriteTestcase(&record.Testcase{})
-	require.ErrorContains(t, err, "no writers registered")
-
-	require.NoError(t, disp.Close())
+	require.ErrorContains(t, err, "no writers ")
+	require.ErrorContains(t, err, "meta")
+	require.Nil(t, disp)
 }
 
 func TestDispatcher_SameTypeDifferentSink(t *testing.T) {
@@ -92,8 +89,8 @@ func TestDispatcher_SameTypeDifferentSink(t *testing.T) {
 
 	disp, err := New(
 		t.Context(),
-		[]RecordWriter{},
-		[]RecordWriter{},
+		[]RecordWriter{writerA},
+		[]RecordWriter{writerA},
 		[]RecordWriter{writerA, writerB},
 	)
 	require.NoError(t, err)
@@ -110,13 +107,10 @@ func TestDispatcher_SameTypeDifferentSink(t *testing.T) {
 
 func TestDispatcher_DedupWritersSameSink(t *testing.T) {
 	writer := &mockWriter{sink: "same"}
+	unique := []RecordWriter{writer}
+	duplicated := []RecordWriter{writer, writer}
 
-	disp, err := New(
-		t.Context(),
-		[]RecordWriter{},
-		[]RecordWriter{writer, writer},
-		[]RecordWriter{},
-	)
+	disp, err := New(t.Context(), unique, duplicated, unique)
 
 	require.Error(t, err)
 	require.Nil(t, disp)
@@ -125,14 +119,9 @@ func TestDispatcher_DedupWritersSameSink(t *testing.T) {
 }
 
 func TestDispatcher_WriteFailureOnFlush(t *testing.T) {
-	writer := &mockWriter{sink: "fail", failNext: true}
+	writers := []RecordWriter{&mockWriter{sink: "fail", failNext: true}}
 
-	disp, err := New(
-		t.Context(),
-		[]RecordWriter{writer},
-		[]RecordWriter{},
-		[]RecordWriter{},
-	)
+	disp, err := New(t.Context(), writers, writers, writers)
 	require.NoError(t, err)
 
 	_ = disp.WriteSuite(&record.Suite{})
@@ -142,14 +131,9 @@ func TestDispatcher_WriteFailureOnFlush(t *testing.T) {
 }
 
 func TestDispatcher_WriteFailure(t *testing.T) {
-	writer := &mockWriter{sink: "fail", failNext: true}
+	writers := []RecordWriter{&mockWriter{sink: "fail", failNext: true}}
 
-	disp, err := New(
-		t.Context(),
-		[]RecordWriter{writer},
-		[]RecordWriter{},
-		[]RecordWriter{},
-	)
+	disp, err := New(t.Context(), writers, writers, writers)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = disp.Close() })
 

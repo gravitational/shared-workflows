@@ -128,7 +128,6 @@ func New(ctx context.Context, suiteWriters, testWriters, metaWriters []RecordWri
 		ctx:    ctx,
 		bySink: make(map[string]*bufferedWriter),
 	}
-
 	var err error
 
 	if d.suiteWriters, err = d.createUniqueBufferedWriters(suiteWriters); err != nil {
@@ -147,6 +146,10 @@ func New(ctx context.Context, suiteWriters, testWriters, metaWriters []RecordWri
 }
 
 func (d *Dispatcher) createUniqueBufferedWriters(writers []RecordWriter) ([]*bufferedWriter, error) {
+	if len(writers) == 0 {
+		return nil, trace.BadParameter("no writers provided")
+	}
+
 	seen := make(map[string]struct{})
 	out := make([]*bufferedWriter, 0, len(writers))
 
