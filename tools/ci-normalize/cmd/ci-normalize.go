@@ -89,12 +89,10 @@ func setupDispatcher(
 }
 func createProducers(cmd string, junitCmd *kingpin.CmdClause, metadata *record.Meta, junitFiles *[]string) ([]input.Producer, error) {
 	producers := []input.Producer{}
-	opts := []input.Option{input.WithMeta(metadata)}
-
 	switch cmd {
 	case junitCmd.FullCommand():
 		for _, f := range *junitFiles {
-			p, err := input.NewJUnitProducer(f, opts...)
+			p, err := input.NewJUnitProducer(f, metadata)
 			if err != nil {
 				return nil, trace.Wrap(err)
 			}

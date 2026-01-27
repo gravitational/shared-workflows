@@ -27,8 +27,6 @@ import (
 	"github.com/gravitational/trace"
 )
 
-type Option func(*JUnitProducer) error
-
 // JUnitProducer produces records from a JUnit XML file.
 type JUnitProducer struct {
 	file string
@@ -36,27 +34,14 @@ type JUnitProducer struct {
 }
 
 // NewJUnitProducer creates a new JUnitProducer.
-func NewJUnitProducer(file string, opts ...Option) (*JUnitProducer, error) {
+func NewJUnitProducer(file string, metadata *record.Meta) (*JUnitProducer, error) {
 	if _, err := os.Stat(file); err != nil {
 		return nil, trace.NotFound("junit file %q does not exist: %v", file, err)
 	}
 
-	p := &JUnitProducer{file: file}
-	for _, opt := range opts {
-		if err := opt(p); err != nil {
-			return nil, trace.Wrap(err)
-		}
-	}
+	p := &JUnitProducer{file: file, meta: metadata.Common}
 
 	return p, nil
-}
-
-// WithMeta sets the metadata for the JUnitProducer.
-func WithMeta(metadata *record.Meta) Option {
-	return func(p *JUnitProducer) error {
-		p.meta = metadata.Common
-		return nil
-	}
 }
 
 type junitTestSuite struct {
