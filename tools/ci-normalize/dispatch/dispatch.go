@@ -220,22 +220,25 @@ func writeAll(ctx context.Context, writers []*bufferedWriter, record any) error 
 // Blocks until all queued records are written.
 func (d *Dispatcher) Close() error {
 	var g errgroup.Group
-	seen := map[*bufferedWriter]struct{}{}
 
-	for _, bw := range d.suiteWriters {
-		seen[bw] = struct{}{}
-	}
-	for _, bw := range d.testWriters {
-		seen[bw] = struct{}{}
-	}
-	for _, bw := range d.metaWriters {
-		seen[bw] = struct{}{}
-	}
-
-	for bw := range seen {
-		bw := bw
+	for _, w := range d.suiteWriters {
+		w := w
 		g.Go(func() error {
-			return bw.Close()
+			return w.Close()
+		})
+	}
+
+	for _, w := range d.testWriters {
+		w := w
+		g.Go(func() error {
+			return w.Close()
+		})
+	}
+
+	for _, w := range d.metaWriters {
+		w := w
+		g.Go(func() error {
+			return w.Close()
 		})
 	}
 
