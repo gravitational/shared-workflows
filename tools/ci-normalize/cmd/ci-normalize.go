@@ -32,14 +32,13 @@ import (
 	"github.com/gravitational/trace"
 )
 
-func makeWriter[T any](
+func makeWriters(
 	ctx context.Context,
 	paths []string,
 	metadata *record.Meta,
-	with func(dispatch.RecordWriter) dispatch.Option,
-) ([]dispatch.Option, error) {
+) ([]dispatch.RecordWriter, error) {
 
-	var opts []dispatch.Option
+	var writers []dispatch.RecordWriter
 
 	for _, path := range paths {
 		raw, err := writer.New(ctx, path, metadata)
@@ -48,10 +47,10 @@ func makeWriter[T any](
 		}
 
 		w := adapter.New(json.NewEncoder(raw), raw)
-		opts = append(opts, with(w))
+		writers = append(writers, w)
 	}
 
-	return opts, nil
+	return writers, nil
 }
 
 func setupDispatcher(
@@ -60,49 +59,33 @@ func setupDispatcher(
 	suiteOuts, testOuts, metaOuts []string,
 ) (*dispatch.Dispatcher, error) {
 
-	var opts []dispatch.Option
-
-	suiteOpts, err := makeWriter[record.Suite](
-		ctx,
-		suiteOuts,
-		metadata,
-		dispatch.WithSuiteWriter,
-	)
+	suiteWriters, err := makeWriters(ctx, suiteOuts, metadata)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	opts = append(opts, suiteOpts...)
 
-	testOpts, err := makeWriter[record.Testcase](
-		ctx,
-		testOuts,
-		metadata,
-		dispatch.WithTestcaseWriter,
-	)
+	testWriters, err := makeWriters(ctx, testOuts, metadata)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	opts = append(opts, testOpts...)
 
-	metaOpts, err := makeWriter[record.Meta](
-		ctx,
-		metaOuts,
-		metadata,
-		dispatch.WithMetaWriter,
-	)
+	metaWriters, err := makeWriters(ctx, metaOuts, metadata)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	opts = append(opts, metaOpts...)
 
-	d, err := dispatch.New(ctx, opts...)
+	d, err := dispatch.New(
+		ctx,
+		suiteWriters,
+		testWriters,
+		metaWriters,
+	)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 
 	return d, nil
 }
-
 func createProducers(cmd string, junitCmd *kingpin.CmdClause, metadata *record.Meta, junitFiles *[]string) ([]input.Producer, error) {
 	producers := []input.Producer{}
 	opts := []input.Option{input.WithMeta(metadata)}

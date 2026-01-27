@@ -16,7 +16,6 @@ package dispatch
 
 import (
 	"context"
-	"slices"
 	"sync"
 
 	"github.com/gravitational/shared-workflows/tools/ci-normalize/record"
@@ -122,8 +121,6 @@ type Dispatcher struct {
 
 var _ record.Writer = (*Dispatcher)(nil)
 
-type Option func(*Dispatcher) error
-
 // New creates a new [Dispatcher] with the given writers.
 func New(ctx context.Context, suiteWriters, testWriters, metaWriters []RecordWriter) (*Dispatcher, error) {
 	d := &Dispatcher{
@@ -131,68 +128,40 @@ func New(ctx context.Context, suiteWriters, testWriters, metaWriters []RecordWri
 		bySink: make(map[string]*bufferedWriter),
 	}
 
-	for _, opt := range opts {
-		if err := opt(d); err != nil {
-			return nil, err
-		}
+	var err error
+
+	if d.suiteWriters, err = d.createUniqueBufferedWriters(suiteWriters); err != nil {
+		return nil, trace.Wrap(err, "registering suite writers")
 	}
 
-	if len(d.suiteWriters) == 0 &&
-		len(d.testWriters) == 0 &&
-		len(d.metaWriters) == 0 {
-		return nil, trace.BadParameter("no writers registered")
+	if d.testWriters, err = d.createUniqueBufferedWriters(testWriters); err != nil {
+		return nil, trace.Wrap(err, "registering testcase writers")
+	}
+
+	if d.metaWriters, err = d.createUniqueBufferedWriters(metaWriters); err != nil {
+		return nil, trace.Wrap(err, "registering meta writers")
 	}
 
 	return d, nil
 }
 
-// WithSuiteWriter registers a RecordWriter for suite records.
-// Example:
-//
-//	disp, err := New(context.Background(),
-//		WithSuiteWriter(writerA),
-//		WithSuiteWriter(writerB),
-//	)
-func WithSuiteWriter(w RecordWriter) Option {
-	return func(d *Dispatcher) error {
-		sw := d.getBufferedWriter(w)
-		if slices.Contains(d.suiteWriters, sw) {
-			return trace.BadParameter(
-				"duplicate suite writer for sink %q",
-				w.SinkKey(),
-			)
-		}
-		d.suiteWriters = append(d.suiteWriters, sw)
-		return nil
-	}
-}
+func (d *Dispatcher) createUniqueBufferedWriters(writers []RecordWriter) ([]*bufferedWriter, error) {
+	seen := make(map[string]struct{})
+	out := make([]*bufferedWriter, 0, len(writers))
 
-func WithTestcaseWriter(w RecordWriter) Option {
-	return func(d *Dispatcher) error {
-		sw := d.getBufferedWriter(w)
-		if slices.Contains(d.testWriters, sw) {
-			return trace.BadParameter(
-				"duplicate testcase writer for sink %q",
-				w.SinkKey(),
+	for _, w := range writers {
+		key := w.SinkKey()
+		if _, ok := seen[key]; ok {
+			return nil, trace.BadParameter(
+				"duplicate writer for sink %q",
+				key,
 			)
 		}
-		d.testWriters = append(d.testWriters, sw)
-		return nil
+		seen[key] = struct{}{}
+		out = append(out, d.getBufferedWriter(w))
 	}
-}
 
-func WithMetaWriter(w RecordWriter) Option {
-	return func(d *Dispatcher) error {
-		sw := d.getBufferedWriter(w)
-		if slices.Contains(d.metaWriters, sw) {
-			return trace.BadParameter(
-				"duplicate meta writer for sink %q",
-				w.SinkKey(),
-			)
-		}
-		d.metaWriters = append(d.metaWriters, sw)
-		return nil
-	}
+	return out, nil
 }
 
 func (d *Dispatcher) getBufferedWriter(w RecordWriter) *bufferedWriter {

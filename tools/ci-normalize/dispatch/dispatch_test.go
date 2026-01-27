@@ -48,8 +48,9 @@ func TestDispatcher_WriteAndClose(t *testing.T) {
 
 	disp, err := New(
 		t.Context(),
-		WithSuiteWriter(writerA),
-		WithSuiteWriter(writerB), // two writers for same type
+		[]RecordWriter{writerA, writerB},
+		[]RecordWriter{},
+		[]RecordWriter{},
 	)
 	require.NoError(t, err)
 
@@ -73,7 +74,9 @@ func TestDispatcher_UnregisteredTypeFails(t *testing.T) {
 
 	disp, err := New(
 		t.Context(),
-		WithSuiteWriter(writer),
+		[]RecordWriter{writer},
+		[]RecordWriter{},
+		[]RecordWriter{},
 	)
 	require.NoError(t, err)
 
@@ -89,8 +92,9 @@ func TestDispatcher_SameTypeDifferentSink(t *testing.T) {
 
 	disp, err := New(
 		t.Context(),
-		WithMetaWriter(writerA),
-		WithMetaWriter(writerB),
+		[]RecordWriter{},
+		[]RecordWriter{},
+		[]RecordWriter{writerA, writerB},
 	)
 	require.NoError(t, err)
 
@@ -109,13 +113,15 @@ func TestDispatcher_DedupWritersSameSink(t *testing.T) {
 
 	disp, err := New(
 		t.Context(),
-		WithTestcaseWriter(writer),
-		WithTestcaseWriter(writer),
+		[]RecordWriter{},
+		[]RecordWriter{writer, writer},
+		[]RecordWriter{},
 	)
 
 	require.Error(t, err)
 	require.Nil(t, disp)
-	require.ErrorContains(t, err, "duplicate testcase writer")
+	require.ErrorContains(t, err, "duplicate writer")
+	require.ErrorContains(t, err, "testcase")
 }
 
 func TestDispatcher_WriteFailureOnFlush(t *testing.T) {
@@ -123,7 +129,9 @@ func TestDispatcher_WriteFailureOnFlush(t *testing.T) {
 
 	disp, err := New(
 		t.Context(),
-		WithSuiteWriter(writer),
+		[]RecordWriter{writer},
+		[]RecordWriter{},
+		[]RecordWriter{},
 	)
 	require.NoError(t, err)
 
@@ -138,7 +146,9 @@ func TestDispatcher_WriteFailure(t *testing.T) {
 
 	disp, err := New(
 		t.Context(),
-		WithSuiteWriter(writer),
+		[]RecordWriter{writer},
+		[]RecordWriter{},
+		[]RecordWriter{},
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = disp.Close() })
@@ -150,10 +160,4 @@ func TestDispatcher_WriteFailure(t *testing.T) {
 	err = disp.WriteSuite(&record.Suite{})
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "fail write")
-}
-
-func TestDispatcher_NoWriters(t *testing.T) {
-	disp, err := New(t.Context())
-	assert.ErrorContains(t, err, "no writers registered")
-	assert.Nil(t, disp)
 }
