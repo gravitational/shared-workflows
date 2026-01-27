@@ -114,8 +114,6 @@ type Dispatcher struct {
 	testWriters  []*bufferedWriter
 	metaWriters  []*bufferedWriter
 
-	// mu protects below:
-	mu sync.Mutex
 	// bySink map of sink keys to writers
 	bySink map[string]*bufferedWriter
 }
@@ -162,25 +160,12 @@ func (d *Dispatcher) createUniqueBufferedWriters(writers []RecordWriter) ([]*buf
 			)
 		}
 		seen[key] = struct{}{}
-		out = append(out, d.getBufferedWriter(w))
-	}
 
+		bw := newBufferedWriter(d.ctx, w)
+		d.bySink[key] = bw
+		out = append(out, bw)
+	}
 	return out, nil
-}
-
-func (d *Dispatcher) getBufferedWriter(w RecordWriter) *bufferedWriter {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-
-	key := w.SinkKey()
-
-	if sw, ok := d.bySink[key]; ok {
-		return sw
-	}
-
-	sw := newBufferedWriter(d.ctx, w)
-	d.bySink[key] = sw
-	return sw
 }
 
 func (d *Dispatcher) WriteSuite(r *record.Suite) error {
