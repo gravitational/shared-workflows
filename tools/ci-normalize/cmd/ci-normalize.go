@@ -167,7 +167,6 @@ func run() error {
 	})
 
 	for _, p := range producers {
-		p := p // capture
 		eg.Go(func() error {
 			return p.Produce(ctx, dispatcher)
 		})
