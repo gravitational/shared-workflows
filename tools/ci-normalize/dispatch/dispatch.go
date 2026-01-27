@@ -16,6 +16,7 @@ package dispatch
 
 import (
 	"context"
+	"io"
 	"sync"
 
 	"github.com/gravitational/shared-workflows/tools/ci-normalize/record"
@@ -25,9 +26,9 @@ import (
 
 // RecordWriter defines an interface for writing records to a sink.
 type RecordWriter interface {
+	io.Closer
 	Write(any) error
 	SinkKey() string
-	Close() error
 }
 
 // bufferedWriter wraps a RecordWriter with a buffered channel.

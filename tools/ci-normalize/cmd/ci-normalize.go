@@ -18,13 +18,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 
 	kingpin "github.com/alecthomas/kingpin/v2"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/gravitational/shared-workflows/tools/ci-normalize/dispatch"
-	"github.com/gravitational/shared-workflows/tools/ci-normalize/dispatch/adapter"
 	"github.com/gravitational/shared-workflows/tools/ci-normalize/input"
 	"github.com/gravitational/shared-workflows/tools/ci-normalize/meta"
 	"github.com/gravitational/shared-workflows/tools/ci-normalize/record"
@@ -41,12 +41,13 @@ func makeWriters(
 	var writers []dispatch.RecordWriter
 
 	for _, path := range paths {
-		raw, err := writer.New(ctx, path, metadata)
+		w, err := writer.New(ctx, path, metadata, func(w io.Writer) writer.Encoder {
+			return json.NewEncoder(w)
+		})
 		if err != nil {
 			return nil, trace.Wrap(err)
 		}
 
-		w := adapter.New(json.NewEncoder(raw), raw)
 		writers = append(writers, w)
 	}
 

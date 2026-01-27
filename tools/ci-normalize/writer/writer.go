@@ -22,48 +22,65 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gravitational/shared-workflows/tools/ci-normalize/dispatch"
 	"github.com/gravitational/shared-workflows/tools/ci-normalize/record"
 	"github.com/gravitational/trace"
 )
 
-// RecordWriter accepts records and writes them to a sink.
-// Implemented by the encoded writer adapter.
-type KeyedWriter interface {
-	io.WriteCloser
-	SinkKey() string
+// Encoder defines an interface for encoding records.
+type Encoder interface {
+	Encode(any) error
 }
 
-func New(ctx context.Context, path string, metadata *record.Meta) (KeyedWriter, error) {
+// EncoderFactory is a factory function for creating Encoders.
+type EncoderFactory func(io.Writer) Encoder
+
+// encodedWriter implements [dispatch.RecordWriter].
+// It wraps an [Encoder] and the underlying [io.WriteCloser].
+type encodedWriter struct {
+	enc    Encoder
+	writer io.WriteCloser
+	key    string
+}
+
+func (w *encodedWriter) Write(record any) error { return w.enc.Encode(record) }
+func (w *encodedWriter) Close() error           { return w.writer.Close() }
+func (w *encodedWriter) SinkKey() string        { return w.key }
+
+func New(ctx context.Context, path string, metadata *record.Meta, encFactory EncoderFactory) (dispatch.RecordWriter, error) {
 	path = renderJinjaPathFromMeta(path, metadata)
+
+	var raw io.WriteCloser
+	key := path
 
 	switch path {
 	case "-", "":
-		return &fileWriter{
-			WriteCloser: nopCloser{os.Stdout},
-			sink:        "stdout",
-		}, nil
-
+		raw = nopCloser{os.Stdout}
+		key = "stdout"
 	case "/dev/null":
-		return &fileWriter{
-			WriteCloser: nopCloser{io.Discard},
-			sink:        "null",
-		}, nil
-
+		raw = nopCloser{io.Discard}
 	default:
 		if strings.HasPrefix(path, "s3://") {
-			return newS3Writer(ctx, path)
+			w, err := newS3Writer(ctx, path)
+			if err != nil {
+				return nil, trace.Wrap(err)
+			}
+			raw = w
+		} else {
+			f, err := os.Create(path)
+			if err != nil {
+				return nil, trace.Wrap(err)
+			}
+			raw = f
 		}
-
-		f, err := os.Create(path)
-		if err != nil {
-			return nil, trace.Wrap(err)
-		}
-
-		return &fileWriter{
-			WriteCloser: f,
-			sink:        path,
-		}, nil
 	}
+
+	return &encodedWriter{
+		// Wrap the raw writer with the provided encoder
+		enc:    encFactory(raw),
+		writer: raw,
+		key:    key,
+	}, nil
 }
 
 func renderJinjaPathFromMeta(template string, meta *record.Meta) string {
@@ -96,15 +113,6 @@ func renderJinjaPathFromMeta(template string, meta *record.Meta) string {
 	}
 
 	return path
-}
-
-type fileWriter struct {
-	io.WriteCloser
-	sink string
-}
-
-func (w *fileWriter) SinkKey() string {
-	return w.sink
 }
 
 type nopCloser struct{ io.Writer }

@@ -15,15 +15,34 @@
 package writer
 
 import (
-	"bytes"
+	"io"
 	"os"
 	"testing"
 	"time"
 
 	"github.com/gravitational/shared-workflows/tools/ci-normalize/record"
+	"github.com/gravitational/trace"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type passThroughEncoder struct {
+	w io.Writer
+}
+
+func (e *passThroughEncoder) Encode(v any) error {
+	b, ok := v.([]byte)
+	if !ok {
+		return trace.BadParameter("passThroughEncoder expects []byte")
+	}
+	_, err := e.w.Write(b)
+	return trace.Wrap(err)
+}
+
+// factory matching EncoderFactory(io.WriteCloser) Encoder
+func passThroughEncoderFactory(w io.Writer) Encoder {
+	return &passThroughEncoder{w: w}
+}
 
 func TestNew_WriterOutputs(t *testing.T) {
 	tmpFile := t.TempDir() + "/file.txt"
@@ -46,7 +65,7 @@ func TestNew_WriterOutputs(t *testing.T) {
 		{
 			name:        "/dev/null",
 			path:        "/dev/null",
-			wantSinkKey: "null",
+			wantSinkKey: "/dev/null",
 		},
 		{
 			name:        "local file",
@@ -57,16 +76,15 @@ func TestNew_WriterOutputs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			w, err := New(t.Context(), tt.path, nil)
+			w, err := New(t.Context(), tt.path, nil, passThroughEncoderFactory)
 			require.NoError(t, err)
 			require.NotNil(t, w)
 
 			assert.Equal(t, tt.wantSinkKey, w.SinkKey())
 
 			data := []byte("hello world")
-			n, err := w.Write(data)
+			err = w.Write(data)
 			require.NoError(t, err)
-			assert.Equal(t, len(data), n)
 			require.NoError(t, w.Close())
 
 			// If it's a file, verify content
@@ -113,15 +131,4 @@ func TestRenderJinjaPathFromMeta_NilMeta(t *testing.T) {
 func TestRenderJinjaPathFromMeta_EmptyTemplate(t *testing.T) {
 	path := renderJinjaPathFromMeta("", &record.Meta{Common: record.Common{ID: "foo"}})
 	assert.Equal(t, "", path)
-}
-
-func TestFileWriter_Close(t *testing.T) {
-	var buf bytes.Buffer
-	w := &fileWriter{WriteCloser: nopCloser{&buf}, sink: "buffer"}
-	n, err := w.Write([]byte("data"))
-	require.NoError(t, err)
-	assert.Equal(t, 4, n)
-	require.NoError(t, w.Close())
-	assert.Equal(t, "data", buf.String())
-	assert.Equal(t, "buffer", w.SinkKey())
 }
