@@ -87,6 +87,8 @@ func (b *Bot) backportReviewers(ctx context.Context) ([]string, error) {
 	}
 
 	var originalReviewers []string
+	// validOrgMembers tracks users we have already verified org membership
+	userToIsKnownOrgMember := make(map[string]bool)
 
 	// Append list of reviewers that have yet to submit a review.
 	reviewers, err := b.c.GitHub.ListReviewers(ctx,
@@ -98,7 +100,17 @@ func (b *Bot) backportReviewers(ctx context.Context) ([]string, error) {
 	}
 	for _, reviewer := range reviewers {
 		// Don't request reviews from bots.
-		if !strings.Contains(reviewer, "[bot]") {
+		if strings.Contains(reviewer, "[bot]") {
+			continue
+		}
+
+		isMember, err := b.c.GitHub.IsOrgMember(ctx, reviewer, b.c.Environment.Organization)
+		if err != nil {
+			log.Printf("Assign: Failed to check reviewer's org membership %v: %v.", reviewer, err)
+			continue
+		}
+		userToIsKnownOrgMember[reviewer] = isMember
+		if isMember {
 			originalReviewers = append(originalReviewers, reviewer)
 		}
 	}
@@ -111,9 +123,25 @@ func (b *Bot) backportReviewers(ctx context.Context) ([]string, error) {
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
+
 	for _, review := range reviews {
 		// Don't request reviews from bots.
-		if !strings.Contains(review.Author, "[bot]") {
+		if strings.Contains(review.Author, "[bot]") {
+			continue
+		}
+
+		isMember, known := userToIsKnownOrgMember[review.Author]
+		if !known {
+			// if they weren't in the requested list, check membership
+			isMember, err = b.c.GitHub.IsOrgMember(ctx, review.Author, b.c.Environment.Organization)
+			if err != nil {
+				log.Printf("Assign: Failed to check reviewer's org membership %v: %v.", review.Author, err)
+				continue
+			}
+			userToIsKnownOrgMember[review.Author] = isMember
+		}
+
+		if isMember {
 			originalReviewers = append(originalReviewers, review.Author)
 		}
 	}
