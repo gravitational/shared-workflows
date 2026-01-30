@@ -47,4 +47,4 @@ Inputs:
 Output:
 - [x] jsonl
 
-The output file schema can be found in `pkg/record/record.go`.
+The output file schema can be found in `record/record.go`.
