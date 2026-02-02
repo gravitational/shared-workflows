@@ -88,6 +88,20 @@ func TestIsInternal(t *testing.T) {
 			expect: true,
 		},
 		{
+			desc: "repo-reviewer-is-internal",
+			assignments: &Assignments{
+				c: &Config{
+					RepoReviewers: map[string]map[string]Reviewer{
+						"custom-repo": {
+							"1": {Owner: true},
+						},
+					},
+				},
+			},
+			author: "1",
+			expect: true,
+		},
+		{
 			desc: "docs-is-internal",
 			assignments: &Assignments{
 				c: &Config{
@@ -314,6 +328,39 @@ func TestGetCodeReviewerSets(t *testing.T) {
 			author:     "8",
 			setA:       []string{"1", "2", "3"},
 			setB:       []string{"4", "5"},
+		},
+		{
+			desc: "normal (custom-repo)",
+			assignments: &Assignments{
+				c: &Config{
+					// Code.
+					CoreReviewers: map[string]Reviewer{
+						"1": {Owner: true},
+					},
+					CloudReviewers: map[string]Reviewer{
+						"2": {Owner: true},
+					},
+					RepoReviewers: map[string]map[string]Reviewer{
+						"custom-repo": {
+							"3": {Owner: true},
+							"4": {Owner: false},
+						},
+					},
+					CodeReviewersOmit: map[string]bool{},
+					// Docs.
+					DocsReviewers:     map[string]Reviewer{},
+					DocsReviewersOmit: map[string]bool{},
+					// Admins.
+					Admins: []string{
+						"1",
+						"2",
+					},
+				},
+			},
+			repository: "custom-repo",
+			author:     "3",
+			setA:       []string{},
+			setB:       []string{"4"},
 		},
 		{
 			desc: "normal",
@@ -1193,6 +1240,21 @@ func TestFromString(t *testing.T) {
 			Owner: false,
 		},
 	})
+	require.EqualValues(t, r.c.CloudReviewers, map[string]Reviewer{
+		"1": {
+			Owner: true,
+		},
+		"2": {
+			Owner: false,
+		},
+	})
+	require.EqualValues(t, r.c.RepoReviewers, map[string]map[string]Reviewer{
+		"custom-repo": {
+			"10": {
+				Owner: true,
+			},
+		},
+	})
 	require.EqualValues(t, r.c.CodeReviewersOmit, map[string]bool{
 		"3": true,
 	})
@@ -1327,6 +1389,13 @@ func TestSingleApproverAuthors(t *testing.T) {
 
 const reviewers = `
 {
+	"repoReviewers": {
+		"custom-repo": {
+			"10": {
+				"owner": true
+			}
+		}
+	},
 	"coreReviewers": {
 		"1": {
 			"owner": true
