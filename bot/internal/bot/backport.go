@@ -301,7 +301,7 @@ func git(args ...string) error {
 	cmd := exec.Command("git", args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return trace.BadParameter("%s", string(bytes.TrimSpace(out)))
+		return trace.BadParameter("git failed: %s", string(bytes.TrimSpace(out)))
 	}
 	return nil
 }
