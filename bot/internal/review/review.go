@@ -115,8 +115,11 @@ type Config struct {
 	// CodeReviewersOmit is a map of code reviews and code reviewers to omit.
 	CodeReviewersOmit map[string]bool `json:"codeReviewersOmit"`
 
-	// CoreReviewers and CloudReviewers defines reviewers for the respositories
-	// owned by the core and cloud teams.
+	// RepoReviewers defines reviewers for repositories by repo slug.
+	RepoReviewers map[string]map[string]Reviewer `json:"repoReviewers,omitempty"`
+
+	// CoreReviewers and CloudReviewers define reviewers for repositories owned
+	// by the core and cloud teams.
 	CoreReviewers  map[string]Reviewer `json:"coreReviewers"`
 	CloudReviewers map[string]Reviewer `json:"cloudReviewers"`
 
@@ -175,7 +178,7 @@ func FromString(e *env.Environment, reviewers string) (*Assignments, error) {
 	if err := json.Unmarshal([]byte(reviewers), &c); err != nil {
 		return nil, trace.Wrap(err)
 	}
-	log.Printf("Reviewers loaded with %d cloud and %d core reviewers", len(c.CloudReviewers), len(c.CoreReviewers))
+	log.Printf("Reviewers loaded with %d repos, %d cloud, and %d core reviewers", len(c.RepoReviewers), len(c.CloudReviewers), len(c.CoreReviewers))
 
 	r, err := New(&c)
 	if err != nil {
@@ -206,6 +209,11 @@ func (r *Assignments) IsInternal(author string) bool {
 	_, core := r.c.CoreReviewers[author]
 	_, cloud := r.c.CloudReviewers[author]
 	_, docs := r.c.DocsReviewers[author]
+	for _, reviewers := range r.c.RepoReviewers {
+		if _, ok := reviewers[author]; ok {
+			return true
+		}
+	}
 	return core || cloud || docs
 }
 
@@ -237,6 +245,10 @@ func (r *Assignments) Get(e *env.Environment, changes env.Changes, files []githu
 }
 
 func (r *Assignments) repoReviewers(e *env.Environment) map[string]Reviewer {
+	if reviewers, ok := r.c.RepoReviewers[e.Repository]; ok {
+		return reviewers
+	}
+
 	switch e.RepoOwnerTeam() {
 	case env.CloudTeam:
 		return r.c.CloudReviewers
