@@ -88,6 +88,9 @@ func (b *Bot) backportReviewers(ctx context.Context) ([]string, error) {
 
 	var originalReviewers []string
 
+	// makeMapOfExistingMembers uses GitHub's `FetchAllOrgMembers`, this will fetch all members of the organization by
+	// continuously fetching (100) members per call. This is currently more efficient than  making individual calls
+	// to `IsOrgMember` for each backport reviewer.
 	currentOrgUserMap, err := b.makeMapOfExistingMembers(ctx, b.c.Environment.Organization)
 	if err != nil {
 		return nil, trace.Wrap(err)

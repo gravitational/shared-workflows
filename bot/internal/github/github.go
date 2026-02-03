@@ -783,6 +783,15 @@ func (c *Client) ListCommitFiles(ctx context.Context, organization string, repos
 	return findTreeBlobEntries(tree, pathPrefix), nil
 }
 
+// FetchAllOrgMembers retrieves the login handles of every member within the specified
+// GitHub organization.
+//
+// It handles pagination automatically, making repeated API calls until the entire
+// membership list is retrieved. Note that for very large organizations, this can
+// be a slow operation and may consume a significant portion of the GitHub API rate limit.
+//
+// Returns a slice of usernames (logins) on success, or a wrapped error if any
+// API request fails.
 func (c *Client) FetchAllOrgMembers(ctx context.Context, org string) ([]string, error) {
 	var allMembers []*go_github.User
 
