@@ -1,0 +1,27 @@
+name: 'Retry'
+description: 'Runs a command with randomized exponential backoff'
+inputs:
+  command:
+    description: 'Command to run'
+    required: true
+  max_attempts:
+    description: 'Max number of retries'
+    default: '5'
+  initial_delay:
+    description: 'Initial delay in seconds'
+    default: '5'
+  retry_on_regex:
+    description: 'Regex to match before triggering a retry'
+    default: '.*'
+
+runs:
+  using: "composite"
+  steps:
+    - shell: bash
+      env:
+        INPUT_COMMAND: ${{ inputs.command }}
+        INPUT_MAX_ATTEMPTS: ${{ inputs.max_attempts }}
+        INPUT_INITIAL_DELAY: ${{ inputs.initial_delay }}
+        INPUT_RETRY_ON_REGEX: ${{ inputs.retry_on_regex }}
+
+      run: ./tools/retry/retry.sh
