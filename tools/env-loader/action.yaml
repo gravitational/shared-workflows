@@ -15,82 +15,13 @@ inputs:
 runs:
   using: "composite"
   steps:
-    # This cannot be implemented within another tool unless it is written as a
-    # typescript action. This logic must be able to run on all platforms,
-    # with only the tools already available on the system.
-    - name: Install the tool
-      shell: bash
-      env:
-        DEFAULT_TOOL_VERSION: ${{ github.action_ref }}
-        TOOL_VERSION: ${{ inputs.tool-version }}
-        INSTALL_DIR: /opt/bin
-        TOOL_NAME: env-loader
-      run: |
-        # Build the download URL
-        case "${RUNNER_OS}" in
-          Linux)    OS='linux' ;;
-          Windows)  OS='windows' ;;
-          macOS)    OS='darwin' ;;
-          *)        echo "Unsupported runner OS ${RUNNER_OS}" >&2; exit 1 ;;
-        esac
-
-        case "${RUNNER_ARCH}" in
-          X86)    ARCH='i386' ;;
-          X64)    ARCH='amd64' ;;
-          ARM)    ARCH='arm' ;;
-          ARM64)  ARCH='arm64' ;;
-          *)      echo "Unsupported runner architecture ${RUNNER_ARCH}" >&2; exit 1 ;;
-        esac
-
-        if [[ -z "${TOOL_VERSION}" ]]; then
-          TOOL_VERSION="${DEFAULT_TOOL_VERSION##tools/"${TOOL_NAME}"/}"
-        fi
-
-        TAG="tools/${TOOL_NAME}/${TOOL_VERSION}"
-        URL_ENCODED_TAG="$(jq -rn --arg TAG "${TAG}" '$TAG|@uri')"
-        FILE_NAME="${TOOL_NAME}-${TOOL_VERSION}-${OS}-${ARCH}.tar.gz"
-        DOWNLOAD_URL="https://github.com/gravitational/shared-workflows/releases/download/${URL_ENCODED_TAG}/${FILE_NAME}"
-
-        # Download the tool
-        export TMPDIR="${RUNNER_TEMP}"
-        DOWNLOAD_DIR="$(mktemp -d -t "${TOOL_NAME}-XXXXXX")"
-        DOWNLOAD_PATH="${DOWNLOAD_DIR}/${TOOL_NAME}.tar.gz"
-        echo "Downloading ${TOOL_NAME} ${TOOL_VERSION} for ${OS}/${ARCH} from ${DOWNLOAD_URL} to ${DOWNLOAD_PATH}..."
-        curl -fsSL -o "${DOWNLOAD_PATH}" "${DOWNLOAD_URL}"
-        echo "Download complete"
-
-        # Install the tool
-        maybe_sudo() {
-          # Run as root via sudo if possible. This cannot be handled via an alias
-          # because Bash on Windows seems to silently discard `alias sudo=""`.
-          if command -v sudo > /dev/null; then
-            sudo "$@"
-          else
-            "$@"
-          fi
-        }
-
-        echo "Installing to ${INSTALL_DIR}..."
-        maybe_sudo mkdir -pv -m 755 "${INSTALL_DIR}"
-
-        TOOL_FILE_NAME="${TOOL_NAME}"
-        if [[ "${RUNNER_OS}" == 'Windows' ]]; then
-          TOOL_FILE_NAME+='.exe'
-        fi
-
-        # The tar `-C` flag may not be used with an absolute path, because tar interprets
-        # `:` in the path name as a network address. Windows uses this to separate
-        # drive/partition letter from file path, so this does not work on Windows. The
-        # easiest workaround is just `pushd`/`popd`.
-        pushd "$(dirname "${DOWNLOAD_PATH}")" || (echo "failed to change to download path" >&2; exit 1)
-        maybe_sudo tar -xzf "$(basename "${DOWNLOAD_PATH}")" -C "${INSTALL_DIR}" "${TOOL_FILE_NAME}"
-        popd || (echo "failed to leave the download path" >&2; exit 1)
-
-        echo "${INSTALL_DIR}" >> "${GITHUB_PATH}"
-        echo "Installation complete!"
-
-        # Cleanup
-        rm -rf "${DOWNLOAD_DIR}"
+    - name: Install env-loader from GitHub Release
+      # Relative paths cannot be used here because the action is not guaranteed to be checked out in the same location as the repository using it.
+      uses: gravitational/shared-workflows/.github/actions/install-gh-release@41eefbdab5c67d8e0169730e999f73cd315a8cb5
+      with:
+        tool-name: env-loader
+        version: ${{ inputs.tool-version }}
+        tag-prefix: tools/env-loader/
 
     - name: Load environment values into environment variables
       shell: bash

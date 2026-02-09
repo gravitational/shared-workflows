@@ -14,21 +14,25 @@ inputs:
     description: "Maximum runtime for normalization and upload (e.g. 30s, 2m). 0 means no timeout."
     required: false
     default: "20m"
+  tool-version:
+    description: Version of the tool to use
 runs:
   using: composite
   steps:
-      # Once released we can switch to use the binary directly, cache is flaky for actions but the build and download is
-      # very fast for this binary so for now this should suffice. Consider cache or binary in the future to save bandwidth and time.
-    - uses: actions/setup-go@v6
+    - name: Install ci-normalize from GitHub Release
+      # Relative paths cannot be used here because the action is not guaranteed to be checked out in the same location as the repository using it.
+      uses: gravitational/shared-workflows/.github/actions/install-gh-release@41eefbdab5c67d8e0169730e999f73cd315a8cb5
       with:
-        go-version-file: ${{ github.action_path }}/go.mod
+        tool-name: ci-normalize
+        version: ${{ inputs.tool-version }}
+        tag-prefix: tools/ci-normalize/
 
     - name: Normalize and push
       id: normalize_and_push
       shell: bash
       working-directory: ${{ github.action_path }}
       run: |
-        go run ./cmd junit \
+        ci-normalize junit \
           --timeout "${{ inputs.timeout }}" \
           --meta "${{ inputs.s3-bucket }}/jsonl/{{META_VERSION}}/jobs/repository={{REPOSITORY}}/year={{YEAR}}/month={{MONTH}}/day={{DAY}}/{{TIMESTAMP}}-job-{{ID}}.json" \
           --meta - \
