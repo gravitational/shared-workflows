@@ -1,0 +1,39 @@
+name: Test install-gh-release (env-loader)
+
+on:
+  push:
+    branches: [ main, 'okraport/*' ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test-env-loader:
+    name: env-loader on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install env-loader v0.0.5
+        uses: gravitational/shared-workflows/.github/actions/install-gh-release@v1
+        with:
+          tool-name: env-loader
+          version: v0.0.5
+          tag-prefix: tools/env-loader/
+
+      - name: Verify env-loader is on PATH
+        shell: bash
+        run: |
+          set -euo pipefail
+          which env-loader
+          env-loader --help
+
