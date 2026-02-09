@@ -21,7 +21,7 @@ runs:
       # very fast for this binary so for now this should suffice. Consider cache or binary in the future to save bandwidth and time.
     - uses: actions/setup-go@v6
       with:
-        go-version-file: ${{ github.action_path }}/go.mod
+        go-version: '1.25.6'
 
     - name: Normalize and push
       id: normalize_and_push
