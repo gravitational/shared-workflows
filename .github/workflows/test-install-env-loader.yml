@@ -24,7 +24,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install env-loader v0.0.5
-        uses: gravitational/shared-workflows/.github/actions/install-gh-release@v1
+        uses: gravitational/shared-workflows/.github/actions/install-gh-release@1fc703c3d3e8ab0b7542514ea23f23870ee9d84d
         with:
           tool-name: env-loader
           version: v0.0.5
