@@ -1,0 +1,127 @@
+---
+name: Install tools from a GitHub Release
+description: >
+  Download and install a tool from a GitHub release. Works cross-platform
+  (Linux, macOS, Windows) and supports versioning, custom install paths, and
+  flexible archive names.
+
+inputs:
+  owner:
+    description: Repository owner
+    required: false
+    default: gravitational
+  repo:
+    description: Repository name
+    required: false
+    default: shared-workflows
+  tool-name:
+    description: Binary name inside the archive
+    required: true
+  version:
+    description: Version or tag to install (e.g. v1.2.3). Defaults to action ref
+    required: false
+  tag-prefix:
+    description: Optional prefix to prepend to version (e.g. tools/)
+    required: false
+    default: ""
+  install-dir:
+    description: Directory to install the binary
+    required: false
+    default: /opt/bin
+  archive-name:
+    description: >
+      Template for archive file name. Supports placeholders:
+      {tool}, {version}, {os}, {arch}
+    required: false
+    default: "{tool}-{version}-{os}-{arch}.tar.gz"
+
+runs:
+  using: composite
+  steps:
+    - name: Install tool from GitHub Release
+      shell: bash
+      env:
+        OWNER: ${{ inputs.owner }}
+        REPO: ${{ inputs.repo }}
+        TOOL_NAME: ${{ inputs.tool-name }}
+        TOOL_VERSION: ${{ inputs.version }}
+        TAG_PREFIX: ${{ inputs.tag-prefix }}
+        INSTALL_DIR: ${{ inputs.install-dir }}
+        ARCHIVE_NAME: ${{ inputs.archive-name }}
+        DEFAULT_VERSION: ${{ github.action_ref }}
+      run: |
+        set -euo pipefail
+
+        echo "Preparing to install ${TOOL_NAME}..."
+
+        case "${RUNNER_OS}" in
+          Linux)   OS=linux ;;
+          macOS)   OS=darwin ;;
+          Windows) OS=windows ;;
+          *) echo "Unsupported OS ${RUNNER_OS}" >&2; exit 1 ;;
+        esac
+
+        case "${RUNNER_ARCH}" in
+          X86)   ARCH=i386 ;;
+          X64)   ARCH=amd64 ;;
+          ARM)   ARCH=arm ;;
+          ARM64) ARCH=arm64 ;;
+          *) echo "Unsupported ARCH ${RUNNER_ARCH}" >&2; exit 1 ;;
+        esac
+
+        if [[ -z "${TOOL_VERSION}" ]]; then
+          TOOL_VERSION="${DEFAULT_VERSION##*/}"
+        fi
+        TAG="${TAG_PREFIX}${TOOL_VERSION}"
+        URL_TAG="$(jq -rn --arg t "$TAG" '$t|@uri')"
+
+        # Build archive file name
+        FILE="${ARCHIVE_NAME}"
+        FILE="${FILE//\{tool\}/${TOOL_NAME}}"
+        FILE="${FILE//\{version\}/${TOOL_VERSION}}"
+        FILE="${FILE//\{os\}/${OS}}"
+        FILE="${FILE//\{arch\}/${ARCH}}"
+
+        # Build download URL
+        URL="https://github.com/${OWNER}/${REPO}/releases/download/${URL_TAG}/${FILE}"
+
+        echo "Downloading ${TOOL_NAME} version ${TOOL_VERSION} for ${OS}/${ARCH}..."
+        echo "URL: ${URL}"
+
+        export TMPDIR="${RUNNER_TEMP}"
+        DOWNLOAD_DIR="$(mktemp -d -t "${TOOL_NAME}"-XXXXXX)"
+        ARCHIVE_PATH="${DOWNLOAD_DIR}/${FILE}"
+
+        curl -fsSL -o "${ARCHIVE_PATH}" "${URL}"
+        echo "Download complete: ${ARCHIVE_PATH}"
+
+        # Helper to run sudo if available
+        maybe_sudo() {
+          if command -v sudo >/dev/null; then
+            sudo "$@"
+          else
+            "$@"
+          fi
+        }
+
+        # Create install dir
+        maybe_sudo mkdir -p -m 755 "${INSTALL_DIR}"
+
+        BIN_NAME="${TOOL_NAME}"
+        [[ "${RUNNER_OS}" == "Windows" ]] && BIN_NAME="${BIN_NAME}.exe"
+
+        # Extract binary
+        # The tar `-C` flag may not be used with an absolute path, because tar interprets
+        # `:` in the path name as a network address. Windows uses this to separate
+        # drive/partition letter from file path, so this does not work on Windows. The
+        # easiest workaround is just `pushd`/`popd`.
+        pushd "${DOWNLOAD_DIR}" >/dev/null
+        maybe_sudo tar -xzf "$(basename "${ARCHIVE_PATH}")" -C "${INSTALL_DIR}" "${BIN_NAME}"
+        popd >/dev/null || (echo "failed to leave the download path" >&2; exit 1)
+
+        # Add to PATH
+        echo "${INSTALL_DIR}" >> "${GITHUB_PATH}"
+        echo "${TOOL_NAME} installed successfully to ${INSTALL_DIR}"
+
+        # Cleanup
+        rm -rf "${DOWNLOAD_DIR}"
