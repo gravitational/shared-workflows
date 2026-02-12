@@ -39,7 +39,7 @@ tarball: binary
 container-image: OS = linux
 container-image: binary
 	@docker buildx build --platform="linux/$(ARCH)" -t "$(TOOL_NAME):$(CONTAINER_VERSION)" \
-		--build-arg "FILE_NAME=$(BINARY_NAME)" --file "$(DOCKERFILE_PATH)" .
+		--build-arg "TOOL_NAME=$(BINARY_NAME)" --file "$(DOCKERFILE_PATH)" .
 
 clean:
 	@rm -rf build/
