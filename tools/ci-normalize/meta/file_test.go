@@ -34,14 +34,12 @@ func Test_newFromReader(t *testing.T) {
 		{
 			name: "all fields",
 			jsonMeta: `
-{"id":"foobar","record_schema_version":"v1","canonical_meta_schema_version":"v1","provider":"github.com","repository_name":"foo/bar","workflow":"example test workflow","job":"job","run_id":"123123123123","run_attempt":1,"git_sha":"deadbeef","git_ref":"ref","git_base_ref":"base","git_head_ref":"head","actor_name":"foo","actor_id":"9090909090","timestamp":"2026-01-15T13:19:35Z"}
+{"meta_id":"foobar","record_schema_version":"v2","canonical_meta_schema_version":"v1","provider":"github.com","repository_name":"foo/bar","workflow":"example test workflow","job":"job","run_id":"123123123123","run_attempt":1,"git_sha":"deadbeef","git_ref":"ref","git_base_ref":"base","git_head_ref":"head","actor_name":"foo","actor_id":"9090909090","timestamp":"2026-01-15T13:19:35Z"}
 `,
 			errFn: require.NoError,
 			wantMeta: &record.Meta{
-				Common: record.Common{
-					ID:                  "foobar",
-					RecordSchemaVersion: "v1",
-				},
+				MetaID:              "foobar",
+				RecordSchemaVersion: "v2",
 				CanonicalMeta: record.CanonicalMeta{
 					CanonicalMetaSchemaVersion: "v1",
 					Provider:                   "github.com",
@@ -69,27 +67,29 @@ func Test_newFromReader(t *testing.T) {
 
 			name: "hard fail on missing ID",
 			jsonMeta: `
-{"record_schema_version":"v1","canonical_meta_schema_version":"v1","git_sha":"deadbeef","git_ref":"ref","git_base_ref":"base","git_head_ref":"head","actor_name":"foo","actor_id":"9090909090","timestamp":"2026-01-15T13:19:35Z"}
+{"record_schema_version":"v2","canonical_meta_schema_version":"v1","git_sha":"deadbeef","git_ref":"ref","git_base_ref":"base","git_head_ref":"head","actor_name":"foo","actor_id":"9090909090","timestamp":"2026-01-15T13:19:35Z"}
 `,
 			errFn: func(tt require.TestingT, err error, i ...interface{}) {
-				assert.ErrorContains(tt, err, "missing .id field")
+				assert.ErrorContains(tt, err, "missing .meta_id field")
 			},
 		},
 		{
 
 			name: "only ID is required",
 			jsonMeta: `
-{"id":"foobar"}
+{"meta_id":"foobar"}
 `,
 			errFn: require.NoError,
 			wantMeta: &record.Meta{
-				Common: record.Common{ID: "foobar", RecordSchemaVersion: "v1"}},
+				MetaID:              "foobar",
+				RecordSchemaVersion: "v2",
+			},
 		},
 		{
 
 			name: "bad JSON",
 			jsonMeta: `
-{"id":"foobar"
+{"meta_id":"foobar"
 `,
 			errFn: func(tt require.TestingT, err error, i ...interface{}) {
 				assert.ErrorContains(tt, err, "unexpected EOF")

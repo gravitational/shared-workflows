@@ -46,10 +46,11 @@ func (m *mockTypedWriter) WriteMeta(md *record.Meta) error {
 
 func TestJUnitProducer_produceFromReader(t *testing.T) {
 	t.Parallel()
+
 	tests := []struct {
 		name       string // description of this test case
 		xml        string
-		meta       record.Common
+		meta       record.Meta
 		wantSuites []*record.Suite
 		wantCases  []*record.Testcase
 		wantMetas  []*record.Meta
@@ -117,13 +118,15 @@ func TestJUnitProducer_produceFromReader(t *testing.T) {
 			errFn: require.NoError,
 			wantSuites: []*record.Suite{
 				&record.Suite{
-					Name:       "full-junit-suite",
-					Timestamp:  "2024-01-02T15:04:05Z",
-					Tests:      4,
-					Failures:   1,
-					Errors:     1,
-					Skipped:    1,
-					DurationMs: 12345,
+					Name:                "full-junit-suite",
+					SuiteID:             "549392e38c4adbc8e60669e312da9537840d211080bc2a4d3e3d8388e30605e1",
+					RecordSchemaVersion: "v2",
+					Timestamp:           "2024-01-02T15:04:05Z",
+					Tests:               4,
+					Failures:            1,
+					Errors:              1,
+					Skipped:             1,
+					DurationMs:          12345,
 					Properties: map[string]string{
 						"arch":       "amd64",
 						"go.version": "1.22",
@@ -133,36 +136,47 @@ func TestJUnitProducer_produceFromReader(t *testing.T) {
 			},
 			wantCases: []*record.Testcase{
 				&record.Testcase{
-					Name:       "test-pass",
-					SuiteName:  "full-junit-suite",
-					Classname:  "example.PassTest",
-					DurationMs: 1234,
-					Status:     "pass",
+					Name:                "test-pass",
+					RecordSchemaVersion: "v2",
+					SuiteName:           "full-junit-suite",
+					Classname:           "example.PassTest",
+					DurationMs:          1234,
+					Status:              "pass",
+					TestcaseID:          "84403ef011d1c3b91392eb6a441db21411141f589781d7022a81b03ec699fb54",
+					SuiteID:             "549392e38c4adbc8e60669e312da9537840d211080bc2a4d3e3d8388e30605e1",
 				},
 				&record.Testcase{
-					Name:           "test-failure",
-					SuiteName:      "full-junit-suite",
-					Classname:      "example.FailureTest",
-					DurationMs:     2345,
-					Status:         "failed",
-					FailureMessage: "assert failed\nAssertionError\n\n            \n            \\u001b[31mexpected true but got false\\u001b[0m\n            at example.FailureTest:42",
+					Name:                "test-failure",
+					RecordSchemaVersion: "v2",
+					SuiteName:           "full-junit-suite",
+					Classname:           "example.FailureTest",
+					DurationMs:          2345,
+					Status:              "failed",
+					FailureMessage:      "assert failed\nAssertionError\n\n            \n            \\u001b[31mexpected true but got false\\u001b[0m\n            at example.FailureTest:42",
+					TestcaseID:          "21f3cfedd152a103d28c6eab72917424c286a70ae0e6cc796be04d3cda0dc6b6",
+					SuiteID:             "549392e38c4adbc8e60669e312da9537840d211080bc2a4d3e3d8388e30605e1",
 				},
 				&record.Testcase{
-
-					Name:         "test-error",
-					SuiteName:    "full-junit-suite",
-					Classname:    "example.ErrorTest",
-					DurationMs:   3456,
-					Status:       "error",
-					SkipMessage:  "",
-					ErrorMessage: "panic occurred\nRuntimeError\n\n            \n            panic: index out of range\n            at example.ErrorTest:99",
+					RecordSchemaVersion: "v2",
+					Name:                "test-error",
+					SuiteName:           "full-junit-suite",
+					Classname:           "example.ErrorTest",
+					DurationMs:          3456,
+					Status:              "error",
+					SkipMessage:         "",
+					ErrorMessage:        "panic occurred\nRuntimeError\n\n            \n            panic: index out of range\n            at example.ErrorTest:99",
+					TestcaseID:          "9b1cc03efadc63ef3e2912222b839a2de84078bec9fb49b26313a8bd88bae1b6",
+					SuiteID:             "549392e38c4adbc8e60669e312da9537840d211080bc2a4d3e3d8388e30605e1",
 				},
 				&record.Testcase{
-					Name:        "test-skipped",
-					SuiteName:   "full-junit-suite",
-					Classname:   "example.SkippedTest",
-					Status:      "skipped",
-					SkipMessage: "feature not implemented yet",
+					Name:                "test-skipped",
+					RecordSchemaVersion: "v2",
+					SuiteName:           "full-junit-suite",
+					Classname:           "example.SkippedTest",
+					Status:              "skipped",
+					SkipMessage:         "feature not implemented yet",
+					TestcaseID:          "9dc209d3fb717153a72382ed35a7dfcf5d0e080fab2aecf7b75817f96a7cf9cb",
+					SuiteID:             "549392e38c4adbc8e60669e312da9537840d211080bc2a4d3e3d8388e30605e1",
 				},
 			},
 		},
@@ -182,37 +196,36 @@ func TestJUnitProducer_produceFromReader(t *testing.T) {
     <testcase name="tc1" classname="example.PassTest" time="1.234"></testcase>
 </testsuite>
 `,
-			meta: record.Common{
-				ID:                  "deadbeef",
+			meta: record.Meta{
+				MetaID:              "deadbeef",
 				RecordSchemaVersion: "v13",
 			},
 			errFn: require.NoError,
 			wantSuites: []*record.Suite{
 				&record.Suite{
-					Name:       "full-junit-suite",
-					Timestamp:  "2024-01-02T15:04:05Z",
-					Tests:      4,
-					Failures:   1,
-					Errors:     1,
-					Skipped:    1,
-					DurationMs: 12345,
-					Common: record.Common{
-						ID:                  "deadbeef",
-						RecordSchemaVersion: "v13",
-					},
+					Name:                "full-junit-suite",
+					RecordSchemaVersion: "v2",
+					Timestamp:           "2024-01-02T15:04:05Z",
+					Tests:               4,
+					Failures:            1,
+					Errors:              1,
+					Skipped:             1,
+					DurationMs:          12345,
+					MetaID:              "deadbeef",
+					SuiteID:             "8e5cbbe9338f706755507f89239b693f820ce938b59bd6b2c12f199cc2c5b516",
 				},
 			},
 			wantCases: []*record.Testcase{
 				&record.Testcase{
-					Name:       "tc1",
-					SuiteName:  "full-junit-suite",
-					Classname:  "example.PassTest",
-					DurationMs: 1234,
-					Status:     "pass",
-					Common: record.Common{
-						ID:                  "deadbeef",
-						RecordSchemaVersion: "v13",
-					},
+					Name:                "tc1",
+					SuiteName:           "full-junit-suite",
+					Classname:           "example.PassTest",
+					DurationMs:          1234,
+					Status:              "pass",
+					MetaID:              "deadbeef",
+					RecordSchemaVersion: "v2",
+					SuiteID:             "8e5cbbe9338f706755507f89239b693f820ce938b59bd6b2c12f199cc2c5b516",
+					TestcaseID:          "c2eddabe5837759d4ce6ff60b0f2d569f7bdbda77a5b8412cabe5ac2567a72a9",
 				},
 			},
 		},
@@ -262,7 +275,7 @@ func TestJUnitProducer_produceFromReader(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := &JUnitProducer{meta: tt.meta}
+			p := &JUnitProducer{meta: &tt.meta}
 			writer := &mockTypedWriter{}
 
 			gotErr := p.produceFromReader(t.Context(), strings.NewReader(tt.xml), writer)
