@@ -48,6 +48,7 @@ func Run(ctx context.Context, cfg Config, name string, args ...string) error {
 		}
 	}
 
+	var lastErr error
 	for attempt := 0; attempt <= cfg.MaxRetries; attempt++ {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -65,13 +66,14 @@ func Run(ctx context.Context, cfg Config, name string, args ...string) error {
 		}
 
 		if err := runCmd(ctx, name, args...); err != nil {
+			lastErr = err
 			continue
 		}
 
 		return nil
 	}
 
-	return fmt.Errorf("command failed after %d retries", cfg.MaxRetries)
+	return fmt.Errorf("command failed after %d retries: %w", cfg.MaxRetries, lastErr)
 }
 
 // backoff calculates a random duration within the range [initial * 2^(attempt-1), initial * 2^attempt).

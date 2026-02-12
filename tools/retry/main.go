@@ -18,9 +18,11 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
 	"syscall"
 	"time"
@@ -54,6 +56,12 @@ func main() {
 
 	if err := Run(ctx, cfg, args[0], args[1:]...); err != nil {
 		fmt.Fprintf(os.Stderr, "retry: %v\n", err)
+
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			os.Exit(exitErr.ExitCode())
+		}
+
 		os.Exit(1)
 	}
 }
