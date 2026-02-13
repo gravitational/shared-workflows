@@ -16,6 +16,8 @@ package input
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/xml"
 	"io"
 	"os"
@@ -30,7 +32,7 @@ import (
 // JUnitProducer produces records from a JUnit XML file.
 type JUnitProducer struct {
 	file string
-	meta record.Common
+	meta *record.Meta
 }
 
 // NewJUnitProducer creates a new JUnitProducer.
@@ -39,9 +41,15 @@ func NewJUnitProducer(file string, metadata *record.Meta) (*JUnitProducer, error
 		return nil, trace.NotFound("junit file %q does not exist: %v", file, err)
 	}
 
-	p := &JUnitProducer{file: file, meta: metadata.Common}
+	p := &JUnitProducer{file: file, meta: metadata}
 
 	return p, nil
+}
+
+func hashID(parts ...string) string {
+	data := strings.Join(parts, "|")
+	sum := sha256.Sum256([]byte(data))
+	return hex.EncodeToString(sum[:])
 }
 
 type junitTestSuite struct {
@@ -65,7 +73,7 @@ func (ts *junitTestSuite) isEmpty() bool {
 	return ts.Name != "" && len(ts.Testcases) > 0
 }
 
-func (ts *junitTestSuite) toRecord(meta record.Common) (*record.Suite, error) {
+func (ts *junitTestSuite) toRecord(meta *record.Meta) (*record.Suite, error) {
 	t, err := time.Parse(time.RFC3339, ts.Timestamp)
 	if err != nil {
 		t, err = time.Parse("2006-01-02T15:04:05", ts.Timestamp)
@@ -75,15 +83,17 @@ func (ts *junitTestSuite) toRecord(meta record.Common) (*record.Suite, error) {
 	}
 
 	return &record.Suite{
-		Common:     meta,
-		Name:       ts.Name,
-		Timestamp:  t.Format(time.RFC3339),
-		Tests:      ts.Tests,
-		Failures:   ts.Failures,
-		Errors:     ts.Errors,
-		Skipped:    ts.Skipped,
-		DurationMs: int64(ts.Time * 1000),
-		Properties: ts.propertiesAsMap(),
+		SuiteID:             hashID(meta.GetId(), ts.Name),
+		MetaID:              meta.GetId(),
+		RecordSchemaVersion: record.RecordSchemaVersion,
+		Name:                ts.Name,
+		Timestamp:           t.Format(time.RFC3339),
+		Tests:               ts.Tests,
+		Failures:            ts.Failures,
+		Errors:              ts.Errors,
+		Skipped:             ts.Skipped,
+		DurationMs:          int64(ts.Time * 1000),
+		Properties:          ts.propertiesAsMap(),
 	}, nil
 }
 
@@ -172,16 +182,19 @@ type junitTestCase struct {
 	SystemErr string        `xml:"system-err"`
 }
 
-func (tc *junitTestCase) toRecord(meta record.Common) *record.Testcase {
+func (tc *junitTestCase) toRecord(meta *record.Meta, suite *record.Suite) *record.Testcase {
 	return &record.Testcase{
-		Common:         meta,
-		Name:           tc.Name,
-		Classname:      tc.Class,
-		DurationMs:     int64(tc.Time * 1000),
-		Status:         tc.status(),
-		FailureMessage: tc.Failure.safeString(),
-		ErrorMessage:   tc.Error.safeString(),
-		SkipMessage:    tc.Skipped.safeString(),
+		TestcaseID:          hashID(suite.GetId(), tc.Name),
+		SuiteID:             suite.GetId(),
+		MetaID:              meta.GetId(),
+		RecordSchemaVersion: record.RecordSchemaVersion,
+		Name:                tc.Name,
+		Classname:           tc.Class,
+		DurationMs:          int64(tc.Time * 1000),
+		Status:              tc.status(),
+		FailureMessage:      tc.Failure.safeString(),
+		ErrorMessage:        tc.Error.safeString(),
+		SkipMessage:         tc.Skipped.safeString(),
 	}
 }
 
@@ -242,7 +255,7 @@ func (p *JUnitProducer) produceFromReader(
 				}
 
 				for _, tc := range ts.Testcases {
-					tcRec := tc.toRecord(p.meta)
+					tcRec := tc.toRecord(p.meta, suiteInfo)
 					tcRec.SuiteName = ts.Name
 					if err := writer.WriteTestcase(tcRec); err != nil {
 						return trace.Wrap(err)

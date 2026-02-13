@@ -44,9 +44,9 @@ func newFromReader(r io.Reader) (*record.Meta, error) {
 		return nil, trace.Wrap(err)
 	}
 
-	// At the very least we need the primary index ID.
-	if meta.ID == "" {
-		return nil, trace.BadParameter("missing .id field")
+	// At the very least we need the meta index ID.
+	if meta.GetId() == "" {
+		return nil, trace.BadParameter("missing .meta_id field")
 	}
 
 	// Overwrite the record schema used for this producer

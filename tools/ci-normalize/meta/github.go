@@ -71,11 +71,9 @@ func newFromGithubEnv() (*record.Meta, error) {
 	}
 
 	return &record.Meta{
-		Common: record.Common{
-			ID:                  id,
-			RecordSchemaVersion: record.RecordSchemaVersion,
-		},
-		CanonicalMeta: canonical,
+		MetaID:              id,
+		RecordSchemaVersion: record.RecordSchemaVersion,
+		CanonicalMeta:       canonical,
 		GitMeta: record.GitMeta{
 			GitRef:     gh.GitRef,
 			GitRefName: gh.GitRefName,

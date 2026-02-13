@@ -29,7 +29,7 @@ func New(metaFile *string) (*record.Meta, error) {
 	case metaFile != nil && *metaFile != "":
 		if m, err := newFromFile(*metaFile); err != nil {
 			return nil, trace.Wrap(err, "reading from file: %q", *metaFile)
-		} else if m != nil && m.ID != "" {
+		} else if m.GetId() != "" {
 			meta = m
 			break
 		}
@@ -37,7 +37,7 @@ func New(metaFile *string) (*record.Meta, error) {
 	default:
 		if m, err := newFromGithubEnv(); err != nil {
 			return nil, trace.Wrap(err)
-		} else if m != nil && m.ID != "" {
+		} else if m.GetId() != "" {
 			meta = m
 		}
 	}
