@@ -3,7 +3,9 @@ package bot
 import (
 	"context"
 	"fmt"
+	"log"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -18,6 +20,34 @@ import (
 // - The RFD itself exists at /rfd/$number-your-title.md
 // - All RFD numbers are properly zero padded to avoid collisions (rfd/123-foo vs. rfd/0123-bar)
 func (b *Bot) ValidateNewRFD(ctx context.Context) error {
+	comments, err := b.c.GitHub.ListComments(ctx,
+		b.c.Environment.Organization,
+		b.c.Environment.Repository,
+		b.c.Environment.Number,
+	)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+
+	const skipPrefix = "/excluderfd"
+	admins := b.c.Review.GetAdminCheckers(b.c.Environment.Author)
+	for _, c := range comments {
+		if !slices.Contains(admins, c.Author) {
+			log.Printf("ignoring comment from non-admin %v", c.Author)
+			continue
+		}
+		// non-admins can edit comments from admins, so we only
+		// consider comments that have not been updated
+		if !c.CreatedAt.IsZero() && c.CreatedAt != c.UpdatedAt {
+			log.Printf("ignoring edited comment from %v", c.Author)
+			continue
+		}
+		if strings.HasPrefix(c.Body, skipPrefix) {
+			log.Printf("skipping RFD validation due to skip comment from %v", c.Author)
+			return nil
+		}
+	}
+
 	files, err := b.c.GitHub.ListFiles(ctx,
 		b.c.Environment.Organization,
 		b.c.Environment.Repository,

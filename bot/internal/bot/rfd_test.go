@@ -4,12 +4,23 @@ import (
 	"context"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/gravitational/shared-workflows/bot/internal/env"
 	"github.com/gravitational/shared-workflows/bot/internal/github"
-	"github.com/stretchr/testify/require"
+	"github.com/gravitational/shared-workflows/bot/internal/review"
 )
 
 func TestValidateNewRFD(t *testing.T) {
+	r, err := review.New(&review.Config{
+		Admins:            []string{"admin1", "admin2"},
+		CoreReviewers:     make(map[string]review.Reviewer),
+		CloudReviewers:    make(map[string]review.Reviewer),
+		CodeReviewersOmit: make(map[string]bool),
+		DocsReviewers:     make(map[string]review.Reviewer),
+		DocsReviewersOmit: make(map[string]bool),
+	})
+	require.NoError(t, err)
 
 	tests := []struct {
 		desc         string
@@ -169,6 +180,15 @@ func TestValidateNewRFD(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
+			gh := &fakeGithub{
+				files: test.files,
+				comments: []github.Comment{
+					{Body: "/excludeflake", Author: "alice"},
+					{Body: "rfd", Author: "alice"},
+					{Body: "test123", Author: "joe"},
+					{Body: "/exclude", Author: "jane"},
+				},
+			}
 			b := &Bot{
 				c: &Config{
 					Environment: &env.Environment{
@@ -176,9 +196,8 @@ func TestValidateNewRFD(t *testing.T) {
 						Repository:   "test",
 						UnsafeHead:   test.branch,
 					},
-					GitHub: &fakeGithub{
-						files: test.files,
-					},
+					Review: r,
+					GitHub: gh,
 				},
 			}
 
@@ -189,6 +208,11 @@ func TestValidateNewRFD(t *testing.T) {
 			}
 
 			require.ErrorContains(t, err, test.errorMessage)
+
+			// Update the comments to include an admin exclusion and
+			// assert that validation passes for all test cases.
+			gh.comments = append(gh.comments, github.Comment{Body: "/excluderfd", Author: "admin2"})
+			require.NoError(t, b.ValidateNewRFD(context.Background()))
 		})
 	}
 }
