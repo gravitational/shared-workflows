@@ -45,7 +45,7 @@ func TestNewFromGithubEnv(t *testing.T) {
 				t.Helper()
 
 				assert.Equal(t, record.RecordSchemaVersion, meta.RecordSchemaVersion)
-				assert.NotEmpty(t, meta.ID)
+				assert.NotEmpty(t, meta.GetId())
 
 				assert.Equal(t, "github.com", meta.Provider)
 				assert.Equal(t, "example/repo", meta.RepositoryName)

@@ -100,10 +100,8 @@ func TestNew_WriterOutputs(t *testing.T) {
 func TestRenderJinjaPathFromMeta(t *testing.T) {
 	ts := time.Date(2026, 1, 16, 15, 4, 5, 0, time.UTC)
 	meta := &record.Meta{
-		Common: record.Common{
-			ID:                  "abc123",
-			RecordSchemaVersion: "v1",
-		},
+		MetaID:              "abc123",
+		RecordSchemaVersion: "v1",
 		CanonicalMeta: record.CanonicalMeta{
 			RepositoryName: "repo/test",
 		},
@@ -129,6 +127,6 @@ func TestRenderJinjaPathFromMeta_NilMeta(t *testing.T) {
 }
 
 func TestRenderJinjaPathFromMeta_EmptyTemplate(t *testing.T) {
-	path := renderJinjaPathFromMeta("", &record.Meta{Common: record.Common{ID: "foo"}})
+	path := renderJinjaPathFromMeta("", &record.Meta{MetaID: "foo"})
 	assert.Equal(t, "", path)
 }

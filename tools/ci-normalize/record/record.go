@@ -22,18 +22,14 @@ import (
 	"github.com/gravitational/trace"
 )
 
-const RecordSchemaVersion = "v1"
+const RecordSchemaVersion = "v2"
 const CanonicalMetaSchemaVersion = "v1"
-
-// Common holds fields common to all record types.
-type Common struct {
-	ID                  string `json:"id"` // Generated from CanonicalMeta
-	RecordSchemaVersion string `json:"record_schema_version"`
-}
 
 // Suite represents a test suite containing multiple test cases.
 type Suite struct {
-	Common
+	SuiteID             string `json:"suite_id"` // SHA256(meta.id + name)
+	MetaID              string `json:"meta_id"`
+	RecordSchemaVersion string `json:"record_schema_version"`
 
 	Name       string            `json:"suite_name"`
 	Timestamp  string            `json:"timestamp"` // RFC3339
@@ -45,9 +41,28 @@ type Suite struct {
 	Properties map[string]string `json:"properties,omitempty"`
 }
 
+// GetId is a nil safe getter for suite id
+func (s *Suite) GetId() string {
+	if s != nil {
+		return s.SuiteID
+	}
+	return ""
+}
+
+// GetName is a nil safe getter for suite name
+func (s *Suite) GetName() string {
+	if s != nil {
+		return s.Name
+	}
+	return ""
+}
+
 // Testcase represents a single test case within a test suite.
 type Testcase struct {
-	Common
+	TestcaseID          string `json:"testcase_id"` // SHA256(suite.id + name)
+	SuiteID             string `json:"suite_id"`
+	MetaID              string `json:"meta_id"`
+	RecordSchemaVersion string `json:"record_schema_version"`
 
 	Name       string `json:"test_name"`
 	SuiteName  string `json:"suite_name"`
@@ -63,12 +78,22 @@ type Testcase struct {
 
 // Meta holds metadata about the CI workflow run.
 type Meta struct {
-	Common
+	MetaID              string `json:"meta_id"` // Generated from CanonicalMeta
+	RecordSchemaVersion string `json:"record_schema_version"`
+
 	CanonicalMeta
 	GitMeta
 	ActorMeta
 	RunnerMeta
 	Timestamp string `json:"timestamp"` // RFC3339 timestamp at creation
+}
+
+// GetId is a nil safe getter for meta id
+func (m *Meta) GetId() string {
+	if m != nil {
+		return m.MetaID
+	}
+	return ""
 }
 
 // GitMeta holds Git-related metadata.
