@@ -783,6 +783,45 @@ func (c *Client) ListCommitFiles(ctx context.Context, organization string, repos
 	return findTreeBlobEntries(tree, pathPrefix), nil
 }
 
+// FetchAllOrgMembers retrieves the login handles of every member within the specified
+// GitHub organization.
+//
+// It handles pagination automatically, making repeated API calls until the entire
+// membership list is retrieved. Note that for very large organizations, this can
+// be a slow operation and may consume a significant portion of the GitHub API rate limit.
+//
+// Returns a slice of usernames (logins) on success, or a wrapped error if any
+// API request fails.
+func (c *Client) FetchAllOrgMembers(ctx context.Context, org string) ([]string, error) {
+	var allMembers []*go_github.User
+
+	opts := &go_github.ListMembersOptions{
+		ListOptions: go_github.ListOptions{PerPage: perPageFetchAllMembers},
+	}
+
+	for {
+		members, resp, err := c.client.Organizations.ListMembers(ctx, org, opts)
+		if err != nil {
+			return nil, trace.Wrap(err)
+		}
+
+		allMembers = append(allMembers, members...)
+
+		if resp.NextPage == 0 {
+			break
+		}
+
+		opts.Page = resp.NextPage
+	}
+
+	allMemberUsernames := make([]string, 0, len(allMembers))
+	for _, member := range allMembers {
+		allMemberUsernames = append(allMemberUsernames, member.GetLogin())
+	}
+
+	return allMemberUsernames, nil
+}
+
 // findTreeBlobEntries returns all blob entries in tree whose path matches pathPrefix.
 // All blob entries are returned when pathPrefix is empty. Called bby GetCommitFilenames.
 func findTreeBlobEntries(tree *go_github.Tree, pathPrefix string) []string {
@@ -809,5 +848,6 @@ type Job struct {
 
 const (
 	// perPage is the number of items per page to request.
-	perPage = 100
+	perPage                = 100
+	perPageFetchAllMembers = 100
 )
