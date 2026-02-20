@@ -10,7 +10,7 @@ func TestFindWorkflowRunIDByUniqueStepName(t *testing.T) {
 	// correlationID is a static value that matches the step name in testdata/list-jobs-with-correlation-id.json
 	const correlationID = "c658ef64-1ea1-4802-ac75-92a43e4d8012"
 	const workflowName = "test-workflow.yml"
-	
+
 	tests := []struct {
 		name                  string
 		listWorkflowsResponse string
