@@ -62,6 +62,13 @@ func (b *Bot) verifyDBMigrations(ctx context.Context) error {
 // verifyDBMigration ensures the DB migration files in a PR have a timestamp
 // that is more recent than the migration files in the base branch.
 func (b *Bot) verifyDBMigration(ctx context.Context, pathPrefix string) error {
+	if b.c.Environment.Number == 0 {
+		// manually skip merge queue runs
+		// TODO(michellescripts) identify temporary branch to pull files changes in merge queue
+		log.Print("Verify:cloudDBMigration: pulling PR 0")
+		return nil
+	}
+
 	// get all PR files
 	prFiles, err := b.c.GitHub.ListFiles(ctx,
 		b.c.Environment.Organization,
