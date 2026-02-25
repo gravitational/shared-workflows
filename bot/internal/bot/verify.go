@@ -62,76 +62,48 @@ func (b *Bot) verifyDBMigrations(ctx context.Context) error {
 // verifyDBMigration ensures the DB migration files in a PR have a timestamp
 // that is more recent than the migration files in the base branch.
 func (b *Bot) verifyDBMigration(ctx context.Context, pathPrefix string) error {
-	var migrationIDs []int
-
-	// if in merge_group (==0), requires the temporary branch ref
-	// else check the PR
 	if b.c.Environment.Number == 0 {
-		// get temporary branch ref
-		tempRef, err := b.c.GitHub.GetRef(ctx,
-			b.c.Environment.Organization,
-			b.c.Environment.Repository,
-			"heads/"+b.c.Environment.UnsafeHead)
-		if err != nil {
-			return trace.Wrap(err)
-		}
+		// manually skip merge queue runs
+		// TODO(michellescripts) identify temporary branch to pull files changes in merge queue
+		log.Print("Verify:cloudDBMigration: pulling PR 0")
+		return nil
+	}
 
-		// get temporary branch migration files
-		tempFiles, err := b.c.GitHub.ListCommitFiles(ctx,
-			b.c.Environment.Organization,
-			b.c.Environment.Repository,
-			tempRef.SHA,
-			pathPrefix)
-		if err != nil {
-			if errors.Is(err, github.ErrTruncatedTree) {
-				log.Print("Verify:cloudDBMigration: skipping because the tree size is too big")
-				return nil
-			}
-			return trace.Wrap(err)
-		}
+	// get all PR files
+	prFiles, err := b.c.GitHub.ListFiles(ctx,
+		b.c.Environment.Organization,
+		b.c.Environment.Repository,
+		b.c.Environment.Number)
+	if err != nil {
+		return trace.Wrap(err)
+	}
 
-		// parse temporary branch migration file ids
-		migrationIDs, err = parseMigrationFileIDs(pathPrefix, tempFiles)
-		if err != nil {
-			return trace.Wrap(err)
-		}
-	} else {
-		// get all PR files
-		prFiles, err := b.c.GitHub.ListFiles(ctx,
-			b.c.Environment.Organization,
-			b.c.Environment.Repository,
-			b.c.Environment.Number)
-		if err != nil {
-			return trace.Wrap(err)
-		}
+	// no files in the PR? okay then.
+	if len(prFiles) == 0 {
+		log.Print("Verify:cloudDBMigration: no PR files")
+		return nil
+	}
 
-		// no files in the PR? okay then.
-		if len(prFiles) == 0 {
-			log.Print("Verify:cloudDBMigration: no PR files")
-			return nil
-		}
+	// don't evaluate removed files
+	prFiles = filterSlice(prFiles, func(f github.PullRequestFile) bool {
+		return f.Status != github.StatusRemoved
+	})
 
-		// don't evaluate removed files
-		prFiles = filterSlice(prFiles, func(f github.PullRequestFile) bool {
-			return f.Status != github.StatusRemoved
-		})
-
-		// parse PR migration file ids
-		// 202301031500_subscription-alter.up.sql => 202301031500
-		migrationIDs, err = parseMigrationFileIDs(pathPrefix, excludeDownMigrationFiles(pullRequestFileNames(prFiles)))
-		if err != nil {
-			return trace.Wrap(err)
-		}
+	// parse PR migration file ids
+	// 202301031500_subscription-alter.up.sql => 202301031500
+	prIDs, err := parseMigrationFileIDs(pathPrefix, excludeDownMigrationFiles(pullRequestFileNames(prFiles)))
+	if err != nil {
+		return trace.Wrap(err)
 	}
 
 	// no PR migration files
-	if len(migrationIDs) == 0 {
+	if len(prIDs) == 0 {
 		log.Printf("Verify:cloudDBMigration: no migration files in %s in this PR", pathPrefix)
 		return nil
 	}
 
 	// get base branch ref
-	baseRef, err := b.c.GitHub.GetRef(ctx,
+	branchRef, err := b.c.GitHub.GetRef(ctx,
 		b.c.Environment.Organization,
 		b.c.Environment.Repository,
 		"heads/"+b.c.Environment.UnsafeBase)
@@ -140,10 +112,10 @@ func (b *Bot) verifyDBMigration(ctx context.Context, pathPrefix string) error {
 	}
 
 	// get base branch migration files
-	baseFiles, err := b.c.GitHub.ListCommitFiles(ctx,
+	branchFiles, err := b.c.GitHub.ListCommitFiles(ctx,
 		b.c.Environment.Organization,
 		b.c.Environment.Repository,
-		baseRef.SHA,
+		branchRef.SHA,
 		pathPrefix)
 	if err != nil {
 		if errors.Is(err, github.ErrTruncatedTree) {
@@ -154,20 +126,20 @@ func (b *Bot) verifyDBMigration(ctx context.Context, pathPrefix string) error {
 	}
 
 	// parse base branch migration file ids
-	baseIDs, err := parseMigrationFileIDs(pathPrefix, baseFiles)
+	branchIDs, err := parseMigrationFileIDs(pathPrefix, branchFiles)
 	if err != nil {
 		return trace.Wrap(err)
 	}
 
 	// no base branch migration files
-	if len(baseIDs) == 0 {
-		log.Printf("Verify:cloudDBMigration: no migration files in the base branch: %s", baseRef.Name)
+	if len(branchIDs) == 0 {
+		log.Printf("Verify:cloudDBMigration: no migration files in the base branch: %s", branchRef.Name)
 		return nil
 	}
 
 	// error if the oldest migration file in the PR has an older timestamp
 	// than the most recent migration file in the base branch
-	oldestPRID, newestBranchID := migrationIDs[0], baseIDs[len(baseIDs)-1]
+	oldestPRID, newestBranchID := prIDs[0], branchIDs[len(branchIDs)-1]
 	log.Printf("Verify:cloudDBMigration: comparing migration file IDs; PR:%d <= Branch:%d", oldestPRID, newestBranchID)
 	if oldestPRID <= newestBranchID {
 		return trace.Errorf("pull request has an older migration (%d) than the most recent migration file in the %s branch (%d); the name of the migration file needs to be changed to be more recent than %[3]d",
