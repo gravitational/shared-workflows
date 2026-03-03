@@ -24,7 +24,7 @@ var (
 	audience      = "cognito-identity.amazonaws.com"
 	loginProvider = "token.actions.githubusercontent.com/teleport"
 
-	minSessionDuration = 900 // 15 minutes, Cognito's default session duration
+	minSessionDuration = 15 * time.Minute // matches Cognito's default
 )
 
 // CognitoGHATokenExchanger creates a role provider that exchanges a GitHub Actions JWT token for a Cognito OIDC token.
