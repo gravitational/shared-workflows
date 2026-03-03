@@ -83,19 +83,11 @@ func (c *Config) GetDefaultsFromEnv() {
 	if c.Cognito.AccountID == "" {
 		c.Cognito.AccountID = c.getEnv("AWS_ACCOUNT_ID")
 	}
-
 	if c.SecretsManager.AccountID == "" {
 		c.SecretsManager.AccountID = c.getEnv("AWS_ACCOUNT_ID")
 	}
 	if c.SecretsManager.Region == "" {
 		c.SecretsManager.Region = c.getEnv("AWS_REGION")
-	}
-
-	if c.GHA.Environment == "" {
-		c.GHA.Environment = c.getEnv("GITHUB_ENVIRONMENT")
-	}
-	if c.GHA.GitHubToken == "" {
-		c.GHA.GitHubToken = c.getEnv("GITHUB_TOKEN")
 	}
 }
 

@@ -16,9 +16,9 @@ import (
 
 func main() {
 	githubToken := kingpin.Flag("github-token", "GitHub token to identify the workflow accessing KVStore values.").Envar("INPUT_GITHUB-TOKEN").String()
-	secretsManagerAccountID := kingpin.Flag("secrets-manager-account-id", "AWS account ID where Secrets Manager secrets are located.").Envar("INPUT_SECRETS-MANAGER-ACCOUNT_ID").String()
+	secretsManagerAccountID := kingpin.Flag("secrets-manager-account-id", "AWS account ID where Secrets Manager secrets are located.").Envar("INPUT_SECRETS-MANAGER-ACCOUNT-ID").String()
 	secretsManagerRegion := kingpin.Flag("secrets-manager-region", "AWS region where Secrets Manager secrets are located.").Envar("INPUT_SECRETS-MANAGER-REGION").Default("us-west-2").String()
-	cognitoAccountID := kingpin.Flag("cognito-account-id", "AWS account ID where Cognito is located.").Envar("INPUT_COGNITO-ACCOUNT_ID").String()
+	cognitoAccountID := kingpin.Flag("cognito-account-id", "AWS account ID where Cognito is located.").Envar("INPUT_COGNITO-ACCOUNT-ID").String()
 	cognitoIdentityPoolID := kingpin.Flag("cognito-identity-pool-id", "Cognito identity pool ID.").Envar("INPUT_COGNITO-IDENTITY-POOL-ID").String()
 	cognitoRegion := kingpin.Flag("cognito-region", "AWS region where Cognito is located.").Envar("INPUT_COGNITO-REGION").Default("us-west-2").String()
 	cognitoRoleARN := kingpin.Flag("cognito-role-arn", "Cognito role ARN.").Envar("INPUT_COGNITO-ROLE-ARN").String()
