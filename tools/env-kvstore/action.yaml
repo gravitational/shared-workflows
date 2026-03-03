@@ -1,0 +1,42 @@
+---
+name: Upload normalized test results
+description: Captures metadata, normalizes the test results and uploads to s3.
+
+inputs:
+  github-token:
+    description: "GitHub JWT token to identify the workflow. Defaults to GITHUB_TOKEN from environment. Will be retrieved if not provided."
+  secrets-manager-account-id:
+    description: "AWS account where Secrets Manager secrets are stored. Defaults to AWS_ACCOUNT_ID from environment."
+  secrets-manager-region:
+    description: "AWS region where Secrets Manager secrets are stored. Defaults to AWS_REGION from environment."
+  cognito-account-id:
+    description: "AWS account where Cognito is located. Defaults to AWS_ACCOUNT_ID from environment."
+  cognito-identity-pool-id:
+    required: true
+    description: "Cognito Identity Pool configured with GitHub OIDC and principal tag mapping."
+  cognito-region:
+    description: "AWS region where Cognito is located. Inferred from Cognito Identity Pool ID."
+  cognito-role-arn:
+    required: true
+    description: "Role to use for retrieving Secrets Manager secrets. Assumed via OIDC using Cognito token."
+  values:
+    required: true
+    description: "Values to retrieve from KVStore and set as environment variables. CSV: environment variable name, value type (variable|secret), override key"
+
+runs:
+  using: composite
+  steps:
+    - name: Install env-kvstore from GitHub Release
+      # Relative paths cannot be used here because the action is not guaranteed to be checked out in the same location as the repository using it.
+      uses: gravitational/shared-workflows/.github/actions/install-gh-release@41eefbdab5c67d8e0169730e999f73cd315a8cb5
+      with:
+        tool-name: env-kvstore
+        version: ${{ inputs.tool-version }}
+        tag-prefix: tools/env-kvstore/
+        
+    - name: Retrieve variables and secrets from KVStore
+      id: retrieve_from_kvstore
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: |
+        env-kvstore

@@ -1,0 +1,100 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+
+	"github.com/gravitational/shared-workflows/tools/env-kvstore/cognitotoken"
+	"github.com/gravitational/shared-workflows/tools/env-kvstore/config"
+
+	"github.com/alecthomas/kingpin/v2"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	awscfg "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
+)
+
+func main() {
+	githubToken := kingpin.Flag("github-token", "GitHub token to identify the workflow accessing KVStore values.").Envar("INPUT_GITHUB-TOKEN").String()
+	secretsManagerAccountID := kingpin.Flag("secrets-manager-account-id", "AWS account ID where Secrets Manager secrets are located.").Envar("INPUT_SECRETS-MANAGER-ACCOUNT_ID").String()
+	secretsManagerRegion := kingpin.Flag("secrets-manager-region", "AWS region where Secrets Manager secrets are located.").Envar("INPUT_SECRETS-MANAGER-REGION").Default("us-west-2").String()
+	cognitoAccountID := kingpin.Flag("cognito-account-id", "AWS account ID where Cognito is located.").Envar("INPUT_COGNITO-ACCOUNT_ID").String()
+	cognitoIdentityPoolID := kingpin.Flag("cognito-identity-pool-id", "Cognito identity pool ID.").Envar("INPUT_COGNITO-IDENTITY-POOL-ID").String()
+	cognitoRegion := kingpin.Flag("cognito-region", "AWS region where Cognito is located.").Envar("INPUT_COGNITO-REGION").Default("us-west-2").String()
+	cognitoRoleARN := kingpin.Flag("cognito-role-arn", "Cognito role ARN.").Envar("INPUT_COGNITO-ROLE-ARN").String()
+	values := kingpin.Flag("values", "Values to retrieve from KVStore and set as environment variables. CSV: environment variable name, value type (variable|secret), value source (repo|env), name of AWS Secrets Manager secret").Envar("INPUT_VALUES").String()
+	ghaIDTokenRequestToken := kingpin.Flag("gha-id-token-request-token", "GitHub Actions ID token request token for retrieving OIDC token to authenticate with Cognito when AWS credentials are not provided.").Envar("ACTIONS_ID_TOKEN_REQUEST_TOKEN").String()
+	ghaIDTokenRequestURL := kingpin.Flag("gha-id-token-request-url", "GitHub Actions ID token request URL for retrieving OIDC token to authenticate with Cognito when AWS credentials are not provided.").Envar("ACTIONS_ID_TOKEN_REQUEST_URL").String()
+
+	kingpin.Parse()
+
+	cfg := config.NewWithEnv()
+
+	cliConfig := config.Config{
+		Cognito: config.CognitoConfig{
+			AccountID:      nz(cognitoAccountID),
+			IdentityPoolID: nz(cognitoIdentityPoolID),
+			Region:         nz(cognitoRegion),
+			RoleARN:        nz(cognitoRoleARN),
+		},
+		SecretsManager: config.SecretsManagerConfig{
+			AccountID: nz(secretsManagerAccountID),
+			Region:    nz(secretsManagerRegion),
+		},
+		Values: nz(values),
+		GHA: config.GHAConfig{
+			IDTokenRequestToken: nz(ghaIDTokenRequestToken),
+			IDTokenRequestURL:   nz(ghaIDTokenRequestURL),
+			GitHubToken:         nz(githubToken),
+		},
+	}
+
+	cfg.Merge(&cliConfig)
+	if err := cfg.Validate(); err != nil {
+		fmt.Printf("Invalid configuration: %v\n", err)
+		os.Exit(1)
+	}
+
+	if err := run(*cfg); err != nil {
+		fmt.Printf("Error running load-kvstore-env: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func run(config config.Config) error {
+	tokenExchanger := cognitotoken.NewTokenExchanger(&config.Cognito, &config.GHA)
+	provider, err := tokenExchanger.CreateProvider()
+	if err != nil {
+		return fmt.Errorf("error creating Cognito role credentials provider: %w", err)
+	}
+
+	awsCfg, err := awscfg.LoadDefaultConfig(context.Background(),
+		awscfg.WithRegion(config.SecretsManager.Region),
+		awscfg.WithCredentialsProvider(provider),
+	)
+	if err != nil {
+		return fmt.Errorf("error creating AWS configuration: %w", err)
+	}
+
+	stsClient := sts.NewFromConfig(awsCfg)
+	identityOutput, err := stsClient.GetCallerIdentity(context.Background(), &sts.GetCallerIdentityInput{})
+	if err != nil {
+		return fmt.Errorf("error validating AWS credentials with STS GetCallerIdentity: %w", err)
+	}
+	fmt.Printf("Successfully authenticated to AWS account %s with ARN %s\n", aws.ToString(identityOutput.Account), aws.ToString(identityOutput.Arn))
+
+	// TODO: implement:
+	//  retrieve from Secrets Manager - environment specific values overwrite repo-level values
+	//  set environment variables for subsequent steps
+	//  mask secret values
+
+	return nil
+}
+
+// nz returns the value of the string pointer or an empty string if the pointer is nil.
+func nz(v *string) string {
+	if v == nil {
+		return ""
+	}
+	return *v
+}
