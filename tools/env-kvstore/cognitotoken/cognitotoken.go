@@ -33,6 +33,7 @@ type CognitoGHATokenExchanger struct {
 	Claims           GHAClaims
 	ghaJWT           string
 	cognitoOIDCToken string
+	ctx				 context.Context
 
 	gha     config.GHAConfig
 	cognito config.CognitoConfig
@@ -49,8 +50,9 @@ type GHAClaims struct {
 }
 
 // NewTokenExchanger creates a new CognitoGHATokenExchanger with the provided Cognito and GHA configuration.
-func NewTokenExchanger(cognitoConfig *config.CognitoConfig, ghaConfig *config.GHAConfig) *CognitoGHATokenExchanger {
+func NewTokenExchanger(ctx context.Context, cognitoConfig *config.CognitoConfig, ghaConfig *config.GHAConfig) *CognitoGHATokenExchanger {
 	return &CognitoGHATokenExchanger{
+		ctx:     ctx,
 		ghaJWT:  ghaConfig.GitHubToken,
 		gha:     *ghaConfig,
 		cognito: *cognitoConfig,
@@ -193,7 +195,7 @@ func (e *CognitoGHATokenExchanger) fetchCognitoOIDCToken() error {
 
 	cognitoClient := cognitoidentity.New(cognitoidentity.Options{Region: e.cognito.Region})
 	getIdOutput, err := cognitoClient.GetId(
-		context.TODO(),
+		e.ctx,
 		&cognitoidentity.GetIdInput{
 			AccountId:      &e.cognito.AccountID,
 			IdentityPoolId: &e.cognito.IdentityPoolID,
@@ -207,7 +209,7 @@ func (e *CognitoGHATokenExchanger) fetchCognitoOIDCToken() error {
 	}
 
 	getOpenIdTokenOutput, err := cognitoClient.GetOpenIdToken(
-		context.TODO(),
+		e.ctx,
 		&cognitoidentity.GetOpenIdTokenInput{
 			IdentityId: getIdOutput.IdentityId,
 			Logins: map[string]string{

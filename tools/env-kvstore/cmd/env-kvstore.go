@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/gravitational/shared-workflows/tools/env-kvstore/cognitotoken"
 	"github.com/gravitational/shared-workflows/tools/env-kvstore/config"
@@ -15,6 +17,9 @@ import (
 )
 
 func main() {
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
+	defer cancel()
+
 	githubToken := kingpin.Flag("github-token", "GitHub token to identify the workflow accessing KVStore values.").Envar("INPUT_GITHUB-TOKEN").String()
 	secretsManagerAccountID := kingpin.Flag("secrets-manager-account-id", "AWS account ID where Secrets Manager secrets are located.").Envar("INPUT_SECRETS-MANAGER-ACCOUNT-ID").String()
 	secretsManagerRegion := kingpin.Flag("secrets-manager-region", "AWS region where Secrets Manager secrets are located.").Envar("INPUT_SECRETS-MANAGER-REGION").Default("us-west-2").String()
@@ -55,20 +60,20 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := run(*cfg); err != nil {
+	if err := run(ctx, *cfg); err != nil {
 		fmt.Printf("Error running load-kvstore-env: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func run(config config.Config) error {
-	tokenExchanger := cognitotoken.NewTokenExchanger(&config.Cognito, &config.GHA)
+func run(ctx context.Context, config config.Config) error {
+	tokenExchanger := cognitotoken.NewTokenExchanger(ctx, &config.Cognito, &config.GHA)
 	provider, err := tokenExchanger.CreateProvider()
 	if err != nil {
 		return fmt.Errorf("error creating Cognito role credentials provider: %w", err)
 	}
 
-	awsCfg, err := awscfg.LoadDefaultConfig(context.Background(),
+	awsCfg, err := awscfg.LoadDefaultConfig(ctx,
 		awscfg.WithRegion(config.SecretsManager.Region),
 		awscfg.WithCredentialsProvider(provider),
 	)
@@ -77,7 +82,7 @@ func run(config config.Config) error {
 	}
 
 	stsClient := sts.NewFromConfig(awsCfg)
-	identityOutput, err := stsClient.GetCallerIdentity(context.Background(), &sts.GetCallerIdentityInput{})
+	identityOutput, err := stsClient.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
 	if err != nil {
 		return fmt.Errorf("error validating AWS credentials with STS GetCallerIdentity: %w", err)
 	}
