@@ -242,11 +242,7 @@ func parseClaims(label, token string, returnClaims *map[string]any) error {
 	}
 
 	// Sort claims by key for consistent display
-	keys := make([]string, 0, len(claims))
-	for k := range maps.Keys(claims) {
-		keys = append(keys, k)
-	}
-	slices.Sort(keys)
+	keys := slices.Sorted(maps.Keys(claims))
 
 	fmt.Printf("::group::Show %s JWT Claims\n-----------------\n", label)
 	// replace unix timestamps with dates and extract values to return
