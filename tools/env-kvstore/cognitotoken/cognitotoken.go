@@ -117,9 +117,9 @@ func (e *CognitoGHATokenExchanger) getAWSSessionName() (string, error) {
 		return "", fmt.Errorf("error parsing GHA JWT claims: %w", err)
 	}
 
-	runID, okRunID := claims["run_id"].(string)
-	sha, okSHA := claims["sha"].(string)
-	if !okRunID || !okSHA || runID == "" || sha == "" {
+	runID, _ := claims["run_id"].(string)
+	sha, _ := claims["sha"].(string)
+	if runID == "" || sha == "" {
 		return "", fmt.Errorf("failed to extract run_id and sha from token claims")
 	}
 
