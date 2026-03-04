@@ -46,7 +46,8 @@ type GHAClaims struct {
 	SHA         string `json:"sha"`
 	Repository  string `json:"repository"`
 	Enterprise  string `json:"enterprise"`
-	Environment string `json:"environment"`
+	Environment string `json:"environment,omitempty"`
+	jwt.RegisteredClaims
 }
 
 // NewTokenExchanger creates a new CognitoGHATokenExchanger with the provided Cognito and GHA configuration.
@@ -105,33 +106,25 @@ func (e *CognitoGHATokenExchanger) getAWSSessionName() (string, error) {
 		}
 	}
 
-	claims := map[string]any{
-		"run_id":      "",
-		"sha":         "",
-		"repository":  "",
-		"enterprise":  "",
-		"environment": "",
+	if err := logClaims("GHA", e.ghaJWT); err != nil {
+		return "", fmt.Errorf("error logging GHA JWT claims: %w", err)
 	}
-	err := parseClaims("GHA", e.ghaJWT, &claims)
+	
+	token, _, err := jwt.NewParser(jwt.WithPaddingAllowed()).ParseUnverified(e.ghaJWT, &GHAClaims{})
 	if err != nil {
-		return "", fmt.Errorf("error parsing GHA JWT claims: %w", err)
+		return "", fmt.Errorf("error parsing claims to GHAClaims struct: %w", err)
+	}
+	c, ok := token.Claims.(*GHAClaims)
+	if !ok {
+		return "", fmt.Errorf("error asserting GHA claims to GHAClaims struct")
+	}
+	e.Claims = *c
+
+	if e.Claims.RunID == "" || e.Claims.SHA == "" {
+		return "", fmt.Errorf("missing required claim values in GHA JWT token: run_id and sha are required: run_id=%s, sha=%s", e.Claims.RunID, e.Claims.SHA)
 	}
 
-	runID, _ := claims["run_id"].(string)
-	sha, _ := claims["sha"].(string)
-	if runID == "" || sha == "" {
-		return "", fmt.Errorf("failed to extract run_id and sha from token claims")
-	}
-
-	e.Claims = GHAClaims{
-		RunID:       runID,
-		SHA:         sha,
-		Repository:  claims["repository"].(string),
-		Enterprise:  claims["enterprise"].(string),
-		Environment: claims["environment"].(string),
-	}
-
-	sessionName := fmt.Sprintf("%s@%s", runID, sha)
+	sessionName := fmt.Sprintf("%s@%s", e.Claims.RunID, e.Claims.SHA)
 	fmt.Printf("Using session name: %s\n", sessionName)
 	return sessionName, nil
 }
@@ -223,54 +216,45 @@ func (e *CognitoGHATokenExchanger) fetchCognitoOIDCToken() error {
 
 	e.cognitoOIDCToken = *getOpenIdTokenOutput.Token
 
-	err = parseClaims("Cognito", e.cognitoOIDCToken, nil)
-	if err != nil {
-		return fmt.Errorf("error parsing Cognito OIDC token claims: %w", err)
+	if err = logClaims("Cognito", e.cognitoOIDCToken); err != nil {
+		return fmt.Errorf("error logging Cognito OIDC token claims: %w", err)
 	}
 
 	return nil
 }
 
-// parseClaims outputs a list of claims from the provided JWT.
-// accepts an optional map pointer to return specific claims by key.
-func parseClaims(label, token string, returnClaims *map[string]any) error {
-	claims := jwt.MapClaims{}
+// logClaims outputs a list of claims from the provided JWT.
+func logClaims(label, token string) (error) {
+	mapClaims := jwt.MapClaims{}
 	// Signature will be verified by Cognito or STS, we can skip verification
-	_, _, err := jwt.NewParser(jwt.WithPaddingAllowed()).ParseUnverified(token, claims)
+	_, _, err := jwt.NewParser(jwt.WithPaddingAllowed()).ParseUnverified(token, mapClaims)
 	if err != nil {
 		return fmt.Errorf("failed to parse unverified token: %w", err)
 	}
 
 	// Sort claims by key for consistent display
-	keys := slices.Sorted(maps.Keys(claims))
+	keys := slices.Sorted(maps.Keys(mapClaims))
 
 	fmt.Printf("::group::Show %s JWT Claims\n-----------------\n", label)
 	// replace unix timestamps with dates and extract values to return
 	for _, key := range keys {
-		value := claims[key]
+		value := mapClaims[key]
 		if key == "iat" || key == "exp" || key == "nbf" {
 			// convert numeric date claims to human-readable format
 			if floatVal, ok := value.(float64); ok {
 				timeVal := time.Unix(int64(floatVal), 0)
-				claims[key] = timeVal.Format(time.RFC3339)
-			}
-		}
-		if returnClaims != nil {
-			_, ok := (*returnClaims)[key]
-			if ok {
-				(*returnClaims)[key] = value
+				mapClaims[key] = timeVal.Format(time.RFC3339)
 			}
 		}
 	}
-	prettyJSON, err := json.MarshalIndent(claims, "  ", "    ")
+	prettyJSON, err := json.MarshalIndent(mapClaims, "  ", "    ")
 	if err == nil {
 		fmt.Println(string(prettyJSON))
 	} else {
 		for _, key := range keys {
-			fmt.Printf("%s: %v\n", key, claims[key])
+			fmt.Printf("%s: %v\n", key, mapClaims[key])
 		}
 	}
 	fmt.Print("::endgroup::\n")
-
 	return nil
 }
