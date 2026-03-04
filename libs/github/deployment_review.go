@@ -22,7 +22,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/google/go-github/v71/github"
+	"github.com/google/go-github/v83/github"
 )
 
 // PendingDeploymentApprovalState represents the state of a pending deployment approval.

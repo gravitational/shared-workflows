@@ -27,7 +27,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	go_github "github.com/google/go-github/v71/github"
+	go_github "github.com/google/go-github/v83/github"
 	"golang.org/x/oauth2"
 )
 

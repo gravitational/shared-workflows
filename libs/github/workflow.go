@@ -22,7 +22,7 @@ import (
 	"log/slog"
 	"strings"
 
-	go_github "github.com/google/go-github/v71/github"
+	go_github "github.com/google/go-github/v83/github"
 )
 
 // WorkflowRunInfo contains information about a specific workflow run.
@@ -100,26 +100,37 @@ type WorkflowDispatchRequest struct {
 	Inputs map[string]any
 }
 
+// WorkflowRunDispatchResult is the return value of of a WorkflowDispatch event.
+type WorkflowRunDispatchResult struct {
+	// WorkflowRunID is the ID of the resulting workflow.
+	// You can use [GetWorkflowRunInfo] to query for more info.
+	WorkflowRunID int64
+}
+
 // WorkflowDispatch triggers a workflow dispatch event.
 // Care should be taken when using this function as it can trigger arbitrary workflows in the target repository.
 // Ensure that the workflow being triggered is safe and does not execute untrusted code.
 // Always validate and sanitize any inputs passed to the workflow.
-func (c *Client) WorkflowDispatch(ctx context.Context, org, repo string, req WorkflowDispatchRequest) error {
+func (c *Client) WorkflowDispatch(ctx context.Context, org, repo string, req WorkflowDispatchRequest) (WorkflowRunDispatchResult, error) {
 	if req.WorkflowName == "" {
-		return fmt.Errorf("workflow name is required")
+		return WorkflowRunDispatchResult{}, fmt.Errorf("workflow name is required")
 	}
 	if req.Ref == "" {
-		return fmt.Errorf("ref is required")
+		return WorkflowRunDispatchResult{}, fmt.Errorf("ref is required")
 	}
 
-	_, err := c.client.Actions.CreateWorkflowDispatchEventByFileName(ctx, org, repo, req.WorkflowName, go_github.CreateWorkflowDispatchEventRequest{
-		Ref:    req.Ref,
-		Inputs: req.Inputs,
+	result, _, err := c.client.Actions.CreateWorkflowDispatchEventByFileName(ctx, org, repo, req.WorkflowName, go_github.CreateWorkflowDispatchEventRequest{
+		Ref:              req.Ref,
+		Inputs:           req.Inputs,
+		ReturnRunDetails: new(true),
 	})
 	if err != nil {
-		return fmt.Errorf("CreateWorkflowDispatchEventByFileName API call: %w", err)
+		return WorkflowRunDispatchResult{}, fmt.Errorf("CreateWorkflowDispatchEventByFileName API call: %w", err)
 	}
-	return nil
+
+	return WorkflowRunDispatchResult{
+		WorkflowRunID: result.GetWorkflowRunID(),
+	}, nil
 }
 
 // WorkflowRunNotFoundError is a sentinel error returned when a workflow run cannot be found.
@@ -140,12 +151,12 @@ func newWorkflowRunNotFoundError(message string) *WorkflowRunNotFoundError {
 	}
 }
 
-// FindWorkflowRunByCorrelatedStepNameParams contains the parameters for finding a workflow run ID by a 
+// FindWorkflowRunByCorrelatedStepNameParams contains the parameters for finding a workflow run ID by a
 // step name containing a correlation ID.
 type FindWorkflowRunByCorrelatedStepNameParams struct {
 	// WorkflowName is the name of the workflow to search within.
 	// Workflows are defined in the .github/workflows directory of a repository and are named by their filename .github/workflows/<NAME>.
-		// Note that the file extension (.yml or .yaml) should be included when specifying the workflow name.
+	// Note that the file extension (.yml or .yaml) should be included when specifying the workflow name.
 	WorkflowName string
 	// CorrelationID is the unique name of the step to search for within the workflow runs.
 	CorrelationID string

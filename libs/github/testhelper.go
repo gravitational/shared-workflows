@@ -8,7 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
-	go_github "github.com/google/go-github/v71/github"
+	go_github "github.com/google/go-github/v83/github"
 )
 
 // newFakeClient creates a new GitHub Client using the provided HTTP mux for handling requests.
