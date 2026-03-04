@@ -20,7 +20,7 @@ import (
 	"github.com/hashicorp/go-retryablehttp"
 )
 
-var (
+const (
 	audience      = "cognito-identity.amazonaws.com"
 	loginProvider = "token.actions.githubusercontent.com/teleport"
 
@@ -88,7 +88,7 @@ func (e *CognitoGHATokenExchanger) CreateProvider() (*stscreds.WebIdentityRolePr
 		e,
 		func(opt *stscreds.WebIdentityRoleOptions) {
 			opt.RoleSessionName = sessionName
-			opt.Duration = time.Duration(minSessionDuration) * time.Second
+			opt.Duration = minSessionDuration
 		},
 	)
 
