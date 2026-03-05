@@ -37,20 +37,20 @@ func main() {
 
 	cliConfig := config.Config{
 		Cognito: config.CognitoConfig{
-			AccountID:      nz(cognitoAccountID),
-			IdentityPoolID: nz(cognitoIdentityPoolID),
-			Region:         nz(cognitoRegion),
-			RoleARN:        nz(cognitoRoleARN),
+			AccountID:      aws.ToString(cognitoAccountID),
+			IdentityPoolID: aws.ToString(cognitoIdentityPoolID),
+			Region:         aws.ToString(cognitoRegion),
+			RoleARN:        aws.ToString(cognitoRoleARN),
 		},
 		SecretsManager: config.SecretsManagerConfig{
-			AccountID: nz(secretsManagerAccountID),
-			Region:    nz(secretsManagerRegion),
+			AccountID: aws.ToString(secretsManagerAccountID),
+			Region:    aws.ToString(secretsManagerRegion),
 		},
-		Values: nz(values),
+		Values: aws.ToString(values),
 		GHA: config.GHAConfig{
-			IDTokenRequestToken: nz(ghaIDTokenRequestToken),
-			IDTokenRequestURL:   nz(ghaIDTokenRequestURL),
-			GitHubToken:         nz(githubToken),
+			IDTokenRequestToken: aws.ToString(ghaIDTokenRequestToken),
+			IDTokenRequestURL:   aws.ToString(ghaIDTokenRequestURL),
+			GitHubToken:         aws.ToString(githubToken),
 		},
 	}
 
@@ -94,12 +94,4 @@ func run(ctx context.Context, config config.Config) error {
 	//  mask secret values
 
 	return nil
-}
-
-// nz returns the value of the string pointer or an empty string if the pointer is nil.
-func nz(v *string) string {
-	if v == nil {
-		return ""
-	}
-	return *v
 }
