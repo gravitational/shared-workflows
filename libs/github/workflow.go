@@ -99,8 +99,8 @@ type WorkflowDispatchRequest struct {
 	Inputs map[string]any
 }
 
-// WorkflowRunDispatchResult is the return value of of a WorkflowDispatch event.
-type WorkflowRunDispatchResult struct {
+// WorkflowDispatchResult is the return value of of a WorkflowDispatch event.
+type WorkflowDispatchResult struct {
 	// WorkflowRunID is the ID of the resulting workflow.
 	// You can use [GetWorkflowRunInfo] to query for more info.
 	WorkflowRunID int64
@@ -110,12 +110,12 @@ type WorkflowRunDispatchResult struct {
 // Care should be taken when using this function as it can trigger arbitrary workflows in the target repository.
 // Ensure that the workflow being triggered is safe and does not execute untrusted code.
 // Always validate and sanitize any inputs passed to the workflow.
-func (c *Client) WorkflowDispatch(ctx context.Context, org, repo string, req WorkflowDispatchRequest) (WorkflowRunDispatchResult, error) {
+func (c *Client) WorkflowDispatch(ctx context.Context, org, repo string, req WorkflowDispatchRequest) (WorkflowDispatchResult, error) {
 	if req.WorkflowName == "" {
-		return WorkflowRunDispatchResult{}, fmt.Errorf("workflow name is required")
+		return WorkflowDispatchResult{}, fmt.Errorf("workflow name is required")
 	}
 	if req.Ref == "" {
-		return WorkflowRunDispatchResult{}, fmt.Errorf("ref is required")
+		return WorkflowDispatchResult{}, fmt.Errorf("ref is required")
 	}
 
 	result, _, err := c.client.Actions.CreateWorkflowDispatchEventByFileName(ctx, org, repo, req.WorkflowName, go_github.CreateWorkflowDispatchEventRequest{
@@ -124,10 +124,10 @@ func (c *Client) WorkflowDispatch(ctx context.Context, org, repo string, req Wor
 		ReturnRunDetails: new(true),
 	})
 	if err != nil {
-		return WorkflowRunDispatchResult{}, fmt.Errorf("CreateWorkflowDispatchEventByFileName API call: %w", err)
+		return WorkflowDispatchResult{}, fmt.Errorf("CreateWorkflowDispatchEventByFileName API call: %w", err)
 	}
 
-	return WorkflowRunDispatchResult{
+	return WorkflowDispatchResult{
 		WorkflowRunID: result.GetWorkflowRunID(),
 	}, nil
 }
