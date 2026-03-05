@@ -5,7 +5,7 @@ go 1.26
 require (
 	github.com/cli/go-gh/v2 v2.12.1
 	github.com/golang-jwt/jwt/v5 v5.2.2
-	github.com/google/go-github/v83 v83.0.1-0.20260226201734-a70ac7742ea5
+	github.com/google/go-github/v84 v84.0.0
 	github.com/gravitational/trace v1.5.1
 	github.com/stretchr/testify v1.10.0
 	golang.org/x/oauth2 v0.30.0

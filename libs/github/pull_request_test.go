@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	go_github "github.com/google/go-github/v83/github"
+	go_github "github.com/google/go-github/v84/github"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

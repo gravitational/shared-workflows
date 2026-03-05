@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	go_github "github.com/google/go-github/v83/github"
+	go_github "github.com/google/go-github/v84/github"
 )
 
 // WorkflowRunInfo contains information about a specific workflow run.

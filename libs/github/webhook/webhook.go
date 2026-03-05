@@ -22,7 +22,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/google/go-github/v83/github"
+	"github.com/google/go-github/v84/github"
 )
 
 // Handler is an implementation of [http.Handler] that handles GitHub webhook events.
