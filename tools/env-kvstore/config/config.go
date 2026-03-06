@@ -6,32 +6,12 @@ import (
 	"strings"
 )
 
-type envGetter interface {
-	getEnv(key string) string
-}
-
-type envGetterOS struct{}
-
-func (e *envGetterOS) getEnv(key string) string {
-	return os.Getenv(key)
-}
-
 // Config holds the configuration values for the application.
 type Config struct {
 	Cognito        CognitoConfig
 	SecretsManager SecretsManagerConfig
 	Values         string
 	GHA            GHAConfig
-	envGetter
-}
-
-func newConfig(envGetter envGetter) *Config {
-	cfg := &Config{envGetter: envGetter}
-	return cfg
-}
-
-func New() *Config {
-	return newConfig(&envGetterOS{})
 }
 
 // CognitoConfig holds the necessary information for performing Cognito authentication.
@@ -74,24 +54,42 @@ type ValueConfig struct {
 
 // NewWithEnv creates a new Config and populates fields with environment variables.
 func NewWithEnv() *Config {
-	c := New()
+	c := &Config{}
 	c.GetDefaultsFromEnv()
 	return c
 }
 
 func (c *Config) GetDefaultsFromEnv() {
 	if c.Cognito.AccountID == "" {
-		c.Cognito.AccountID = c.getEnv("AWS_ACCOUNT_ID")
+		c.Cognito.AccountID = os.Getenv("AWS_ACCOUNT_ID")
 	}
 	if c.SecretsManager.AccountID == "" {
-		c.SecretsManager.AccountID = c.getEnv("AWS_ACCOUNT_ID")
+		c.SecretsManager.AccountID = os.Getenv("AWS_ACCOUNT_ID")
 	}
 	if c.SecretsManager.Region == "" {
-		c.SecretsManager.Region = c.getEnv("AWS_REGION")
+		c.SecretsManager.Region = os.Getenv("AWS_REGION")
 	}
 }
 
+// Validate checks that all required configuration fields are set and that the Values field is properly formatted.
+// It also fills in any missing AccountID or Region fields from the Cognito Role ARN or Identity Pool ID.
 func (c *Config) Validate() error {
+	// AccountID can be derived from the Role ARN
+	accountFromRoleARN := ""
+	if c.Cognito.RoleARN != "" {
+		parts := strings.Split(c.Cognito.RoleARN, ":")
+		if len(parts) >= 5 {
+			accountFromRoleARN = parts[4]
+		}
+	}
+	// Region can be derived from the Identity Pool ID
+	regionFromIdentityPoolID := ""
+	if c.Cognito.IdentityPoolID != "" {
+		parts := strings.Split(c.Cognito.IdentityPoolID, ":")
+		if len(parts) >= 1 {
+			regionFromIdentityPoolID = parts[0]
+		}
+	}
 	if c.Cognito.IdentityPoolID == "" {
 		return fmt.Errorf("missing required config: Cognito Identity Pool ID")
 	}
@@ -99,7 +97,10 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("missing required config: Cognito Role ARN")
 	}
 	if c.Cognito.AccountID == "" {
-		return fmt.Errorf("missing required config: Cognito Account ID")
+		if accountFromRoleARN == "" {
+			return fmt.Errorf("missing required config: Cognito Account ID")
+		}
+		c.Cognito.AccountID = accountFromRoleARN
 	}
 
 	if c.GHA.GitHubToken == "" && (c.GHA.IDTokenRequestToken == "" || c.GHA.IDTokenRequestURL == "") {
@@ -107,11 +108,16 @@ func (c *Config) Validate() error {
 	}
 
 	if c.SecretsManager.Region == "" {
-		return fmt.Errorf("missing required config: AWS region where Secrets Manager secrets are located")
+		if regionFromIdentityPoolID == "" {
+			return fmt.Errorf("missing required config: AWS region where Secrets Manager secrets are located")
+		}
+		c.SecretsManager.Region = regionFromIdentityPoolID
 	}
-
 	if c.SecretsManager.AccountID == "" {
-		return fmt.Errorf("missing required config: AWS account ID where Secrets Manager secrets are located")
+		if accountFromRoleARN == "" {
+			return fmt.Errorf("missing required config: AWS account ID where Secrets Manager secrets are located")
+		}
+		c.SecretsManager.AccountID = accountFromRoleARN
 	}
 
 	if c.Values == "" {

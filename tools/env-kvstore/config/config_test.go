@@ -4,29 +4,22 @@ import (
 	"testing"
 )
 
-type envGetterTest struct {
-	EnvMap map[string]string
-}
-
-func (e *envGetterTest) getEnv(key string) string {
-	if val, ok := e.EnvMap[key]; ok {
-		return val
-	}
-	return ""
-}
-
-func NewTestConfig(envMap map[string]string) *Config {
-	return newConfig(&envGetterTest{EnvMap: envMap})
-}
-
 func TestConfigValidation(t *testing.T) {
+	validGHAConfig := GHAConfig{
+		IDTokenRequestToken: "example-token",
+		IDTokenRequestURL:   "http://test.github.com/token",
+	}
+	validCognitoConfig := CognitoConfig{
+		IdentityPoolID: "us-west-2:example-pool-id",
+		RoleARN:        "arn:aws:iam::123456789012:role/example-role",
+	}
 	tests := []struct {
 		name    string
 		config  Config
 		wantErr bool
 	}{
 		{
-			name: "valid config with Cognito auth",
+			name: "full config with all fields set",
 			config: Config{
 				Cognito: CognitoConfig{
 					IdentityPoolID: "us-west-2:example-pool-id",
@@ -37,11 +30,17 @@ func TestConfigValidation(t *testing.T) {
 					AccountID: "123456789012",
 					Region:    "us-west-2",
 				},
-				GHA: GHAConfig{
-					IDTokenRequestToken: "example-token",
-					IDTokenRequestURL:   "http://test.github.com/token",
-				},
+				GHA:    validGHAConfig,
 				Values: "MY_VAR,variable,my-var",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid minimal config with Cognito auth and inferrable AccountID and Region",
+			config: Config{
+				Cognito: validCognitoConfig,
+				GHA:     validGHAConfig,
+				Values:  "MY_VAR,variable,my-var",
 			},
 			wantErr: false,
 		},
@@ -52,82 +51,34 @@ func TestConfigValidation(t *testing.T) {
 					Region:    "us-west-2",
 					AccountID: "123456789012",
 				},
+				GHA:    validGHAConfig,
 				Values: "MY_VAR,secret,my-secret",
-			},
-			wantErr: true,
-		},
-		{
-			name: "missing AWS region",
-			config: Config{
-				Cognito: CognitoConfig{
-					IdentityPoolID: "us-west-2:example-pool-id",
-					AccountID:      "123456789012",
-					RoleARN:        "arn:aws:iam::123456789012:role/example-role",
-				},
-				SecretsManager: SecretsManagerConfig{
-					AccountID: "123456789012",
-				},
-			},
-			wantErr: true,
-		},
-		{
-			name: "missing AWS account ID",
-			config: Config{
-				Cognito: CognitoConfig{
-					IdentityPoolID: "us-west-2:example-pool-id",
-					AccountID:      "123456789012",
-					RoleARN:        "arn:aws:iam::123456789012:role/example-role",
-				},
-				SecretsManager: SecretsManagerConfig{
-					Region: "us-west-2",
-				},
 			},
 			wantErr: true,
 		},
 		{
 			name: "missing values",
 			config: Config{
-				Cognito: CognitoConfig{
-					IdentityPoolID: "us-west-2:example-pool-id",
-					AccountID:      "123456789012",
-					RoleARN:        "arn:aws:iam::123456789012:role/example-role",
-				},
-				SecretsManager: SecretsManagerConfig{
-					Region:    "us-west-2",
-					AccountID: "123456789012",
-				},
+				Cognito: validCognitoConfig,
+				GHA:     validGHAConfig,
 			},
 			wantErr: true,
 		},
 		{
 			name: "invalid values format",
 			config: Config{
-				Cognito: CognitoConfig{
-					IdentityPoolID: "us-west-2:example-pool-id",
-					AccountID:      "123456789012",
-					RoleARN:        "arn:aws:iam::123456789012:role/example-role",
-				},
-				SecretsManager: SecretsManagerConfig{
-					Region:    "us-west-2",
-					AccountID: "123456789012",
-				},
-				Values: "INVALID_FORMAT_TOO_FEW_COLUMNS",
+				Cognito: validCognitoConfig,
+				GHA:     validGHAConfig,
+				Values:  "INVALID_FORMAT_TOO_FEW_COLUMNS",
 			},
 			wantErr: true,
 		},
 		{
 			name: "invalid value type",
 			config: Config{
-				Cognito: CognitoConfig{
-					IdentityPoolID: "us-west-2:example-pool-id",
-					AccountID:      "123456789012",
-					RoleARN:        "arn:aws:iam::123456789012:role/example-role",
-				},
-				SecretsManager: SecretsManagerConfig{
-					Region:    "us-west-2",
-					AccountID: "123456789012",
-				},
-				Values: "MY_VAR,not_a_type,repo,my-secret",
+				Cognito: validCognitoConfig,
+				GHA:     validGHAConfig,
+				Values:  "MY_VAR,not_a_type,repo,my-secret",
 			},
 			wantErr: true,
 		},
@@ -144,11 +95,10 @@ func TestConfigValidation(t *testing.T) {
 }
 
 func TestConfigFromEnv(t *testing.T) {
-	cfg := newConfig(&envGetterTest{EnvMap: map[string]string{
-		"AWS_REGION":     "us-west-2",
-		"AWS_ACCOUNT_ID": "123456789012",
-		"INPUT_VALUES":   "MY_VAR,variable,my-var\nANOTHER_VAR,secret,env",
-	}})
+	t.Setenv("AWS_REGION", "us-west-2")
+	t.Setenv("AWS_ACCOUNT_ID", "123456789012")
+	t.Setenv("INPUT_VALUES", "MY_VAR,variable,my-var\nANOTHER_VAR,secret,env")
+	cfg := NewWithEnv()
 	cfg.GetDefaultsFromEnv()
 
 	if cfg.SecretsManager.Region != "us-west-2" {
