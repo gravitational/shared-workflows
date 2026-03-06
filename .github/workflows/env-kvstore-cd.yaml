@@ -1,0 +1,25 @@
+---
+name: env-kvstore CD
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - tools/env-kvstore
+    tags:
+      - "tools/env-kvstore/v[0-9]+.[0-9]+.[0-9]+**"
+  pull_request:
+    paths:
+      - tools/env-kvstore/workflows/cd.yaml
+      - .github/workflows/env-kvstore-cd.yaml
+      - .github/workflows/reusable-cd.yaml
+
+jobs:
+  release:
+    uses: ./.github/workflows/reusable-cd.yaml
+    permissions:
+      contents: write
+      packages: write
+    with:
+      tool-directory: ./tools/env-kvstore
