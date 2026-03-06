@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"maps"
 	"net/http"
 	"slices"
@@ -125,7 +126,7 @@ func (e *CognitoGHATokenExchanger) getAWSSessionName() (string, error) {
 	}
 
 	sessionName := fmt.Sprintf("%s@%s", e.Claims.RunID, e.Claims.SHA)
-	fmt.Printf("Using session name: %s\n", sessionName)
+	slog.Info("Using session name.", "sessionName", sessionName)
 	return sessionName, nil
 }
 
@@ -134,7 +135,7 @@ func (e *CognitoGHATokenExchanger) fetchGHAJWT() error {
 	if e.ghaJWT != "" {
 		return nil
 	}
-	fmt.Printf("::add-mask::%s\n", e.gha.IDTokenRequestToken)
+	fmt.Printf("::add-mask::%s", e.gha.IDTokenRequestToken)
 	url := fmt.Sprintf("%s&audience=%s", e.gha.IDTokenRequestURL, audience)
 
 	retryClient := retryablehttp.NewClient()
@@ -235,7 +236,7 @@ func logClaims(label, token string) error {
 	// Sort claims by key for consistent display
 	keys := slices.Sorted(maps.Keys(mapClaims))
 
-	fmt.Printf("::group::Show %s JWT Claims\n-----------------\n", label)
+	fmt.Printf("::group::Show %s JWT Claims\n-----------------", label)
 	// replace unix timestamps with dates and extract values to return
 	for _, key := range keys {
 		value := mapClaims[key]
@@ -249,12 +250,12 @@ func logClaims(label, token string) error {
 	}
 	prettyJSON, err := json.MarshalIndent(mapClaims, "  ", "    ")
 	if err == nil {
-		fmt.Println(string(prettyJSON))
+		slog.Info(string(prettyJSON))
 	} else {
 		for _, key := range keys {
-			fmt.Printf("%s: %v\n", key, mapClaims[key])
+			slog.Info(fmt.Sprintf("%s: %v", key, mapClaims[key]))
 		}
 	}
-	fmt.Print("::endgroup::\n")
+	fmt.Println("::endgroup::")
 	return nil
 }

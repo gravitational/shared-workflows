@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -17,6 +18,8 @@ import (
 )
 
 func main() {
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})))
+
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
 	defer cancel()
 
@@ -56,12 +59,12 @@ func main() {
 
 	cfg.Merge(&cliConfig)
 	if err := cfg.Validate(); err != nil {
-		fmt.Printf("Invalid configuration: %v\n", err)
+		slog.Error("Invalid configuration.", "error", err)
 		os.Exit(1)
 	}
 
 	if err := run(ctx, *cfg); err != nil {
-		fmt.Printf("Error running load-kvstore-env: %v\n", err)
+		slog.Error("Error running env-kvstore.", "error", err)
 		os.Exit(1)
 	}
 }
@@ -86,7 +89,7 @@ func run(ctx context.Context, config config.Config) error {
 	if err != nil {
 		return fmt.Errorf("error validating AWS credentials with STS GetCallerIdentity: %w", err)
 	}
-	fmt.Printf("Successfully authenticated to AWS account %s with ARN %s\n", aws.ToString(identityOutput.Account), aws.ToString(identityOutput.Arn))
+	slog.Info("Successfully authenticated to AWS account.", "account", aws.ToString(identityOutput.Account), "arn", aws.ToString(identityOutput.Arn))
 
 	// TODO: implement:
 	//  retrieve from Secrets Manager - environment specific values overwrite repo-level values
