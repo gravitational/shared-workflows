@@ -5,8 +5,8 @@ import (
 )
 
 var (
-	jwt_with_session_naming_claims    = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJ0ZXN0IiwiaWF0IjpudWxsLCJleHAiOm51bGwsImF1ZCI6Im5vbmUiLCJzdWIiOiJ0ZXN0IiwicnVuX2lkIjoicnVuSUQiLCJzaGEiOiJTSEEifQ.1w2YtkjMCMOeyIwoRKhB3keJkF9AZh2CmdcYD6EFcwg"
-	jwt_without_session_naming_claims = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJ0ZXN0IiwiaWF0IjpudWxsLCJleHAiOm51bGwsImF1ZCI6Im5vbmUiLCJzdWIiOiJ0ZXN0Iiwibm90X3J1bl9pZCI6InJ1bklEIiwibm90X3NoYSI6IlNIQSJ9.r4cCaI_W09e-W2dxzdg5uwjH3rlCcI5jFBb4Bugm6Uw"
+	jwtWithSessionNamingClaims    = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJ0ZXN0IiwiaWF0IjpudWxsLCJleHAiOm51bGwsImF1ZCI6Im5vbmUiLCJzdWIiOiJ0ZXN0IiwicnVuX2lkIjoicnVuSUQiLCJzaGEiOiJTSEEifQ.1w2YtkjMCMOeyIwoRKhB3keJkF9AZh2CmdcYD6EFcwg"
+	jwtWithoutSessionNamingClaims = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJ0ZXN0IiwiaWF0IjpudWxsLCJleHAiOm51bGwsImF1ZCI6Im5vbmUiLCJzdWIiOiJ0ZXN0Iiwibm90X3J1bl9pZCI6InJ1bklEIiwibm90X3NoYSI6IlNIQSJ9.r4cCaI_W09e-W2dxzdg5uwjH3rlCcI5jFBb4Bugm6Uw"
 )
 
 func TestGetAWSSessionName(t *testing.T) {
@@ -19,7 +19,7 @@ func TestGetAWSSessionName(t *testing.T) {
 		{
 			name: "JWT with session naming claims",
 			exchanger: &CognitoGHATokenExchanger{
-				ghaJWT: jwt_with_session_naming_claims,
+				ghaJWT: jwtWithSessionNamingClaims,
 			},
 			expectedName:   "runID@SHA",
 			expectingError: false,
@@ -27,7 +27,7 @@ func TestGetAWSSessionName(t *testing.T) {
 		{
 			name: "JWT without session naming claims",
 			exchanger: &CognitoGHATokenExchanger{
-				ghaJWT: jwt_without_session_naming_claims,
+				ghaJWT: jwtWithoutSessionNamingClaims,
 			},
 			expectedName:   "",
 			expectingError: true,

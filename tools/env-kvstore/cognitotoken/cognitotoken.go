@@ -33,7 +33,7 @@ type CognitoGHATokenExchanger struct {
 	Claims           GHAClaims
 	ghaJWT           string
 	cognitoOIDCToken string
-	ctx				 context.Context
+	ctx              context.Context
 
 	gha     config.GHAConfig
 	cognito config.CognitoConfig
@@ -109,7 +109,7 @@ func (e *CognitoGHATokenExchanger) getAWSSessionName() (string, error) {
 	if err := logClaims("GHA", e.ghaJWT); err != nil {
 		return "", fmt.Errorf("error logging GHA JWT claims: %w", err)
 	}
-	
+
 	token, _, err := jwt.NewParser(jwt.WithPaddingAllowed()).ParseUnverified(e.ghaJWT, &GHAClaims{})
 	if err != nil {
 		return "", fmt.Errorf("error parsing claims to GHAClaims struct: %w", err)
@@ -224,7 +224,7 @@ func (e *CognitoGHATokenExchanger) fetchCognitoOIDCToken() error {
 }
 
 // logClaims outputs a list of claims from the provided JWT.
-func logClaims(label, token string) (error) {
+func logClaims(label, token string) error {
 	mapClaims := jwt.MapClaims{}
 	// Signature will be verified by Cognito or STS, we can skip verification
 	_, _, err := jwt.NewParser(jwt.WithPaddingAllowed()).ParseUnverified(token, mapClaims)
