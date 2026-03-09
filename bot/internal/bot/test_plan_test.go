@@ -1,7 +1,6 @@
 package bot
 
 import (
-	"context"
 	"strings"
 	"testing"
 
@@ -282,7 +281,243 @@ func TestValidateManualTestPlan(t *testing.T) {
 				},
 			}
 
-			test.assertion(t, b.ValidateManualTestPlan(context.Background()))
+			test.assertion(t, b.ValidateManualTestPlan(t.Context()))
+		})
+	}
+}
+
+func TestGetManualTestPlanEntries(t *testing.T) {
+	tests := []struct {
+		desc     string
+		body     string
+		expected []string
+	}{
+		{
+			desc: "empty-if-no-body",
+		},
+		{
+			desc: "empty-if-no-test-plan",
+			body: "some typical PR entry",
+		},
+		{
+			desc: "pass-extracts-full-section",
+			body: strings.Join([]string{
+				"## Manual Test Plan",
+				"",
+				"### Test Environment",
+				"",
+				"staging",
+				"",
+				"### Test Cases",
+				"- [x] Verify login works",
+				"- [x] Verify logout works",
+			}, "\n"),
+			expected: []string{strings.Join([]string{
+				"## Manual Test Plan",
+				"",
+				"### Test Environment",
+				"",
+				"staging",
+				"",
+				"### Test Cases",
+				"- [x] Verify login works",
+				"- [x] Verify logout works",
+			}, "\n")},
+		},
+		{
+			desc: "pass-stops-at-next-heading",
+			body: strings.Join([]string{
+				"## Manual Test Plan",
+				"",
+				"### Test Environment",
+				"",
+				"staging",
+				"",
+				"### Test Cases",
+				"- [x] Step one",
+				"## Another Section",
+				"Some other content",
+			}, "\n"),
+			expected: []string{strings.Join([]string{
+				"## Manual Test Plan",
+				"",
+				"### Test Environment",
+				"",
+				"staging",
+				"",
+				"### Test Cases",
+				"- [x] Step one",
+			}, "\n")},
+		},
+		{
+			desc: "pass-section-with-content-before",
+			body: strings.Join([]string{
+				"## Summary",
+				"This is a summary.",
+				"## Manual Test Plan",
+				"",
+				"### Test Environment",
+				"",
+				"staging",
+				"",
+				"### Test Cases",
+				"- [x] First check",
+			}, "\n"),
+			expected: []string{strings.Join([]string{
+				"## Manual Test Plan",
+				"",
+				"### Test Environment",
+				"",
+				"staging",
+				"",
+				"### Test Cases",
+				"- [x] First check",
+			}, "\n")},
+		},
+		{
+			desc: "pass-trims-trailing-whitespace",
+			body: strings.Join([]string{
+				"## Manual Test Plan",
+				"",
+				"### Test Environment",
+				"",
+				"staging",
+				"",
+				"### Test Cases",
+				"- [x] Step one",
+				"",
+				"  ",
+				"",
+			}, "\n"),
+			expected: []string{strings.Join([]string{
+				"## Manual Test Plan",
+				"",
+				"### Test Environment",
+				"",
+				"staging",
+				"",
+				"### Test Cases",
+				"- [x] Step one",
+			}, "\n")},
+		},
+		{
+			desc: "pass-unchecked-boxes-included",
+			body: strings.Join([]string{
+				"## Manual Test Plan",
+				"",
+				"### Test Environment",
+				"",
+				"staging",
+				"",
+				"### Test Cases",
+				"- [x] Verify login works",
+				"- [ ] Verify logout works",
+			}, "\n"),
+			expected: []string{strings.Join([]string{
+				"## Manual Test Plan",
+				"",
+				"### Test Environment",
+				"",
+				"staging",
+				"",
+				"### Test Cases",
+				"- [x] Verify login works",
+				"- [ ] Verify logout works",
+			}, "\n")},
+		},
+		{
+			desc: "pass-stops-before-trailing-text",
+			body: strings.Join([]string{
+				"## Manual Test Plan",
+				"",
+				"### Test Environment",
+				"",
+				"staging",
+				"",
+				"### Test Cases",
+				"- [x] Verify login works",
+				"- [x] Verify logout works",
+				"",
+				"Some unrelated trailing text that is not part of the test plan.",
+				"More trailing text.",
+			}, "\n"),
+			expected: []string{strings.Join([]string{
+				"## Manual Test Plan",
+				"",
+				"### Test Environment",
+				"",
+				"staging",
+				"",
+				"### Test Cases",
+				"- [x] Verify login works",
+				"- [x] Verify logout works",
+			}, "\n")},
+		},
+		{
+			desc: "pass-includes-continuation-text-on-last-case",
+			body: strings.Join([]string{
+				"## Manual Test Plan",
+				"",
+				"### Test Environment",
+				"",
+				"staging",
+				"",
+				"### Test Cases",
+				"- [x] Verify login works",
+				"- [x] Verify logout works",
+				"  with SSO enabled",
+			}, "\n"),
+			expected: []string{strings.Join([]string{
+				"## Manual Test Plan",
+				"",
+				"### Test Environment",
+				"",
+				"staging",
+				"",
+				"### Test Cases",
+				"- [x] Verify login works",
+				"- [x] Verify logout works",
+				"  with SSO enabled",
+			}, "\n")},
+		},
+		{
+			desc: "pass-continuation-stops-at-blank-line",
+			body: strings.Join([]string{
+				"## Manual Test Plan",
+				"",
+				"### Test Environment",
+				"",
+				"staging",
+				"",
+				"### Test Cases",
+				"- [x] Verify login works",
+				"  with SSO enabled",
+				"",
+				"Some trailing text.",
+			}, "\n"),
+			expected: []string{strings.Join([]string{
+				"## Manual Test Plan",
+				"",
+				"### Test Environment",
+				"",
+				"staging",
+				"",
+				"### Test Cases",
+				"- [x] Verify login works",
+				"  with SSO enabled",
+			}, "\n")},
+		},
+		{
+			desc: "empty-if-no-test-cases",
+			body: "## Manual Test Plan\n\nSome other text here.",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			b, _ := buildTestingFixtures()
+
+			entries := b.getManualTestPlanEntries(test.body)
+			require.Equal(t, test.expected, entries)
 		})
 	}
 }
