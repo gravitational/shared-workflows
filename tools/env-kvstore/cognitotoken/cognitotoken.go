@@ -140,11 +140,13 @@ func (e *CognitoGHATokenExchanger) fetchGHAJWT() error {
 
 	retryClient := retryablehttp.NewClient()
 	retryClient.RetryMax = 5
+	retryClient.HTTPClient.Timeout = 10 * time.Second
 
 	req, err := retryablehttp.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return fmt.Errorf("could not create request for GHA token %s: %w", url, err)
 	}
+
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", e.gha.IDTokenRequestToken))
 	res, err := retryClient.Do(req)
 	if err != nil {
