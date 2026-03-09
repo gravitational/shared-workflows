@@ -40,7 +40,7 @@ A Cognito Identity Pool is used to exchange GitHub OIDC tokens for a Cognito OID
 <details>
 <summary>Example Cognito Identity Pool Principal Mapping</summary>
 
-```json
+```hcl
 resource "aws_cognito_identity_pool_provider_principal_tag" "gha" {
   identity_provider_name = "arn:aws:iam::${AWS_ACCOUNT_ID}$:oidc-provider/token.actions.githubusercontent.com/${GITHUB_ORG}"
   identity_pool_id       = aws_cognito_identity_pool.gha.id
@@ -84,7 +84,7 @@ An IAM role that can be assumed using the Cognito token is required. The followi
             "Action": "sts:AssumeRoleWithWebIdentity",
             "Condition": {
                 "StringEquals": {
-                    "aws:RequestTag/enterprise": "${GITHUB_ORG}$",
+                    "aws:RequestTag/enterprise": "${GITHUB_ORG}",
                     "cognito-identity.amazonaws.com:aud": "us-west-2:12345678-1234-1234-1234-1234567890ab",
                     "sts:RoleSessionName": "${aws:RequestTag/run_id}@${aws:RequestTag/sha}"
                 },
@@ -115,6 +115,7 @@ Role policy should allow `secretsmanager:GetSecretValue` for secrets following t
 
 <details>
 <summary>Example IAM Role Policy</summary>
+
 ```json
 {
     "Statement": [
@@ -131,6 +132,7 @@ Role policy should allow `secretsmanager:GetSecretValue` for secrets following t
     ],
 }
 ```
+
 </details>
 
 ## Trust Model
