@@ -237,6 +237,7 @@ func logClaims(label, token string) error {
 	keys := slices.Sorted(maps.Keys(mapClaims))
 
 	fmt.Printf("::group::Show %s JWT Claims\n-----------------", label)
+	defer fmt.Println("::endgroup::")
 	// replace unix timestamps with dates and extract values to return
 	for _, key := range keys {
 		value := mapClaims[key]
@@ -256,6 +257,5 @@ func logClaims(label, token string) error {
 			slog.Info(fmt.Sprintf("%s: %v", key, mapClaims[key]))
 		}
 	}
-	fmt.Println("::endgroup::")
 	return nil
 }
