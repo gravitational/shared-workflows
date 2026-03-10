@@ -18,7 +18,6 @@ type Config struct {
 type CognitoConfig struct {
 	AccountID      string
 	IdentityPoolID string
-	Region         string
 	RoleARN        string
 }
 
@@ -46,22 +45,33 @@ type ValueConfig struct {
 	NameOverride string
 }
 
-// NewWithEnv creates a new Config and populates fields with environment variables.
-func NewWithEnv() *Config {
-	c := &Config{}
-	c.GetDefaultsFromEnv()
-	return c
-}
+func NewFromEnv() Config {
+	githubToken := os.Getenv("INPUT_GITHUB-TOKEN")
+	secretsManagerAccountID := os.Getenv("INPUT_SECRETS-MANAGER-ACCOUNT-ID")
+	secretsManagerRegion := os.Getenv("INPUT_SECRETS-MANAGER-REGION")
+	cognitoAccountID := os.Getenv("INPUT_COGNITO-ACCOUNT-ID")
+	cognitoIdentityPoolID := os.Getenv("INPUT_COGNITO-IDENTITY-POOL-ID")
+	cognitoRoleARN := os.Getenv("INPUT_COGNITO-ROLE-ARN")
+	values := os.Getenv("INPUT_VALUES")
+	ghaIDTokenRequestToken := os.Getenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+	ghaIDTokenRequestURL := os.Getenv("ACTIONS_ID_TOKEN_REQUEST_URL")
 
-func (c *Config) GetDefaultsFromEnv() {
-	if c.Cognito.AccountID == "" {
-		c.Cognito.AccountID = os.Getenv("AWS_ACCOUNT_ID")
-	}
-	if c.SecretsManager.AccountID == "" {
-		c.SecretsManager.AccountID = os.Getenv("AWS_ACCOUNT_ID")
-	}
-	if c.SecretsManager.Region == "" {
-		c.SecretsManager.Region = os.Getenv("AWS_REGION")
+	return Config{
+		Cognito: CognitoConfig{
+			AccountID:      cognitoAccountID,
+			IdentityPoolID: cognitoIdentityPoolID,
+			RoleARN:        cognitoRoleARN,
+		},
+		SecretsManager: SecretsManagerConfig{
+			AccountID: secretsManagerAccountID,
+			Region:    secretsManagerRegion,
+		},
+		Values: values,
+		GHA: GHAConfig{
+			IDTokenRequestToken: ghaIDTokenRequestToken,
+			IDTokenRequestURL:   ghaIDTokenRequestURL,
+			GitHubToken:         githubToken,
+		},
 	}
 }
 
@@ -160,41 +170,4 @@ func (c *Config) ParseValues() ([]ValueConfig, error) {
 	}
 
 	return valueConfigs, nil
-}
-
-// Merge merges non-empty fields from another Config into the current Config.
-func (c *Config) Merge(other *Config) {
-	if other.Cognito.AccountID != "" {
-		c.Cognito.AccountID = other.Cognito.AccountID
-	}
-	if other.Cognito.IdentityPoolID != "" {
-		c.Cognito.IdentityPoolID = other.Cognito.IdentityPoolID
-	}
-	if other.Cognito.Region != "" {
-		c.Cognito.Region = other.Cognito.Region
-	}
-	if other.Cognito.RoleARN != "" {
-		c.Cognito.RoleARN = other.Cognito.RoleARN
-	}
-	if other.GHA.Environment != "" {
-		c.GHA.Environment = other.GHA.Environment
-	}
-	if other.GHA.IDTokenRequestToken != "" {
-		c.GHA.IDTokenRequestToken = other.GHA.IDTokenRequestToken
-	}
-	if other.GHA.IDTokenRequestURL != "" {
-		c.GHA.IDTokenRequestURL = other.GHA.IDTokenRequestURL
-	}
-	if other.GHA.GitHubToken != "" {
-		c.GHA.GitHubToken = other.GHA.GitHubToken
-	}
-	if other.SecretsManager.AccountID != "" {
-		c.SecretsManager.AccountID = other.SecretsManager.AccountID
-	}
-	if other.SecretsManager.Region != "" {
-		c.SecretsManager.Region = other.SecretsManager.Region
-	}
-	if other.Values != "" {
-		c.Values = other.Values
-	}
 }

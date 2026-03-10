@@ -11,10 +11,10 @@ import (
 	"github.com/gravitational/shared-workflows/tools/env-kvstore/cognitotoken"
 	"github.com/gravitational/shared-workflows/tools/env-kvstore/config"
 
-	"github.com/alecthomas/kingpin/v2"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awscfg "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
+	"github.com/spf13/cobra"
 )
 
 func main() {
@@ -23,47 +23,18 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
 	defer cancel()
 
-	githubToken := kingpin.Flag("github-token", "GitHub token to identify the workflow accessing KVStore values.").Envar("INPUT_GITHUB-TOKEN").String()
-	secretsManagerAccountID := kingpin.Flag("secrets-manager-account-id", "AWS account ID where Secrets Manager secrets are located.").Envar("INPUT_SECRETS-MANAGER-ACCOUNT-ID").String()
-	secretsManagerRegion := kingpin.Flag("secrets-manager-region", "AWS region where Secrets Manager secrets are located.").Envar("INPUT_SECRETS-MANAGER-REGION").Default("us-west-2").String()
-	cognitoAccountID := kingpin.Flag("cognito-account-id", "AWS account ID where Cognito is located.").Envar("INPUT_COGNITO-ACCOUNT-ID").String()
-	cognitoIdentityPoolID := kingpin.Flag("cognito-identity-pool-id", "Cognito identity pool ID.").Envar("INPUT_COGNITO-IDENTITY-POOL-ID").String()
-	cognitoRegion := kingpin.Flag("cognito-region", "AWS region where Cognito is located.").Envar("INPUT_COGNITO-REGION").Default("us-west-2").String()
-	cognitoRoleARN := kingpin.Flag("cognito-role-arn", "Cognito role ARN.").Envar("INPUT_COGNITO-ROLE-ARN").String()
-	values := kingpin.Flag("values", "Values to retrieve from KVStore and set as environment variables. CSV: environment variable name, value type (variable|secret), value source (repo|env), name of AWS Secrets Manager secret").Envar("INPUT_VALUES").String()
-	ghaIDTokenRequestToken := kingpin.Flag("gha-id-token-request-token", "GitHub Actions ID token request token for retrieving OIDC token to authenticate with Cognito when AWS credentials are not provided.").Envar("ACTIONS_ID_TOKEN_REQUEST_TOKEN").String()
-	ghaIDTokenRequestURL := kingpin.Flag("gha-id-token-request-url", "GitHub Actions ID token request URL for retrieving OIDC token to authenticate with Cognito when AWS credentials are not provided.").Envar("ACTIONS_ID_TOKEN_REQUEST_URL").String()
-
-	kingpin.Parse()
-
-	cfg := config.NewWithEnv()
-
-	cliConfig := config.Config{
-		Cognito: config.CognitoConfig{
-			AccountID:      aws.ToString(cognitoAccountID),
-			IdentityPoolID: aws.ToString(cognitoIdentityPoolID),
-			Region:         aws.ToString(cognitoRegion),
-			RoleARN:        aws.ToString(cognitoRoleARN),
-		},
-		SecretsManager: config.SecretsManagerConfig{
-			AccountID: aws.ToString(secretsManagerAccountID),
-			Region:    aws.ToString(secretsManagerRegion),
-		},
-		Values: aws.ToString(values),
-		GHA: config.GHAConfig{
-			IDTokenRequestToken: aws.ToString(ghaIDTokenRequestToken),
-			IDTokenRequestURL:   aws.ToString(ghaIDTokenRequestURL),
-			GitHubToken:         aws.ToString(githubToken),
-		},
+	cliConfig, err := parseCLIConfig()
+	if err != nil {
+		slog.Error("Error parsing CLI input.", "error", err)
+		os.Exit(1)
 	}
 
-	cfg.Merge(&cliConfig)
-	if err := cfg.Validate(); err != nil {
+	if err := cliConfig.Validate(); err != nil {
 		slog.Error("Invalid configuration.", "error", err)
 		os.Exit(1)
 	}
 
-	if err := run(ctx, *cfg); err != nil {
+	if err := run(ctx, cliConfig); err != nil {
 		slog.Error("Error running env-kvstore.", "error", err)
 		os.Exit(1)
 	}
@@ -97,4 +68,35 @@ func run(ctx context.Context, config config.Config) error {
 	//  mask secret values
 
 	return nil
+}
+
+func parseCLIConfig() (config.Config, error) {
+	cmd := &cobra.Command{
+		Use:           "env-kvstore",
+		SilenceUsage:  true,
+		SilenceErrors: true,
+		Args:          cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return nil
+		},
+	}
+
+	cfg := config.NewFromEnv()
+
+	flags := cmd.Flags()
+	flags.StringVar(&cfg.GHA.GitHubToken, "github-token", cfg.GHA.GitHubToken, "GitHub token to identify the workflow accessing KVStore values.")
+	flags.StringVar(&cfg.SecretsManager.AccountID, "secrets-manager-account-id", cfg.SecretsManager.AccountID, "AWS account ID where Secrets Manager secrets are located.")
+	flags.StringVar(&cfg.SecretsManager.Region, "secrets-manager-region", cfg.SecretsManager.Region, "AWS region where Secrets Manager secrets are located.")
+	flags.StringVar(&cfg.Cognito.AccountID, "cognito-account-id", cfg.Cognito.AccountID, "AWS account ID where Cognito is located.")
+	flags.StringVar(&cfg.Cognito.IdentityPoolID, "cognito-identity-pool-id", cfg.Cognito.IdentityPoolID, "Cognito identity pool ID.")
+	flags.StringVar(&cfg.Cognito.RoleARN, "cognito-role-arn", cfg.Cognito.RoleARN, "Cognito role ARN.")
+	flags.StringVar(&cfg.Values, "values", cfg.Values, "Values to retrieve from KVStore and set as environment variables. CSV: environment variable name, value type (variable|secret), value source (repo|env), name of AWS Secrets Manager secret")
+	flags.StringVar(&cfg.GHA.IDTokenRequestToken, "gha-id-token-request-token", cfg.GHA.IDTokenRequestToken, "GitHub Actions ID token request token for retrieving OIDC token to authenticate with Cognito when AWS credentials are not provided.")
+	flags.StringVar(&cfg.GHA.IDTokenRequestURL, "gha-id-token-request-url", cfg.GHA.IDTokenRequestURL, "GitHub Actions ID token request URL for retrieving OIDC token to authenticate with Cognito when AWS credentials are not provided.")
+
+	if err := cmd.Execute(); err != nil {
+		return config.Config{}, err
+	}
+
+	return cfg, nil
 }

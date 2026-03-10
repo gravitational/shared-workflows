@@ -84,7 +84,7 @@ func (e *CognitoGHATokenExchanger) CreateProvider() (*stscreds.WebIdentityRolePr
 	}
 
 	provider := stscreds.NewWebIdentityRoleProvider(
-		sts.New(sts.Options{Region: e.cognito.Region}),
+		sts.New(sts.Options{Region: e.getRegion()}),
 		e.cognito.RoleARN,
 		e,
 		func(opt *stscreds.WebIdentityRoleOptions) {
@@ -172,6 +172,17 @@ func (e *CognitoGHATokenExchanger) fetchGHAJWT() error {
 	return fmt.Errorf("could not find token in response body for GHA token %s: %s", url, string(resBody))
 }
 
+func (e *CognitoGHATokenExchanger) getRegion() string {
+	// Region can be derived from the Identity Pool ID in the format REGION:UUID
+	if e.cognito.IdentityPoolID != "" {
+		parts := strings.Split(e.cognito.IdentityPoolID, ":")
+		if len(parts) >= 1 {
+			return parts[0]
+		}
+	}
+	return ""
+}
+
 // fetchCognitoOIDCToken retrieves an OIDC token from Cognito in exchange for a GitHub Actions JWT token.
 func (e *CognitoGHATokenExchanger) fetchCognitoOIDCToken() error {
 	if e.cognitoOIDCToken != "" {
@@ -184,12 +195,7 @@ func (e *CognitoGHATokenExchanger) fetchCognitoOIDCToken() error {
 		}
 	}
 
-	if e.cognito.Region == "" {
-		parts := strings.Split(e.cognito.IdentityPoolID, ":")
-		e.cognito.Region = parts[0]
-	}
-
-	cognitoClient := cognitoidentity.New(cognitoidentity.Options{Region: e.cognito.Region})
+	cognitoClient := cognitoidentity.New(cognitoidentity.Options{Region: e.getRegion()})
 	getIdOutput, err := cognitoClient.GetId(
 		e.ctx,
 		&cognitoidentity.GetIdInput{

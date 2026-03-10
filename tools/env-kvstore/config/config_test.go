@@ -95,20 +95,19 @@ func TestConfigValidation(t *testing.T) {
 }
 
 func TestConfigFromEnv(t *testing.T) {
-	t.Setenv("AWS_REGION", "us-west-2")
-	t.Setenv("AWS_ACCOUNT_ID", "123456789012")
+	t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "example-token")
+	t.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", "http://test.github.com/token")
+	t.Setenv("INPUT_COGNITO-IDENTITY-POOL-ID", "us-west-2:example-pool-id")
+	t.Setenv("INPUT_COGNITO-ROLE-ARN", "arn:aws:iam::123456789012:role/example-role")
 	t.Setenv("INPUT_VALUES", "MY_VAR,variable,my-var\nANOTHER_VAR,secret,env")
-	cfg := NewWithEnv()
-	cfg.GetDefaultsFromEnv()
+	cfg := NewFromEnv()
+	cfg.Validate()
 
 	if cfg.SecretsManager.Region != "us-west-2" {
 		t.Errorf("Expected SecretsManager Region to be 'us-west-2', got '%s'", cfg.SecretsManager.Region)
 	}
 	if cfg.SecretsManager.AccountID != "123456789012" {
 		t.Errorf("Expected SecretsManager AccountID to be '123456789012', got '%s'", cfg.SecretsManager.AccountID)
-	}
-	if cfg.Cognito.Region != "" {
-		t.Errorf("Expected Cognito Region to be empty (infer from IdentityPoolID during token exchange), got '%s'", cfg.Cognito.Region)
 	}
 	if cfg.Cognito.AccountID != "123456789012" {
 		t.Errorf("Expected Cognito AccountID to be '123456789012', got '%s'", cfg.Cognito.AccountID)
