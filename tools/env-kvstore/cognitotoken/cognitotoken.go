@@ -259,10 +259,10 @@ func logClaims(label, token string) error {
 	}
 	prettyJSON, err := json.MarshalIndent(mapClaims, "  ", "    ")
 	if err == nil {
-		slog.Info(string(prettyJSON))
+		fmt.Println(string(prettyJSON))
 	} else {
 		for _, key := range keys {
-			slog.Info(fmt.Sprintf("%s: %v", key, mapClaims[key]))
+			fmt.Printf("%s: %v\n", key, mapClaims[key])
 		}
 	}
 	return nil
