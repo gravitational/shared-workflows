@@ -22,12 +22,6 @@ type CognitoConfig struct {
 	RoleARN        string
 }
 
-type AWSSessionCredentials struct {
-	AccessKeyID     string
-	SecretAccessKey string
-	SessionToken    string
-}
-
 type SecretsManagerConfig struct {
 	AccountID string
 	Region    string
