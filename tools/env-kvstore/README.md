@@ -142,3 +142,91 @@ Each workflow using this action is initially identified by the token provided by
 A Cognito Identity Pool is configured to trust GitHub as an OpenID Connect (OIDC) provider. The Identity Pool provide a Cognito token in exchange for a GitHub token. Claims from the GitHub token are mapped to a claim structure in the Cognito token that will become session tags when assuming an AWS role.
 
 Once a Cognito token is used to assume an AWS role with session tags, IAM policies for that role can use ABAC to constrain permissions within namespaces associated with a workflow, such as repository or environment.
+
+### GHA Token Claims
+
+The following claims are included in the GitHub token and can be mapped to Cognito token claims and then session tags when assuming an AWS role:
+
+```json
+{
+        "actor": "github_username",
+        "actor_id": "12345678",
+        "aud": "cognito-identity.amazonaws.com",
+        "base_ref": "",
+        "check_run_id": "65204598612",
+        "enterprise": "github_org",
+        "enterprise_id": "9266",
+        "event_name": "workflow_dispatch",
+        "exp": "2026-02-27T22:23:34Z",
+        "head_ref": "",
+        "iat": "2026-02-27T22:18:34Z",
+        "iss": "https://token.actions.githubusercontent.com/github_org",
+        "issuer_scope": "enterprise",
+        "job_workflow_ref": "org_slug/repo/.github/workflows/dispatch.yaml@refs/heads/main",
+        "job_workflow_sha": "1c6fb9ebf8734a38050775c4522f9e10f396efc4",
+        "jti": "4d3dbc09-8da0-4065-b311-3b8481d3174b",
+        "nbf": "2026-02-27T22:13:34Z",
+        "ref": "refs/heads/main",
+        "ref_protected": "false",
+        "ref_type": "branch",
+        "repository": "org_slug/repo",
+        "repository_id": "12345678",
+        "repository_owner": "org_slug",
+        "repository_owner_id": "12345678",
+        "repository_visibility": "internal",
+        "run_attempt": "1",
+        "run_id": "22505998282",
+        "run_number": "90",
+        "runner_environment": "github-hosted",
+        "sha": "1c6fb9ebf8734a38050775c4522f9e10f396efc4",
+        "sub": "repo:org_slug/repo:ref:refs/heads/main",
+        "workflow": "dispatch",
+        "workflow_ref": "org_slug/repo/.github/workflows/dispatch.yaml@refs/heads/main",
+        "workflow_sha": "1c6fb9ebf8734a38050775c4522f9e10f396efc4"
+    }
+```
+
+### Cognito Token Claims
+
+When using a principal tag mapping similar to the [example above](#Cognito Identity Pool), the Cognito token will have claims that mirror the GitHub token claims, but structured so AWS will assign them as session tags during role assumption.
+
+```json
+  {
+        "amr": [
+            "authenticated",
+            "token.actions.githubusercontent.com/github_org",
+            "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com/github_org:OIDC:repo:org_slug/repo:ref:refs/heads/main"
+        ],
+        "aud": "us-west-2:12345678-1234-1234-1234-1234567890ab",
+        "exp": "2026-02-27T22:28:34Z",
+        "https://aws.amazon.com/tags": {
+            "principal_tags": {
+                "actor": [
+                    "github_username"
+                ],
+                "enterprise": [
+                    "github_org"
+                ],
+                "event_name": [
+                    "workflow_dispatch"
+                ],
+                "repository": [
+                    "org_slug/repo"
+                ],
+                "run_id": [
+                    "22505998282"
+                ],
+                "sha": [
+                    "1c6fb9ebf8734a38050775c4522f9e10f396efc4"
+                ],
+                "workflow": [
+                    "dispatch"
+                ]
+            }
+        },
+        "https://cognito-identity.amazonaws.com/identity-pool-arn": "arn:aws:cognito-identity:us-west-2:123456789012:identitypool/us-west-2:12345678-1234-1234-1234-1234567890ab",
+        "iat": "2026-02-27T22:18:34Z",
+        "iss": "https://cognito-identity.amazonaws.com",
+        "sub": "us-west-2:87654321-4321-4321-4321-1234567890ab"
+    }
+```
