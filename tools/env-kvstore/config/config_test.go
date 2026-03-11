@@ -101,11 +101,11 @@ func TestConfigFromEnv(t *testing.T) {
 	t.Setenv("INPUT_COGNITO-ROLE-ARN", "arn:aws:iam::123456789012:role/example-role")
 	t.Setenv("INPUT_VALUES", "MY_VAR,variable,my-var\nANOTHER_VAR,secret,env")
 	cfg := NewFromEnv()
-	
+
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("Config validation failed: %v", err)
 	}
-	
+
 	if cfg.SecretsManager.Region != "us-west-2" {
 		t.Errorf("Expected SecretsManager Region to be 'us-west-2', got '%s'", cfg.SecretsManager.Region)
 	}

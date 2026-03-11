@@ -19,7 +19,8 @@ func TestGetAWSSessionName(t *testing.T) {
 		{
 			name: "JWT with session naming claims",
 			exchanger: &CognitoGHATokenExchanger{
-				ghaJWT: jwtWithSessionNamingClaims,
+				ghaJWT:         jwtWithSessionNamingClaims,
+				skipValidation: true,
 			},
 			expectedName:   "runID@SHA",
 			expectingError: false,
@@ -27,7 +28,8 @@ func TestGetAWSSessionName(t *testing.T) {
 		{
 			name: "JWT without session naming claims",
 			exchanger: &CognitoGHATokenExchanger{
-				ghaJWT: jwtWithoutSessionNamingClaims,
+				ghaJWT:         jwtWithoutSessionNamingClaims,
+				skipValidation: true,
 			},
 			expectedName:   "",
 			expectingError: true,

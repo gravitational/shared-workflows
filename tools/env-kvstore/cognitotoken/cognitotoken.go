@@ -2,11 +2,14 @@ package cognitotoken
 
 import (
 	"context"
+	"crypto/rsa"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
 	"maps"
+	"math/big"
 	"net/http"
 	"slices"
 	"strings"
@@ -22,8 +25,10 @@ import (
 )
 
 const (
-	audience      = "cognito-identity.amazonaws.com"
-	loginProvider = "token.actions.githubusercontent.com/teleport"
+	audience         = "cognito-identity.amazonaws.com"
+	ghaJWKSURL       = "https://token.actions.githubusercontent.com/.well-known/jwks"
+	fmtIssuer        = "https://token.actions.githubusercontent.com%s"
+	fmtLoginProvider = "token.actions.githubusercontent.com%s"
 
 	minSessionDuration = 15 * time.Minute // matches Cognito's default
 )
@@ -35,6 +40,9 @@ type CognitoGHATokenExchanger struct {
 	ghaJWT           string
 	cognitoOIDCToken string
 	ctx              context.Context
+
+	// skipValidation is used for testing only
+	skipValidation bool
 
 	gha     config.GHAConfig
 	cognito config.CognitoConfig
@@ -51,11 +59,23 @@ type GHAClaims struct {
 	jwt.RegisteredClaims
 }
 
+type jwk struct {
+	KTY string `json:"kty"`
+	KID string `json:"kid"`
+	Use string `json:"use"`
+	N   string `json:"n"`
+	E   string `json:"e"`
+}
+
+type jwks struct {
+	Keys []jwk `json:"keys"`
+}
+
 // NewTokenExchanger creates a new CognitoGHATokenExchanger with the provided Cognito and GHA configuration.
 func NewTokenExchanger(ctx context.Context, cognitoConfig *config.CognitoConfig, ghaConfig *config.GHAConfig) *CognitoGHATokenExchanger {
 	return &CognitoGHATokenExchanger{
 		ctx:     ctx,
-		ghaJWT:  ghaConfig.GitHubToken,
+		ghaJWT:  "",
 		gha:     *ghaConfig,
 		cognito: *cognitoConfig,
 	}
@@ -111,6 +131,7 @@ func (e *CognitoGHATokenExchanger) getAWSSessionName() (string, error) {
 		return "", fmt.Errorf("error logging GHA JWT claims: %w", err)
 	}
 
+	// token signature was already validated in fetchGHAJWT, so skipping validation here
 	token, _, err := jwt.NewParser(jwt.WithPaddingAllowed()).ParseUnverified(e.ghaJWT, &GHAClaims{})
 	if err != nil {
 		return "", fmt.Errorf("error parsing claims to GHAClaims struct: %w", err)
@@ -135,14 +156,14 @@ func (e *CognitoGHATokenExchanger) fetchGHAJWT() error {
 	if e.ghaJWT != "" {
 		return nil
 	}
-	fmt.Printf("::add-mask::%s", e.gha.IDTokenRequestToken)
+	fmt.Printf("\n::add-mask::%s\n", e.gha.IDTokenRequestToken)
 	url := fmt.Sprintf("%s&audience=%s", e.gha.IDTokenRequestURL, audience)
 
 	retryClient := retryablehttp.NewClient()
-	retryClient.RetryMax = 5
+	retryClient.RetryMax = 3
 	retryClient.HTTPClient.Timeout = 10 * time.Second
 
-	req, err := retryablehttp.NewRequest(http.MethodGet, url, nil)
+	req, err := retryablehttp.NewRequestWithContext(e.ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return fmt.Errorf("could not create request for GHA token %s: %w", url, err)
 	}
@@ -166,10 +187,121 @@ func (e *CognitoGHATokenExchanger) fetchGHAJWT() error {
 	}
 	if token, ok := result["value"].(string); ok {
 		e.ghaJWT = token
+		if !e.skipValidation {
+			if err := e.validateGHAToken(); err != nil {
+				e.ghaJWT = ""
+				return fmt.Errorf("failed to validate GHA token: %w", err)
+			}
+		}
 		return nil
 	}
 
 	return fmt.Errorf("could not find token in response body for GHA token %s: %s", url, string(resBody))
+}
+
+func (e *CognitoGHATokenExchanger) validateGHAToken() error {
+	if e.ghaJWT == "" {
+		return fmt.Errorf("cannot validate empty GHA JWT")
+	}
+	token, err := jwt.Parse(
+		e.ghaJWT,
+		func(token *jwt.Token) (any, error) {
+			kid, ok := token.Header["kid"].(string)
+			if !ok {
+				return nil, fmt.Errorf("token header does not contain kid")
+			}
+
+			publicKey, err := e.getGHAPublicKey(kid)
+			if err != nil {
+				return nil, fmt.Errorf("failed to retrieve GHA public key: %w", err)
+			}
+
+			return publicKey, nil
+		},
+		jwt.WithValidMethods([]string{"RS256"}),
+		jwt.WithExpirationRequired(),
+	)
+
+	if err != nil {
+		return fmt.Errorf("error validating token: %w", err)
+	}
+	if !token.Valid {
+		return fmt.Errorf("token is invalid")
+	}
+	tokenIssuer, err := token.Claims.GetIssuer()
+	if err != nil {
+		return fmt.Errorf("token missing expected issuer claim: %w", err)
+	}
+
+	var issuer string
+	if e.gha.EnterpriseName != "" {
+		issuer = fmt.Sprintf(fmtIssuer, fmt.Sprintf("/%s", e.gha.EnterpriseName))
+	} else {
+		issuer = fmt.Sprintf(fmtIssuer, "")
+	}
+	if tokenIssuer != issuer {
+		return fmt.Errorf("unexpected token issuer, got: %s, expected: %s", tokenIssuer, issuer)
+	}
+
+	tokenAudience, err := token.Claims.GetAudience()
+	if err != nil {
+		return fmt.Errorf("token missing expected audience claim: %w", err)
+	}
+	if !slices.Contains(tokenAudience, audience) {
+		return fmt.Errorf("unexpected token audience: %v", tokenAudience)
+	}
+	return nil
+}
+
+func (e *CognitoGHATokenExchanger) getGHAPublicKey(kid string) (*rsa.PublicKey, error) {
+	req, err := retryablehttp.NewRequestWithContext(e.ctx, http.MethodGet, ghaJWKSURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed creating JWKS request: %w", err)
+	}
+
+	retryClient := retryablehttp.NewClient()
+	retryClient.RetryMax = 3
+	retryClient.HTTPClient.Timeout = 5 * time.Second
+	resp, err := retryClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed fetching JWKS: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("JWKS endpoint non-200 return status %d: %s", resp.StatusCode, body)
+	}
+
+	var ghaJWKS jwks
+	if err := json.NewDecoder(resp.Body).Decode(&ghaJWKS); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal JWKS: %w", err)
+	}
+
+	for _, key := range ghaJWKS.Keys {
+		if key.KID == kid {
+			if key.KTY != "RSA" {
+				return nil, fmt.Errorf("expected keytype RSA, got %s", key.KTY)
+			}
+
+			nBytes, err := base64.RawURLEncoding.DecodeString(key.N)
+			if err != nil {
+				return nil, fmt.Errorf("failed to decode modulus: %w", err)
+			}
+			n := new(big.Int).SetBytes(nBytes)
+			eBytes, err := base64.RawURLEncoding.DecodeString(key.E)
+			if err != nil {
+				return nil, fmt.Errorf("failed to decode exponent: %w", err)
+			}
+			e := new(big.Int).SetBytes(eBytes)
+
+			return &rsa.PublicKey{
+				N: n,
+				E: int(e.Int64()),
+			}, nil
+		}
+	}
+	return nil, fmt.Errorf("could not find public key with ID %s", kid)
 }
 
 func (e *CognitoGHATokenExchanger) getRegion() string {
@@ -193,6 +325,13 @@ func (e *CognitoGHATokenExchanger) fetchCognitoOIDCToken() error {
 		if err := e.fetchGHAJWT(); err != nil {
 			return fmt.Errorf("error fetching GHA JWT token: %w", err)
 		}
+	}
+
+	var loginProvider string
+	if e.gha.EnterpriseName != "" {
+		loginProvider = fmt.Sprintf(fmtLoginProvider, fmt.Sprintf("/%s", e.gha.EnterpriseName))
+	} else {
+		loginProvider = fmt.Sprintf(fmtLoginProvider, "")
 	}
 
 	cognitoClient := cognitoidentity.New(cognitoidentity.Options{Region: e.getRegion()})
@@ -235,7 +374,7 @@ func (e *CognitoGHATokenExchanger) fetchCognitoOIDCToken() error {
 // logClaims outputs a list of claims from the provided JWT.
 func logClaims(label, token string) error {
 	mapClaims := jwt.MapClaims{}
-	// Signature will be verified by Cognito or STS, we can skip verification
+	// Skipping validation since this is only for logging purposes
 	_, _, err := jwt.NewParser(jwt.WithPaddingAllowed()).ParseUnverified(token, mapClaims)
 	if err != nil {
 		return fmt.Errorf("failed to parse unverified token: %w", err)

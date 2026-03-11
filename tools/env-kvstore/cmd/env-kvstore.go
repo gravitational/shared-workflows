@@ -73,7 +73,6 @@ func run(ctx context.Context, config config.Config) error {
 func parseCLIConfig() (config.Config, error) {
 	cfg := config.NewFromEnv()
 
-	flag.StringVar(&cfg.GHA.GitHubToken, "github-token", cfg.GHA.GitHubToken, "GitHub token to identify the workflow accessing KVStore values.")
 	flag.StringVar(&cfg.SecretsManager.AccountID, "secrets-manager-account-id", cfg.SecretsManager.AccountID, "AWS account ID where Secrets Manager secrets are located.")
 	flag.StringVar(&cfg.SecretsManager.Region, "secrets-manager-region", cfg.SecretsManager.Region, "AWS region where Secrets Manager secrets are located.")
 	flag.StringVar(&cfg.Cognito.AccountID, "cognito-account-id", cfg.Cognito.AccountID, "AWS account ID where Cognito is located.")
@@ -82,6 +81,7 @@ func parseCLIConfig() (config.Config, error) {
 	flag.StringVar(&cfg.Values, "values", cfg.Values, "Values to retrieve from KVStore and set as environment variables. CSV: environment variable name, value type (variable|secret), value source (repo|env), name of AWS Secrets Manager secret")
 	flag.StringVar(&cfg.GHA.IDTokenRequestToken, "gha-id-token-request-token", cfg.GHA.IDTokenRequestToken, "GitHub Actions ID token request token for retrieving OIDC token to authenticate with Cognito when AWS credentials are not provided.")
 	flag.StringVar(&cfg.GHA.IDTokenRequestURL, "gha-id-token-request-url", cfg.GHA.IDTokenRequestURL, "GitHub Actions ID token request URL for retrieving OIDC token to authenticate with Cognito when AWS credentials are not provided.")
+	flag.StringVar(&cfg.GHA.EnterpriseName, "github-enterprise-name", "teleport", "GitHub Enterprise name. Used to validate JWT issuer and generate the AWS OIDC provider.")
 
 	flag.Parse()
 

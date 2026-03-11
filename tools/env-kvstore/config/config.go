@@ -29,8 +29,7 @@ type SecretsManagerConfig struct {
 type GHAConfig struct {
 	IDTokenRequestToken string
 	IDTokenRequestURL   string
-	GitHubToken         string
-	Environment         string
+	EnterpriseName      string
 }
 
 type ValueConfig struct {
@@ -46,7 +45,6 @@ type ValueConfig struct {
 }
 
 func NewFromEnv() Config {
-	githubToken := os.Getenv("INPUT_GITHUB-TOKEN")
 	secretsManagerAccountID := os.Getenv("INPUT_SECRETS-MANAGER-ACCOUNT-ID")
 	secretsManagerRegion := os.Getenv("INPUT_SECRETS-MANAGER-REGION")
 	cognitoAccountID := os.Getenv("INPUT_COGNITO-ACCOUNT-ID")
@@ -70,7 +68,6 @@ func NewFromEnv() Config {
 		GHA: GHAConfig{
 			IDTokenRequestToken: ghaIDTokenRequestToken,
 			IDTokenRequestURL:   ghaIDTokenRequestURL,
-			GitHubToken:         githubToken,
 		},
 	}
 }
@@ -107,7 +104,7 @@ func (c *Config) Validate() error {
 		c.Cognito.AccountID = accountFromRoleARN
 	}
 
-	if c.GHA.GitHubToken == "" && (c.GHA.IDTokenRequestToken == "" || c.GHA.IDTokenRequestURL == "") {
+	if c.GHA.IDTokenRequestToken == "" || c.GHA.IDTokenRequestURL == "" {
 		return fmt.Errorf("missing required config: GitHub Actions ID token request token and URL")
 	}
 
