@@ -48,6 +48,12 @@ const (
 	CheckStatusWaiting CheckStatus = "waiting"
 )
 
+// String satisfies the Stringer interface.
+// This provides a stable API for converting to string in the case of future refactors.
+func (s CheckStatus) String() string {
+	return string(s)
+}
+
 // CheckConclusion represents the conclusion of a completed GitHub check run.
 // See [CheckStatus] for more information about check run statuses and conclusions.
 type CheckConclusion string
@@ -70,3 +76,9 @@ const (
 	// CheckConclusionTimedOut indicates the check run timed out.
 	CheckConclusionTimedOut CheckConclusion = "timed_out"
 )
+
+// String satisfies the Stringer interface.
+// This provides a stable API for converting to string in the case of future refactors.
+func (c CheckConclusion) String() string {
+	return string(c)
+}

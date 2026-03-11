@@ -162,7 +162,7 @@ func (w WorkflowRunInfo) LogValue() slog.Value {
 		slog.String("organization", w.Organization),
 		slog.String("repository", w.Repository),
 		slog.Int64("workflow_id", w.WorkflowID),
-		slog.String("status", string(w.Status)),
-		slog.String("conclusion", string(w.Conclusion)),
+		slog.String("status", w.Status.String()),
+		slog.String("conclusion", w.Conclusion.String()),
 	)
 }
