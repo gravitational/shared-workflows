@@ -1,0 +1,55 @@
+---
+name: Upload normalized test results
+description: Captures metadata, normalizes the test results and uploads to s3.
+
+inputs:
+  github-token:
+    description: "GitHub JWT token to identify the workflow. Will be retrieved if not provided."
+  aws-account-id:
+    description: "Default value for AWS account."
+  aws-region:
+    description: "Default value for AWS region."
+  secrets-manager-account-id:
+    description: "AWS account where Secrets Manager secrets are stored."
+  secrets-manager-region:
+    description: "AWS region where Secrets Manager secrets are stored."
+  cognito-account-id:
+    description: "AWS account where Cognito is located."
+  cognito-identity-pool-id:
+    required: true
+    description: "Cognito Identity Pool configured with GitHub OIDC and principal tag mapping."
+  cognito-region:
+    description: "AWS region where Cognito is located. Inferred from Cognito Identity Pool ID."
+  cognito-role-arn:
+    required: true
+    description: "Role to use for retrieving Secrets Manager secrets. Assumed via OIDC using Cognito token."
+  values:
+    required: true
+    description: "Values to retrieve from KVStore and set as environment variables. CSV: environment variable name, value type (variable|secret), override key"
+
+runs:
+  using: composite
+  steps:
+    - name: Install env-kvstore from GitHub Release
+      # Relative paths cannot be used here because the action is not guaranteed to be checked out in the same location as the repository using it.
+      uses: gravitational/shared-workflows/.github/actions/install-gh-release@41eefbdab5c67d8e0169730e999f73cd315a8cb5
+      with:
+        tool-name: env-kvstore
+        version: ${{ inputs.tool-version }}
+        tag-prefix: tools/env-kvstore/
+    - name: Retrieve variables and secrets from KVStore
+      id: retrieve_from_kvstore
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      env:
+        AWS_ACCOUNT_ID: "${{ inputs.aws-account-id }}"
+        AWS_REGION: "${{ inputs.aws-region }}"
+        INPUT_GITHUB-TOKEN: "${{ inputs.github-token }}"
+        INPUT_SECRETS-MANAGER-ACCOUNT-ID: "${{ inputs.secrets-manager-account-id }}"
+        INPUT_SECRETS-MANAGER-REGION: "${{ inputs.secrets-manager-region }}"
+        INPUT_COGNITO-ACCOUNT-ID: "${{ inputs.cognito-account-id }}"
+        INPUT_COGNITO-IDENTITY-POOL-ID: "${{ inputs.cognito-identity-pool-id }}"
+        INPUT_COGNITO-REGION: "${{ inputs.cognito-region }}"
+        INPUT_CODNITO-ROLE-ARN: "${{ inputs.cognito-role-arn }}"
+      run: |
+        env-kvstore
