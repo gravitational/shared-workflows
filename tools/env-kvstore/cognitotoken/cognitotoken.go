@@ -5,6 +5,7 @@ import (
 	"crypto/rsa"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -12,7 +13,6 @@ import (
 	"math/big"
 	"net/http"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/gravitational/shared-workflows/tools/env-kvstore/config"
@@ -104,7 +104,7 @@ func (e *CognitoGHATokenExchanger) CreateProvider() (*stscreds.WebIdentityRolePr
 	}
 
 	provider := stscreds.NewWebIdentityRoleProvider(
-		sts.New(sts.Options{Region: e.getRegion()}),
+		sts.New(sts.Options{Region: e.cognito.GetRegion()}),
 		e.cognito.RoleARN,
 		e,
 		func(opt *stscreds.WebIdentityRoleOptions) {
@@ -226,7 +226,7 @@ func (e *CognitoGHATokenExchanger) validateGHAToken() error {
 		return fmt.Errorf("error validating token: %w", err)
 	}
 	if !token.Valid {
-		return fmt.Errorf("token is invalid")
+		return errors.New("token is invalid")
 	}
 	tokenIssuer, err := token.Claims.GetIssuer()
 	if err != nil {
@@ -304,17 +304,6 @@ func (e *CognitoGHATokenExchanger) getGHAPublicKey(kid string) (*rsa.PublicKey, 
 	return nil, fmt.Errorf("could not find public key with ID %s", kid)
 }
 
-func (e *CognitoGHATokenExchanger) getRegion() string {
-	// Region can be derived from the Identity Pool ID in the format REGION:UUID
-	if e.cognito.IdentityPoolID != "" {
-		parts := strings.Split(e.cognito.IdentityPoolID, ":")
-		if len(parts) >= 1 {
-			return parts[0]
-		}
-	}
-	return ""
-}
-
 // fetchCognitoOIDCToken retrieves an OIDC token from Cognito in exchange for a GitHub Actions JWT token.
 func (e *CognitoGHATokenExchanger) fetchCognitoOIDCToken() error {
 	if e.cognitoOIDCToken != "" {
@@ -334,7 +323,7 @@ func (e *CognitoGHATokenExchanger) fetchCognitoOIDCToken() error {
 		loginProvider = fmt.Sprintf(fmtLoginProvider, "")
 	}
 
-	cognitoClient := cognitoidentity.New(cognitoidentity.Options{Region: e.getRegion()})
+	cognitoClient := cognitoidentity.New(cognitoidentity.Options{Region: e.cognito.GetRegion()})
 	getIdOutput, err := cognitoClient.GetId(
 		e.ctx,
 		&cognitoidentity.GetIdInput{

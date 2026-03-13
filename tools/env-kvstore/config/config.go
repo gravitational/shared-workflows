@@ -83,14 +83,8 @@ func (c *Config) Validate() error {
 			accountFromRoleARN = parts[4]
 		}
 	}
-	// Region can be derived from the Identity Pool ID
-	regionFromIdentityPoolID := ""
-	if c.Cognito.IdentityPoolID != "" {
-		parts := strings.Split(c.Cognito.IdentityPoolID, ":")
-		if len(parts) >= 1 {
-			regionFromIdentityPoolID = parts[0]
-		}
-	}
+	regionFromIdentityPoolID := c.Cognito.GetRegion()
+
 	if c.Cognito.IdentityPoolID == "" {
 		return fmt.Errorf("missing required config: Cognito Identity Pool ID")
 	}
@@ -140,9 +134,6 @@ func (c *Config) ParseValues() ([]ValueConfig, error) {
 	valueConfigs := []ValueConfig{}
 
 	valueEntries := strings.Split(c.Values, "\n")
-	if len(valueEntries) == 1 {
-		valueEntries = strings.Split(c.Values, ";")
-	}
 
 	for _, entry := range valueEntries {
 		parts := strings.Split(entry, ",")
@@ -167,4 +158,16 @@ func (c *Config) ParseValues() ([]ValueConfig, error) {
 	}
 
 	return valueConfigs, nil
+}
+
+// GetRegion returns the AWS region of the Cognito Identity Pool.
+func (c *CognitoConfig) GetRegion() string {
+	// Region can be derived from the Identity Pool ID in the format REGION:UUID
+	if c.IdentityPoolID != "" {
+		region, _, ok := strings.Cut(c.IdentityPoolID, ":")
+		if ok {
+			return region
+		}
+	}
+	return ""
 }
