@@ -136,6 +136,10 @@ func (c *Config) ParseValues() ([]ValueConfig, error) {
 	valueEntries := strings.Split(c.Values, "\n")
 
 	for _, entry := range valueEntries {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
 		parts := strings.Split(entry, ",")
 		if len(parts) < 2 || len(parts) > 3 {
 			return nil, fmt.Errorf("invalid value entry: \"%s\". Expected format: ENV_VAR_NAME(req),VALUE_TYPE(req),NAME_OVERRIDE(optional)", entry)

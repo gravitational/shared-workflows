@@ -116,3 +116,16 @@ func TestConfigFromEnv(t *testing.T) {
 		t.Errorf("Expected Cognito AccountID to be '123456789012', got '%s'", cfg.Cognito.AccountID)
 	}
 }
+
+func TestParseValues(t *testing.T) {
+	cfg := Config{
+		Values: "\n\n\nMY_VAR,variable,my-var\nANOTHER_VAR,secret,env",
+	}
+	values, err := cfg.ParseValues()
+	if err != nil {
+		t.Fatalf("ParseValues() error = %v", err)
+	}
+	if len(values) != 2 {
+		t.Fatalf("Expected 2 values, got %d", len(values))
+	}
+}
