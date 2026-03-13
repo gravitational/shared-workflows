@@ -137,7 +137,7 @@ func (e *CognitoGHATokenExchanger) getAWSSessionName() (string, error) {
 		return "", fmt.Errorf("error parsing claims to GHAClaims struct: %w", err)
 	}
 	c, ok := token.Claims.(*GHAClaims)
-	if !ok {
+	if !ok || c == nil {
 		return "", fmt.Errorf("error asserting GHA claims to GHAClaims struct")
 	}
 	e.Claims = *c
