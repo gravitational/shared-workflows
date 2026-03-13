@@ -41,6 +41,12 @@ type WorkflowRunInfo struct {
 	Organization string
 	// Repository is the name of the repository where the workflow run occurred.
 	Repository string
+	// Status is the current status of the workflow run.
+	// GitHub's Workflow API uses check run statuses for workflow runs.
+	Status CheckStatus
+	// Conclusion is the conclusion of the workflow run (only set when status is "completed").
+	// GitHub's Workflow API uses check run conclusions for workflow runs.
+	Conclusion CheckConclusion
 }
 
 // GetWorkflowRunInfo retrieves information about a specific workflow run by its ID.
@@ -50,14 +56,7 @@ func (c *Client) GetWorkflowRunInfo(ctx context.Context, org, repo string, runID
 		return WorkflowRunInfo{}, fmt.Errorf("GetWorkflowRunByID API call: %w", err)
 	}
 
-	return WorkflowRunInfo{
-		WorkflowID:   workflow.GetID(),
-		Name:         workflow.GetName(),
-		HTMLURL:      workflow.GetHTMLURL(),
-		Requester:    workflow.GetActor().GetLogin(),
-		Organization: org,
-		Repository:   repo,
-	}, nil
+	return workflowRunInfoFromObj(workflow), nil
 }
 
 // ListWaitingWorkflowRuns lists all workflow runs in a repository that are currently waiting for approval.
@@ -72,14 +71,7 @@ func (c *Client) ListWaitingWorkflowRuns(ctx context.Context, org, repo string) 
 
 	allRuns := []WorkflowRunInfo{}
 	for _, run := range data.WorkflowRuns {
-		allRuns = append(allRuns, WorkflowRunInfo{
-			WorkflowID:   run.GetID(),
-			Name:         run.GetName(),
-			HTMLURL:      run.GetHTMLURL(),
-			Requester:    run.GetActor().GetLogin(),
-			Organization: org,
-			Repository:   repo,
-		})
+		allRuns = append(allRuns, workflowRunInfoFromObj(run))
 	}
 
 	return allRuns, nil
@@ -159,6 +151,8 @@ func workflowRunInfoFromObj(githubObj *go_github.WorkflowRun) WorkflowRunInfo {
 		Requester:    githubObj.GetActor().GetLogin(),
 		Organization: githubObj.GetRepository().GetOwner().GetLogin(),
 		Repository:   githubObj.GetRepository().GetName(),
+		Status:       CheckStatus(githubObj.GetStatus()),
+		Conclusion:   CheckConclusion(githubObj.GetConclusion()),
 	}
 }
 
@@ -168,5 +162,7 @@ func (w WorkflowRunInfo) LogValue() slog.Value {
 		slog.String("organization", w.Organization),
 		slog.String("repository", w.Repository),
 		slog.Int64("workflow_id", w.WorkflowID),
+		slog.String("status", w.Status.String()),
+		slog.String("conclusion", w.Conclusion.String()),
 	)
 }
