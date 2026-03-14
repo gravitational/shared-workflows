@@ -10,7 +10,7 @@ import (
 type Config struct {
 	Cognito        CognitoConfig
 	SecretsManager SecretsManagerConfig
-	Values         string
+	Values         ValuesConfig
 	GHA            GHAConfig
 }
 
@@ -32,16 +32,22 @@ type GHAConfig struct {
 	EnterpriseName      string
 }
 
-type ValueConfig struct {
+type ValuesConfig struct {
+	ValuesInput string
+	Items       []EnvValue
+}
+
+// EnvValue represents a value to be retrieved from the KVStore and set as an
+// environment variable in GitHub Actions.
+type EnvValue struct {
 	// EnvVar is the name of the environment variable to set in the GitHub Actions workflow.
 	EnvVar string
 	// ValueType indicates whether the value is a variable or a secret. Determines retrieval
 	// namespace and whether value is masked in GitHub Actions logs.
 	ValueType string
-	// NameOverride allows users to specify a different name to lookup in the AWS Secrets Manager
-	// secret instead of the environment variable name. This is useful when a branch-specific value
-	// needs to be maintained.
-	NameOverride string
+	// KeyOverride is used to lookup the value in AWS Secrets Manager by a different key than 
+	// the environment variable name. Use when a branch-specific value is needed.
+	KeyOverride string
 }
 
 func NewFromEnv() Config {
@@ -64,7 +70,9 @@ func NewFromEnv() Config {
 			AccountID: secretsManagerAccountID,
 			Region:    secretsManagerRegion,
 		},
-		Values: values,
+		Values: ValuesConfig{
+			ValuesInput: values,
+		},
 		GHA: GHAConfig{
 			IDTokenRequestToken: ghaIDTokenRequestToken,
 			IDTokenRequestURL:   ghaIDTokenRequestURL,
@@ -115,11 +123,11 @@ func (c *Config) Validate() error {
 		c.SecretsManager.AccountID = accountFromRoleARN
 	}
 
-	if c.Values == "" {
+	if c.Values.ValuesInput == "" {
 		return fmt.Errorf("at least one value must be specified to retrieve from KVStore")
 	}
 
-	if _, err := c.ParseValues(); err != nil {
+	if err := c.Values.ParseValues(); err != nil {
 		return fmt.Errorf("cannot parse values: %v", err)
 	}
 
@@ -130,10 +138,10 @@ func (c *Config) Validate() error {
 // Each line is comma-separated. The expected format for each line is:
 // ENV_VAR_NAME,VALUE_TYPE,NAME_OVERRIDE
 // Lines can be separated by newlines or semicolons.
-func (c *Config) ParseValues() ([]ValueConfig, error) {
-	valueConfigs := []ValueConfig{}
+func (c *ValuesConfig) ParseValues() error {
+	valueConfigs := []EnvValue{}
 
-	valueEntries := strings.Split(c.Values, "\n")
+	valueEntries := strings.Split(c.ValuesInput, "\n")
 
 	for _, entry := range valueEntries {
 		entry = strings.TrimSpace(entry)
@@ -142,26 +150,27 @@ func (c *Config) ParseValues() ([]ValueConfig, error) {
 		}
 		parts := strings.Split(entry, ",")
 		if len(parts) < 2 || len(parts) > 3 {
-			return nil, fmt.Errorf("invalid value entry: \"%s\". Expected format: ENV_VAR_NAME(req),VALUE_TYPE(req),NAME_OVERRIDE(optional)", entry)
+			return fmt.Errorf("invalid value entry: \"%s\". Expected format: ENV_VAR_NAME(req),VALUE_TYPE(req),NAME_OVERRIDE(optional)", entry)
 		}
 
-		valueConfig := ValueConfig{
+		valueConfig := EnvValue{
 			EnvVar:    strings.TrimSpace(parts[0]),
 			ValueType: strings.ToLower(strings.TrimSpace(parts[1])),
 		}
 
 		if valueConfig.ValueType != "variable" && valueConfig.ValueType != "secret" {
-			return nil, fmt.Errorf("invalid value type for entry: \"%s\". Expected 'variable' or 'secret'", entry)
+			return fmt.Errorf("invalid value type for entry: \"%s\". Expected 'variable' or 'secret'", entry)
 		}
 
 		if len(parts) >= 3 {
-			valueConfig.NameOverride = strings.TrimSpace(parts[2])
+			valueConfig.KeyOverride = strings.TrimSpace(parts[2])
 		}
 
 		valueConfigs = append(valueConfigs, valueConfig)
 	}
 
-	return valueConfigs, nil
+	c.Items = valueConfigs
+	return nil
 }
 
 // GetRegion returns the AWS region of the Cognito Identity Pool.

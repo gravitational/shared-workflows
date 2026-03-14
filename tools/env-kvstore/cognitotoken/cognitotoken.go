@@ -36,7 +36,7 @@ const (
 // CognitoGHATokenExchanger creates a role provider that exchanges a GitHub Actions JWT token for a Cognito OIDC token.
 // The Cognito OIDC token can include claims that map to role session tags for IAM ABAC. Implements stscreds.IdentityTokenRetriever.
 type CognitoGHATokenExchanger struct {
-	Claims           GHAClaims
+	Claims           config.GHAClaims
 	ghaJWT           string
 	cognitoOIDCToken string
 	ctx              context.Context
@@ -46,17 +46,6 @@ type CognitoGHATokenExchanger struct {
 
 	gha     config.GHAConfig
 	cognito config.CognitoConfig
-}
-
-// GHAClaims are extracted from the GitHub Actions JWT token and used to identify the
-// session and to name the Secrets Manager secrets.
-type GHAClaims struct {
-	RunID       string `json:"run_id"`
-	SHA         string `json:"sha"`
-	Repository  string `json:"repository"`
-	Enterprise  string `json:"enterprise"`
-	Environment string `json:"environment,omitempty"`
-	jwt.RegisteredClaims
 }
 
 type jwk struct {
@@ -132,11 +121,11 @@ func (e *CognitoGHATokenExchanger) getAWSSessionName() (string, error) {
 	}
 
 	// token signature was already validated in fetchGHAJWT, so skipping validation here
-	token, _, err := jwt.NewParser(jwt.WithPaddingAllowed()).ParseUnverified(e.ghaJWT, &GHAClaims{})
+	token, _, err := jwt.NewParser(jwt.WithPaddingAllowed()).ParseUnverified(e.ghaJWT, &config.GHAClaims{})
 	if err != nil {
 		return "", fmt.Errorf("error parsing claims to GHAClaims struct: %w", err)
 	}
-	c, ok := token.Claims.(*GHAClaims)
+	c, ok := token.Claims.(*config.GHAClaims)
 	if !ok || c == nil {
 		return "", fmt.Errorf("error asserting GHA claims to GHAClaims struct")
 	}
