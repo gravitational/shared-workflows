@@ -19,7 +19,7 @@ import (
 )
 
 func main() {
-	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})))
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug})))
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
 	defer cancel()
@@ -65,6 +65,7 @@ func run(ctx context.Context, config config.Config) error {
 	}
 	slog.Info("Successfully authenticated to AWS account.", "account", aws.ToString(identityOutput.Account), "arn", aws.ToString(identityOutput.Arn))
 
+	slog.Info("Retrieving secrets from AWS Secrets Manager and setting environment variables.")
 	_, err = kvstore.NewSecretsManagerValueProvider(ctx, awsCfg, config.SecretsManager, config.Values.Items, tokenExchanger.Claims)
 	if err != nil {
 		return fmt.Errorf("error creating Secrets Manager value provider: %w", err)

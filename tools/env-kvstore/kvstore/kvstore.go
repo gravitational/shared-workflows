@@ -69,12 +69,14 @@ func NewSecretsManagerValueProvider(ctx context.Context, awsConfig aws.Config, s
 		envVariablesARN = fmt.Sprintf("%s/variables", fmt.Sprintf(envARNFormat, smConfig.Region, smConfig.AccountID, ghaClaims.Enterprise, ghaClaims.Repository, ghaClaims.Environment))
 	}
 
+	slog.Debug("Creating secrets store", "repoSecretsARN", repoSecretsARN, "envSecretsARN", envSecretsARN)
 	secrets, err := provider.repoOrEnvStoreFromSecretARNs(ctx, repoSecretsARN, envSecretsARN)
 	if err != nil {
 		return nil, err
 	}
 	provider.secrets = secrets
 
+	slog.Debug("Creating variables store", "repoVariablesARN", repoVariablesARN, "envVariablesARN", envVariablesARN)
 	variables, err := provider.repoOrEnvStoreFromSecretARNs(ctx, repoVariablesARN, envVariablesARN)
 	if err != nil {
 		return nil, err
@@ -157,6 +159,7 @@ func (s SecretsManagerValueProvider) mapStoreFromSecretARN(ctx context.Context, 
 	}
 	client := secretsmanager.NewFromConfig(s.awsConfig)
 
+	slog.Debug("Retrieving secret value from AWS Secrets Manager", "arn", arn)
 	secretOutput, err := client.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{SecretId: aws.String(arn)})
 	if err != nil {
 		return nil, err
