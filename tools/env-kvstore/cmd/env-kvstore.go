@@ -11,6 +11,7 @@ import (
 
 	"github.com/gravitational/shared-workflows/tools/env-kvstore/cognitotoken"
 	"github.com/gravitational/shared-workflows/tools/env-kvstore/config"
+	"github.com/gravitational/shared-workflows/tools/env-kvstore/kvstore"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awscfg "github.com/aws/aws-sdk-go-v2/config"
@@ -42,19 +43,21 @@ func main() {
 
 func run(ctx context.Context, config config.Config) error {
 	tokenExchanger := cognitotoken.NewTokenExchanger(ctx, &config.Cognito, &config.GHA)
-	provider, err := tokenExchanger.CreateProvider()
+	awsCredentialsProvider, err := tokenExchanger.CreateProvider()
 	if err != nil {
 		return fmt.Errorf("error creating Cognito role credentials provider: %w", err)
 	}
 
 	awsCfg, err := awscfg.LoadDefaultConfig(ctx,
 		awscfg.WithRegion(config.SecretsManager.Region),
-		awscfg.WithCredentialsProvider(provider),
+		awscfg.WithCredentialsProvider(awsCredentialsProvider),
 	)
 	if err != nil {
 		return fmt.Errorf("error creating AWS configuration: %w", err)
 	}
 
+	// Validate AWS credentials by making a call to STS GetCallerIdentity before proceeding with Secrets Manager calls.
+	// Need to ensure credentials are valid and that tokenExchanger.Claims is populated with values from GHA JWT.
 	stsClient := sts.NewFromConfig(awsCfg)
 	identityOutput, err := stsClient.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
 	if err != nil {
@@ -62,10 +65,10 @@ func run(ctx context.Context, config config.Config) error {
 	}
 	slog.Info("Successfully authenticated to AWS account.", "account", aws.ToString(identityOutput.Account), "arn", aws.ToString(identityOutput.Arn))
 
-	// TODO: implement:
-	//  retrieve from Secrets Manager - environment specific values overwrite repo-level values
-	//  set environment variables for subsequent steps
-	//  mask secret values
+	_, err = kvstore.NewSecretsManagerValueProvider(ctx, awsCfg, config.SecretsManager, config.Values.Items, tokenExchanger.Claims)
+	if err != nil {
+		return fmt.Errorf("error creating Secrets Manager value provider: %w", err)
+	}
 
 	return nil
 }

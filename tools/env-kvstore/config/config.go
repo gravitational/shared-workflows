@@ -184,3 +184,10 @@ func (c *CognitoConfig) GetRegion() string {
 	}
 	return ""
 }
+
+func (v *EnvValue) LookupKey() string {
+	if v.KeyOverride != "" {
+		return v.KeyOverride
+	}
+	return v.EnvVar
+}
