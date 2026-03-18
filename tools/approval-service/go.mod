@@ -1,6 +1,6 @@
 module github.com/gravitational/shared-workflows/tools/approval-service
 
-go 1.25
+go 1.25.0
 
 toolchain go1.25.5
 
@@ -11,12 +11,12 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/gravitational/shared-workflows/libs v0.1.5
 	github.com/gravitational/teleport/api v0.0.0-20250304181506-29a19b0f92da
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.1
 	golang.org/x/sync v0.18.0
 )
 
 require (
-	github.com/beevik/etree v1.3.0 // indirect
+	github.com/beevik/etree v1.6.0 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/cli/go-gh/v2 v2.12.1 // indirect
 	github.com/cli/safeexec v1.0.1 // indirect
@@ -37,8 +37,8 @@ require (
 	github.com/jonboulle/clockwork v0.5.0 // indirect
 	github.com/mattermost/xml-roundtrip-validator v0.1.0 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
-	github.com/russellhaering/gosaml2 v0.9.1 // indirect
-	github.com/russellhaering/goxmldsig v1.4.0 // indirect
+	github.com/russellhaering/gosaml2 v0.11.0 // indirect
+	github.com/russellhaering/goxmldsig v1.6.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.59.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.59.0 // indirect
