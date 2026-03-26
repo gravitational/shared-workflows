@@ -80,7 +80,7 @@ func PrintSummaryReport() {
 // GITHUB_STEP_SUMMARY environment variable, which will be displayed in the GitHub Actions UI.
 func (r *summaryReporter) reportSummary() {
 	output := strings.Builder{}
-	output.WriteString("<details>\n<summary>## env-kvstore - Environment Variable Retrieval Summary</summary>\n")
+	output.WriteString("<details>\n<summary>\n## env-kvstore - Environment Variable Retrieval Summary\n</summary>\n\n")
 	for _, step := range r.steps {
 		statuses := r.stepStatuses[step]
 		if len(statuses) == 0 {
@@ -106,7 +106,7 @@ func (r *summaryReporter) reportSummary() {
 			output.WriteString(fmt.Sprintf("| %s | %s | %d | %d | %d |\n", resultEmoji, status.Msg, status.SuccessCount, status.FailureCount, status.WarningCount))
 		}
 	}
-	output.WriteString("</details>")
+	output.WriteString("\n</details>\n")
 	summaryFile := os.Getenv("GITHUB_STEP_SUMMARY")
 	if summaryFile == "" {
 		slog.Error("GITHUB_STEP_SUMMARY environment variable not set, cannot write summary report")
