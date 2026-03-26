@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/gravitational/shared-workflows/tools/env-kvstore/config"
+	"github.com/gravitational/shared-workflows/tools/env-kvstore/github"
 
 	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentity"
@@ -31,6 +32,8 @@ const (
 	fmtLoginProvider = "token.actions.githubusercontent.com%s"
 
 	minSessionDuration = 15 * time.Minute // matches Cognito's default
+
+	githubStepName = "Exchange GHA token for AWS credentials"
 )
 
 // CognitoGHATokenExchanger creates a role provider that exchanges a GitHub Actions JWT token for a Cognito OIDC token.
@@ -89,6 +92,10 @@ func (e *CognitoGHATokenExchanger) GetIdentityToken() ([]byte, error) {
 func (e *CognitoGHATokenExchanger) CreateProvider() (*stscreds.WebIdentityRoleProvider, error) {
 	sessionName, err := e.getAWSSessionName()
 	if err != nil {
+		github.AddSummary(githubStepName, github.StepStatus{
+			Result: github.StepResultFailure,
+			Msg:    fmt.Sprintf("Failed to complete token exchange: %v", err),
+		})
 		return nil, fmt.Errorf("error getting AWS session name for Cognito role provider: %w", err)
 	}
 
@@ -182,6 +189,10 @@ func (e *CognitoGHATokenExchanger) fetchGHAJWT() error {
 				return fmt.Errorf("failed to validate GHA token: %w", err)
 			}
 		}
+		github.AddSummary(githubStepName, github.StepStatus{
+			Result: github.StepResultSuccess,
+			Msg:    "Retrieved GHA JWT from ID Token request URL",
+		})
 		return nil
 	}
 
@@ -346,6 +357,10 @@ func (e *CognitoGHATokenExchanger) fetchCognitoOIDCToken() error {
 		return fmt.Errorf("error logging Cognito OIDC token claims: %w", err)
 	}
 
+	github.AddSummary(githubStepName, github.StepStatus{
+		Result: github.StepResultSuccess,
+		Msg:    "Retrieved OIDC token from Cognito",
+	})
 	return nil
 }
 

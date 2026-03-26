@@ -3,6 +3,10 @@ name: env-kvstore CI
 
 on:
   pull_request:
+    paths:
+      - tools/env-kvstore/**
+      - .github/workflows/env-kvstore-ci.yaml
+      - .github/workflows/reusable-ci.yaml
 
 jobs:
   release:

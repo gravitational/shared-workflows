@@ -45,7 +45,7 @@ type EnvValue struct {
 	// ValueType indicates whether the value is a variable or a secret. Determines retrieval
 	// namespace and whether value is masked in GitHub Actions logs.
 	ValueType string
-	// KeyOverride is used to lookup the value in AWS Secrets Manager by a different key than 
+	// KeyOverride is used to lookup the value in AWS Secrets Manager by a different key than
 	// the environment variable name. Use when a branch-specific value is needed.
 	KeyOverride string
 }

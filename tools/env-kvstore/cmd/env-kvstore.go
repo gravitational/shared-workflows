@@ -11,6 +11,7 @@ import (
 
 	"github.com/gravitational/shared-workflows/tools/env-kvstore/cognitotoken"
 	"github.com/gravitational/shared-workflows/tools/env-kvstore/config"
+	"github.com/gravitational/shared-workflows/tools/env-kvstore/github"
 	"github.com/gravitational/shared-workflows/tools/env-kvstore/kvstore"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -35,8 +36,10 @@ func main() {
 		os.Exit(1)
 	}
 
+	defer github.PrintSummaryReport()
 	if err := run(ctx, cliConfig); err != nil {
 		slog.Error("Error running env-kvstore.", "error", err)
+		github.PrintSummaryReport()
 		os.Exit(1)
 	}
 }
@@ -65,10 +68,12 @@ func run(ctx context.Context, config config.Config) error {
 	}
 	slog.Info("Successfully authenticated to AWS account.", "account", aws.ToString(identityOutput.Account), "arn", aws.ToString(identityOutput.Arn))
 
-	slog.Info("Retrieving secrets from AWS Secrets Manager and setting environment variables.")
-	_, err = kvstore.NewSecretsManagerValueProvider(ctx, awsCfg, config.SecretsManager, config.Values.Items, tokenExchanger.Claims)
+	valueProvider := kvstore.NewSecretsManagerValueProvider(awsCfg, config.SecretsManager, tokenExchanger.Claims, config.Values.Items)
+
+	slog.Info("Setting environment values for GHA workflow.")
+	err = valueProvider.SetEnvValuesForGitHubActions(ctx)
 	if err != nil {
-		return fmt.Errorf("error creating Secrets Manager value provider: %w", err)
+		return fmt.Errorf("error setting environment values for GHA workflow: %w", err)
 	}
 
 	return nil
