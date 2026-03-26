@@ -270,7 +270,7 @@ func (s SecretsManagerValueProvider) mapStoreFromSecretARN(ctx context.Context, 
 		return nil, err
 	}
 
-	kvMap := make(map[string]string)
+	kvMap := make(map[string]string, len(s.valuesConfig))
 	if err := json.Unmarshal([]byte(aws.ToString(secretOutput.SecretString)), &kvMap); err != nil {
 		return nil, fmt.Errorf("error unmarshalling value from Secrets Manager: %w", err)
 	}
