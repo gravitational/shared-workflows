@@ -239,11 +239,11 @@ func (s SecretsManagerValueProvider) repoOrEnvStoreFromSecretARNs(ctx context.Co
 		}
 	}
 
-	// When the workflow is running in the context of a specific environment, we expect to find some
+	// When the workflow is running in the context of a specific GHA environment, we expect to find
 	// environment-specific values in Secrets Manager.
-	// Emit a warning when no environment-specific values are stored.
-	// If an empty environment store is found in secrets manager, the environment is configured, but
-	// expected to use repo-level values only.
+	// Emit a warning when no environment-specific values are stored at all.
+	// If an empty environment store is retrieved from Secrets Manager, the environment is configured to
+	// use repo-level values only.
 	if envArn != "" && envStore.IsEmpty() && isResourceNotFoundException(err) {
 		slog.Warn("no environment-specific values found in Secrets Manager, only repo-level values will be available", "environment", s.ghaClaims.Environment, "arn", envArn)
 		err = envStoreNotFoundError{msg: fmt.Sprintf("no environment-specific values found in Secrets Manager for environment %s", s.ghaClaims.Environment)}

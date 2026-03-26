@@ -112,7 +112,7 @@ func (r *summaryReporter) ReportSummary() {
 		slog.Error("Error opening GITHUB_STEP_SUMMARY file", "error", err)
 		return
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	if _, err := f.WriteString(output.String()); err != nil {
 		slog.Error("Error writing to GITHUB_STEP_SUMMARY file", "error", err)
@@ -144,7 +144,7 @@ func AppendEnvLines(values *[]GhaEnvValue) error {
 		slog.Error("Error opening GITHUB_ENV file", "error", err)
 		return fmt.Errorf("error opening GITHUB_ENV file: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	if _, err := f.WriteString(GenerateEnvLines(values)); err != nil {
 		slog.Error("Error writing to GITHUB_ENV file", "error", err)
