@@ -73,20 +73,20 @@ func init() {
 }
 
 func PrintSummaryReport() {
-	summary.ReportSummary()
+	summary.reportSummary()
 }
 
-// ReportSummary prints a summary of the steps and their results to the file identified by the
+// reportSummary prints a summary of the steps and their results to the file identified by the
 // GITHUB_STEP_SUMMARY environment variable, which will be displayed in the GitHub Actions UI.
-func (r *summaryReporter) ReportSummary() {
+func (r *summaryReporter) reportSummary() {
 	output := strings.Builder{}
-	output.WriteString("# env-kvstore - Environment Variable Retrieval Summary\n\n")
+	output.WriteString("<details>\n<summary>## env-kvstore - Environment Variable Retrieval Summary</summary>\n")
 	for _, step := range r.steps {
 		statuses := r.stepStatuses[step]
 		if len(statuses) == 0 {
 			continue
 		}
-		output.WriteString("## " + step + "\n")
+		output.WriteString("### " + step + "\n")
 		// output a table header with columns for stepName, result, msg, successCount, failureCount, warningCount
 		output.WriteString("| Result | Message | ✅ | ❌ | ⚠️ |\n")
 		output.WriteString("| --- | --- | --- | --- | --- |\n")
@@ -98,9 +98,15 @@ func (r *summaryReporter) ReportSummary() {
 			case StepResultWarning:
 				resultEmoji = "⚠️"
 			}
+			if (status.SuccessCount == 0 && status.FailureCount == 0 && status.WarningCount == 0) {
+				// if no counts are provided, just output the message without counts
+				output.WriteString(fmt.Sprintf("| %s | %s |  |  |  |\n", resultEmoji, status.Msg))
+				continue
+			}
 			output.WriteString(fmt.Sprintf("| %s | %s | %d | %d | %d |\n", resultEmoji, status.Msg, status.SuccessCount, status.FailureCount, status.WarningCount))
 		}
 	}
+	output.WriteString("</details>")
 	summaryFile := os.Getenv("GITHUB_STEP_SUMMARY")
 	if summaryFile == "" {
 		slog.Error("GITHUB_STEP_SUMMARY environment variable not set, cannot write summary report")

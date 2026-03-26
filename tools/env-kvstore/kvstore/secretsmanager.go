@@ -147,7 +147,7 @@ func (s *SecretsManagerValueProvider) populateEnvValues(ctx context.Context) err
 	}
 	stepResult := github.StepStatus{
 		Result:       github.StepResultSuccess,
-		Msg:          fmt.Sprintf("Populated %d secret values and %d variable values (%d warnings)", secretCount, variableCount, secretErrCount+variableErrCount),
+		Msg:          fmt.Sprintf("Populated %d secret values and %d variable values (%d errors)", secretCount, variableCount, secretErrCount+variableErrCount),
 		SuccessCount: secretCount + variableCount,
 		FailureCount: secretErrCount + variableErrCount,
 	}

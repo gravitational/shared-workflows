@@ -111,7 +111,7 @@ An IAM role that can be assumed using the Cognito token is required. The followi
 ```
 </details>
 
-Role policy should allow `secretsmanager:GetSecretValue` for secrets following the naming convention.
+Role policy should allow `secretsmanager:GetSecretValue` for secrets that are tagged with the appropriate GitHub session tags.
 
 <details>
 <summary>Example IAM Role Policy</summary>
@@ -124,10 +124,17 @@ Role policy should allow `secretsmanager:GetSecretValue` for secrets following t
             "Action": "secretsmanager:GetSecretValue",
             "Effect": "Allow",
             "Resource": [
-                "arn:aws:secretsmanager:us-west-2:278576220453:secret:${aws:PrincipalTag/enterprise}/repo/${aws:PrincipalTag/repository}/secrets",
-                "arn:aws:secretsmanager:us-west-2:278576220453:secret:${aws:PrincipalTag/enterprise}/repo/${aws:PrincipalTag/repository}/variables",
-                "arn:aws:secretsmanager:us-west-2:278576220453:secret:${aws:PrincipalTag/enterprise}/repo/${aws:PrincipalTag/repository}/env/${aws:PrincipalTag/environment}/*",
+                "*"
             ],
+            "Condition": {
+                "StringEquals": {
+                    "aws:ResourceTag/github:enterprise": "${aws:PrincipalTag/enterprise}",
+                    "aws:ResourceTag/github:repository": "${aws:PrincipalTag/repository}"
+                },
+                "StringEqualsIfExists": {
+                    "aws:ResourceTag/github:environment": "${aws:PrincipalTag/environment}"
+                }
+            },
         }
     ],
 }
