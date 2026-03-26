@@ -171,13 +171,13 @@ func TestReportSummaryAppendsToExistingFile(t *testing.T) {
 	if !strings.HasPrefix(got, "existing summary\n") {
 		t.Fatalf("PrintSummaryReport() should append to existing summary:\n%s", got)
 	}
-	if !strings.Contains(got, "# env-kvstore - Environment Variable Retrieval Summary") {
+	if !strings.Contains(got, "<h2>env-kvstore - Environment Variable Retrieval Summary</h2>") {
 		t.Fatalf("PrintSummaryReport() missing summary header:\n%s", got)
 	}
-	if !strings.Contains(got, "## Retrieve values") {
+	if !strings.Contains(got, "<h3>Retrieve values</h3>") {
 		t.Fatalf("PrintSummaryReport() missing step section:\n%s", got)
 	}
-	if !strings.Contains(got, "| ✅ | loaded values | 2 | 0 | 0 |") {
+	if !strings.Contains(got, "<td>✅</td><td>loaded values</td><td>2</td><td>0</td><td>0</td>") {
 		t.Fatalf("PrintSummaryReport() missing status row:\n%s", got)
 	}
 }

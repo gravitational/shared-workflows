@@ -80,16 +80,16 @@ func PrintSummaryReport() {
 // GITHUB_STEP_SUMMARY environment variable, which will be displayed in the GitHub Actions UI.
 func (r *summaryReporter) reportSummary() {
 	output := strings.Builder{}
-	output.WriteString("<details>\n<summary>\n## env-kvstore - Environment Variable Retrieval Summary\n</summary>\n\n")
+	output.WriteString("<details><summary><h2>env-kvstore - Environment Variable Retrieval Summary</h2></summary>\n")
 	for _, step := range r.steps {
 		statuses := r.stepStatuses[step]
 		if len(statuses) == 0 {
 			continue
 		}
-		output.WriteString("### " + step + "\n")
+		output.WriteString("<p><h3>" + step + "</h3></p>\n")
 		// output a table header with columns for stepName, result, msg, successCount, failureCount, warningCount
-		output.WriteString("| Result | Message | ✅ | ❌ | ⚠️ |\n")
-		output.WriteString("| --- | --- | --- | --- | --- |\n")
+		output.WriteString("<table><tr>")
+		output.WriteString("<th>Result</th><th>Message</th><th>✅</th><th>❌</th><th>⚠️</th></tr>\n")
 		for _, status := range statuses {
 			resultEmoji := "✅"
 			switch status.Result {
@@ -100,11 +100,12 @@ func (r *summaryReporter) reportSummary() {
 			}
 			if (status.SuccessCount == 0 && status.FailureCount == 0 && status.WarningCount == 0) {
 				// if no counts are provided, just output the message without counts
-				output.WriteString(fmt.Sprintf("| %s | %s |  |  |  |\n", resultEmoji, status.Msg))
+				output.WriteString(fmt.Sprintf("<tr><td>%s</td><td>%s</td><td></td><td></td><td></td></tr>\n", resultEmoji, status.Msg))
 				continue
 			}
-			output.WriteString(fmt.Sprintf("| %s | %s | %d | %d | %d |\n", resultEmoji, status.Msg, status.SuccessCount, status.FailureCount, status.WarningCount))
+			output.WriteString(fmt.Sprintf("<tr><td>%s</td><td>%s</td><td>%d</td><td>%d</td><td>%d</td></tr>\n", resultEmoji, status.Msg, status.SuccessCount, status.FailureCount, status.WarningCount))
 		}
+		output.WriteString("</table>\n")
 	}
 	output.WriteString("\n</details>\n")
 	summaryFile := os.Getenv("GITHUB_STEP_SUMMARY")
