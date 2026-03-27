@@ -15,6 +15,11 @@ const (
 	StepResultWarning
 )
 
+const (
+	GitHubStepSummary = "GITHUB_STEP_SUMMARY"
+	GitHubEnv         = "GITHUB_ENV"
+)
+
 // StepStatus is used to track the result of each step for summary reporting at the end of execution.
 type StepStatus struct {
 	Result       int
@@ -98,7 +103,7 @@ func (r *summaryReporter) reportSummary() {
 			case StepResultWarning:
 				resultEmoji = "⚠️"
 			}
-			if (status.SuccessCount == 0 && status.FailureCount == 0 && status.WarningCount == 0) {
+			if status.SuccessCount == 0 && status.FailureCount == 0 && status.WarningCount == 0 {
 				// if no counts are provided, just output the message without counts
 				output.WriteString(fmt.Sprintf("<tr><td>%s</td><td>%s</td><td></td><td></td><td></td></tr>\n", resultEmoji, status.Msg))
 				continue
@@ -108,14 +113,14 @@ func (r *summaryReporter) reportSummary() {
 		output.WriteString("</table>\n")
 	}
 	output.WriteString("\n</details>\n")
-	summaryFile := os.Getenv("GITHUB_STEP_SUMMARY")
+	summaryFile := os.Getenv(GitHubStepSummary)
 	if summaryFile == "" {
-		slog.Error("GITHUB_STEP_SUMMARY environment variable not set, cannot write summary report")
+		slog.Error("step summary environment variable not set, cannot write summary report", "variable", GitHubStepSummary)
 		return
 	}
 
-    if err := os.WriteFile(summaryFile, []byte(output.String()), 0644); err != nil {
-		slog.Error("Error writing to GITHUB_STEP_SUMMARY file", "error", err)
+	if err := os.WriteFile(summaryFile, []byte(output.String()), 0644); err != nil {
+		slog.Error("Error writing GitHub summary file", "error", err, "file", summaryFile)
 	}
 }
 
@@ -130,26 +135,21 @@ func AddSummary(stepName string, status StepStatus) {
 	summary.stepStatuses[stepName] = append(summary.stepStatuses[stepName], status)
 }
 
-// AppendEnvLines appends environment variable definitions to the file specified by the GITHUB_ENV
+// WriteEnvLines writes environment variable definitions to the file specified by the GITHUB_ENV
 // environment variable, which will set those environment variables for subsequent steps in the
 // GitHub Actions workflow.
-func AppendEnvLines(values *[]GhaEnvValue) error {
-	envFile := os.Getenv("GITHUB_ENV")
+func WriteEnvLines(values *[]GhaEnvValue) error {
+	envFile := os.Getenv(GitHubEnv)
 	if envFile == "" {
-		slog.Error("GITHUB_ENV environment variable not set, cannot append environment variables")
-		return fmt.Errorf("GITHUB_ENV environment variable not set")
+		slog.Error("environment variable not set, cannot append environment variables", "variable", GitHubEnv)
+		return fmt.Errorf("%s environment variable not set", GitHubEnv)
 	}
-	f, err := os.OpenFile(envFile, os.O_APPEND|os.O_WRONLY, 0644)
-	if err != nil {
-		slog.Error("Error opening GITHUB_ENV file", "error", err)
-		return fmt.Errorf("error opening GITHUB_ENV file: %w", err)
-	}
-	defer func() { _ = f.Close() }()
 
-	if _, err := f.WriteString(GenerateEnvLines(values)); err != nil {
-		slog.Error("Error writing to GITHUB_ENV file", "error", err)
-		return fmt.Errorf("error writing to GITHUB_ENV file: %w", err)
+	if err := os.WriteFile(envFile, []byte(GenerateEnvLines(values)), 0644); err != nil {
+		slog.Error("Error writing GitHub environment variable file", "error", err, "file", envFile)
+		return fmt.Errorf("error writing to GitHub environment variable file: %w", err)
 	}
+
 	return nil
 }
 

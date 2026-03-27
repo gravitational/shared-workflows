@@ -73,9 +73,9 @@ func envSecretARN(valueType string, arnDetails arnTemplateFields) string {
 
 func NewSecretsManagerValueProvider(awsConfig aws.Config, smConfig config.SecretsManagerConfig, ghaClaims config.GHAClaims, valuesConfig []config.EnvValue) *SecretsManagerValueProvider {
 	return &SecretsManagerValueProvider{
-		awsConfig:   awsConfig,
-		smConfig:    smConfig,
-		ghaClaims:   ghaClaims,
+		awsConfig:    awsConfig,
+		smConfig:     smConfig,
+		ghaClaims:    ghaClaims,
 		valuesConfig: valuesConfig,
 	}
 }
@@ -90,7 +90,7 @@ func (s *SecretsManagerValueProvider) SetEnvValuesForGitHubActions(ctx context.C
 	}
 	s.MaskAllSecretValues()
 
-	if err := github.AppendEnvLines(&s.ghaEnvValues); err != nil {
+	if err := github.WriteEnvLines(&s.ghaEnvValues); err != nil {
 		github.AddSummary(githubStepName, github.StepStatus{
 			Result: github.StepResultFailure,
 			Msg:    fmt.Sprintf("Failed to set environment variables for GitHub Actions: %v", err),

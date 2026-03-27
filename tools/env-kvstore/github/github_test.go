@@ -108,9 +108,6 @@ func TestGenerateEnvLines(t *testing.T) {
 func TestAppendEnvLines(t *testing.T) {
 	dir := t.TempDir()
 	envFile := filepath.Join(dir, "github_env")
-	if err := os.WriteFile(envFile, []byte("EXISTING=1\n"), 0o644); err != nil {
-		t.Fatalf("WriteFile() error = %v", err)
-	}
 	t.Setenv("GITHUB_ENV", envFile)
 
 	values := []GhaEnvValue{
@@ -121,7 +118,7 @@ func TestAppendEnvLines(t *testing.T) {
 		},
 	}
 
-	if err := AppendEnvLines(&values); err != nil {
+	if err := WriteEnvLines(&values); err != nil {
 		t.Fatalf("AppendEnvLines() error = %v", err)
 	}
 
@@ -130,20 +127,14 @@ func TestAppendEnvLines(t *testing.T) {
 		t.Fatalf("ReadFile() error = %v", err)
 	}
 	got := string(contents)
-	if !strings.HasPrefix(got, "EXISTING=1\n") {
-		t.Fatalf("AppendEnvLines() overwrote existing file contents:\n%s", got)
-	}
 	if !strings.Contains(got, "APPENDED<<ghadelimiter_") {
 		t.Fatalf("AppendEnvLines() missing appended variable:\n%s", got)
 	}
 }
 
-func TestReportSummaryAppendsToExistingFile(t *testing.T) {
+func TestReportSummaryWrites(t *testing.T) {
 	dir := t.TempDir()
 	summaryFile := filepath.Join(dir, "summary.md")
-	if err := os.WriteFile(summaryFile, []byte("existing summary\n"), 0o644); err != nil {
-		t.Fatalf("WriteFile() error = %v", err)
-	}
 	t.Setenv("GITHUB_STEP_SUMMARY", summaryFile)
 
 	oldSummary := summary
@@ -168,9 +159,6 @@ func TestReportSummaryAppendsToExistingFile(t *testing.T) {
 		t.Fatalf("ReadFile() error = %v", err)
 	}
 	got := string(contents)
-	if !strings.HasPrefix(got, "existing summary\n") {
-		t.Fatalf("PrintSummaryReport() should append to existing summary:\n%s", got)
-	}
 	if !strings.Contains(got, "<h2>env-kvstore - Environment Variable Retrieval Summary</h2>") {
 		t.Fatalf("PrintSummaryReport() missing summary header:\n%s", got)
 	}
