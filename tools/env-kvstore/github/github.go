@@ -114,14 +114,7 @@ func (r *summaryReporter) reportSummary() {
 		return
 	}
 
-	f, err := os.OpenFile(summaryFile, os.O_APPEND|os.O_WRONLY, 0644)
-	if err != nil {
-		slog.Error("Error opening GITHUB_STEP_SUMMARY file", "error", err)
-		return
-	}
-	defer func() { _ = f.Close() }()
-
-	if _, err := f.WriteString(output.String()); err != nil {
+    if err := os.WriteFile(summaryFile, []byte(output.String()), 0644); err != nil {
 		slog.Error("Error writing to GITHUB_STEP_SUMMARY file", "error", err)
 	}
 }
