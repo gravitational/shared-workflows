@@ -8,7 +8,7 @@ import (
 	"log/slog"
 
 	"github.com/gravitational/shared-workflows/tools/env-kvstore/config"
-	"github.com/gravitational/shared-workflows/tools/env-kvstore/github"
+	"github.com/gravitational/shared-workflows/tools/env-kvstore/actions"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
@@ -33,7 +33,13 @@ type SecretsManagerValueProvider struct {
 	// variables is the KV store for variable values retrieved from Secrets Manager, environment-specific values have precedence
 	variables KVStoreStringReader
 	// ghaEnvValues contains the desired environment variables with their corresponding values retrieved from Secrets Manager
-	ghaEnvValues []github.GhaEnvValue
+	ghaEnvValues []ghaEnvValue
+}
+
+type ghaEnvValue struct {
+	VarName   string
+	ValueType string
+	Value     string
 }
 
 type arnTemplateFields struct {
@@ -90,15 +96,20 @@ func (s *SecretsManagerValueProvider) SetEnvValuesForGitHubActions(ctx context.C
 	}
 	s.MaskAllSecretValues()
 
-	if err := github.WriteEnvLines(&s.ghaEnvValues); err != nil {
-		github.AddSummary(githubStepName, github.StepStatus{
-			Result: github.StepResultFailure,
+	envValues := make(map[string]string, len(s.ghaEnvValues))
+	for _, v := range s.ghaEnvValues {
+		envValues[v.VarName] = v.Value
+	}
+
+	if err := actions.WriteGithubEnv(envValues); err != nil {
+		actions.AddSummary(githubStepName, actions.SummaryRow{
+			Result: actions.SummaryResultFailure,
 			Msg:    fmt.Sprintf("Failed to set environment variables for GitHub Actions: %v", err),
 		})
 		return fmt.Errorf("error appending environment variable definitions to GITHUB_ENV file: %w", err)
 	}
-	github.AddSummary(githubStepName, github.StepStatus{
-		Result: github.StepResultSuccess,
+	actions.AddSummary(githubStepName, actions.SummaryRow{
+		Result: actions.SummaryResultSuccess,
 		Msg:    "Environment variables set successfully for GitHub Actions",
 	})
 
@@ -108,7 +119,13 @@ func (s *SecretsManagerValueProvider) SetEnvValuesForGitHubActions(ctx context.C
 // MaskAllSecretValues iterates through the values and adds a mask for any value of type "secret" so that they are not exposed in GitHub Actions logs if printed by subsequent steps.
 func (s *SecretsManagerValueProvider) MaskAllSecretValues() {
 	fmt.Println("\n::group::Masking secret values in GitHub Actions logs")
-	github.MaskSecretValues(&s.ghaEnvValues)
+	secrets := make([]string, 0, len(s.ghaEnvValues))
+	for _, v := range s.ghaEnvValues {
+		if v.ValueType == "secret" && v.Value != "" {
+			secrets = append(secrets, v.Value)
+		}
+	}
+	actions.MaskSecretValues(secrets)
 	defer fmt.Println("::endgroup::")
 }
 
@@ -139,23 +156,23 @@ func (s *SecretsManagerValueProvider) populateEnvValues(ctx context.Context) err
 			}
 			variableCount++
 		}
-		s.ghaEnvValues = append(s.ghaEnvValues, github.GhaEnvValue{
+		s.ghaEnvValues = append(s.ghaEnvValues, ghaEnvValue{
 			VarName:   v.EnvVar,
 			ValueType: v.ValueType,
 			Value:     value,
 		})
 	}
-	stepResult := github.StepStatus{
-		Result:       github.StepResultSuccess,
+	stepResult := actions.SummaryRowWithCounts{
+		Result:       actions.SummaryResultSuccess,
 		Msg:          fmt.Sprintf("Populated %d secret values and %d variable values (%d errors)", secretCount, variableCount, secretErrCount+variableErrCount),
 		SuccessCount: secretCount + variableCount,
 		FailureCount: secretErrCount + variableErrCount,
 	}
 	if secretErrCount+variableErrCount > 0 {
-		stepResult.Result = github.StepResultFailure
+		stepResult.Result = actions.SummaryResultFailure
 	}
-	github.AddSummary(githubStepName, stepResult)
-	if stepResult.Result == github.StepResultFailure {
+	actions.AddSummary(githubStepName, stepResult)
+	if stepResult.Result == actions.SummaryResultFailure {
 		return fmt.Errorf("failed to populate all environment variable values: %d secrets and %d variables were not found in Secrets Manager", secretErrCount, variableErrCount)
 	}
 	return nil
@@ -186,9 +203,10 @@ func (s *SecretsManagerValueProvider) initializeStores(ctx context.Context) erro
 	}
 
 	s.secrets = secrets
-	github.AddSummary(githubStepName, github.StepStatus{
-		Result: github.StepResultSuccess,
-		Msg:    "Secrets store created successfully",
+	actions.AddSummary(githubStepName, actions.SummaryRowWithCounts{
+		Result:       actions.SummaryResultSuccess,
+		Msg:          "Secrets store created successfully",
+		SuccessCount: 1,
 	})
 
 	slog.Debug("Creating variables store", "repoVariablesARN", repoVariablesARN, "envVariablesARN", envVariablesARN)
@@ -202,25 +220,28 @@ func (s *SecretsManagerValueProvider) initializeStores(ctx context.Context) erro
 	}
 
 	s.variables = variables
-	github.AddSummary(githubStepName, github.StepStatus{
-		Result: github.StepResultSuccess,
-		Msg:    "Variables store created successfully",
+	actions.AddSummary(githubStepName, actions.SummaryRowWithCounts{
+		Result:       actions.SummaryResultSuccess,
+		Msg:          "Variables store created successfully",
+		SuccessCount: 1,
 	})
 
 	return nil
 }
 
 func (s *SecretsManagerValueProvider) emitStoreInitFailureSummary(err error, storeType string) {
-	github.AddSummary(githubStepName, github.StepStatus{
-		Result: github.StepResultFailure,
-		Msg:    fmt.Sprintf("Failed to create %s store: %v", storeType, err),
+	actions.AddSummary(githubStepName, actions.SummaryRowWithCounts{
+		Result:       actions.SummaryResultFailure,
+		Msg:          fmt.Sprintf("Failed to create %s store: %v", storeType, err),
+		FailureCount: 1,
 	})
 }
 
 func (s *SecretsManagerValueProvider) emitEnvStoreWarning(storeType string) {
-	github.AddSummary(githubStepName, github.StepStatus{
-		Result: github.StepResultWarning,
-		Msg:    fmt.Sprintf("Environment specific %s do not exist for environment \"%v\"", storeType, s.ghaClaims.Environment),
+	actions.AddSummary(githubStepName, actions.SummaryRowWithCounts{
+		Result:       actions.SummaryResultWarning,
+		Msg:          fmt.Sprintf("Environment specific %s do not exist for environment \"%v\"", storeType, s.ghaClaims.Environment),
+		WarningCount: 1,
 	})
 }
 

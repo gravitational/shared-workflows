@@ -11,7 +11,7 @@ import (
 
 	"github.com/gravitational/shared-workflows/tools/env-kvstore/cognitotoken"
 	"github.com/gravitational/shared-workflows/tools/env-kvstore/config"
-	"github.com/gravitational/shared-workflows/tools/env-kvstore/github"
+	"github.com/gravitational/shared-workflows/tools/env-kvstore/actions"
 	"github.com/gravitational/shared-workflows/tools/env-kvstore/kvstore"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -36,10 +36,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	defer github.PrintSummaryReport()
+	title := "env-kvstore - Environment Variable Retrieval Summary"
+	defer actions.PrintSummaryReport(title)
 	if err := run(ctx, cliConfig); err != nil {
 		slog.Error("Error running env-kvstore.", "error", err)
-		github.PrintSummaryReport()
+		actions.PrintSummaryReport(title)
 		os.Exit(1)
 	}
 }
