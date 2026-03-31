@@ -102,10 +102,10 @@ func generateKVAssignment(name, value string) (string, error) {
 	// adapted from https://github.com/actions/toolkit/blob/44d43b5490b02998bd09b0c4ff369a4cc67876c2/packages/core/src/file-command.ts#L27-L47
 	delimiter := fmt.Sprintf("ghadelimiter_%s", uuid.New().String())
 	if strings.Contains(name, delimiter) {
-		return "", fmt.Errorf("Unexpected input: VarName should not contain the delimiter '%s'", delimiter)
+		return "", fmt.Errorf("unexpected input: VarName should not contain the delimiter '%s'", delimiter)
 	}
 	if strings.Contains(value, delimiter) {
-		return "", fmt.Errorf("Unexpected input: Value should not contain the delimiter '%s'", delimiter)
+		return "", fmt.Errorf("unexpected input: Value should not contain the delimiter '%s'", delimiter)
 	}
 	return fmt.Sprintf("%s<<%s\n%s\n%s", name, delimiter, value, delimiter), nil
 }
