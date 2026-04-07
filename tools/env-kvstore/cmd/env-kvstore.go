@@ -9,9 +9,9 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/gravitational/shared-workflows/libs/github/actions"
 	"github.com/gravitational/shared-workflows/tools/env-kvstore/cognitotoken"
 	"github.com/gravitational/shared-workflows/tools/env-kvstore/config"
-	"github.com/gravitational/shared-workflows/tools/env-kvstore/actions"
 	"github.com/gravitational/shared-workflows/tools/env-kvstore/kvstore"
 
 	"github.com/aws/aws-sdk-go-v2/aws"

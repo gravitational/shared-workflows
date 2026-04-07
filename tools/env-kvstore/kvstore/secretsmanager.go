@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/gravitational/shared-workflows/libs/github/actions"
 	"github.com/gravitational/shared-workflows/tools/env-kvstore/config"
-	"github.com/gravitational/shared-workflows/tools/env-kvstore/actions"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
@@ -102,15 +102,17 @@ func (s *SecretsManagerValueProvider) SetEnvValuesForGitHubActions(ctx context.C
 	}
 
 	if err := actions.WriteGithubEnv(envValues); err != nil {
-		actions.AddSummary(githubStepName, actions.SummaryRow{
+		actions.AddSummary(githubStepName, actions.SummaryRowWithCounts{
 			Result: actions.SummaryResultFailure,
 			Msg:    fmt.Sprintf("Failed to set environment variables for GitHub Actions: %v", err),
+			FailureCount: 1,
 		})
 		return fmt.Errorf("error appending environment variable definitions to GITHUB_ENV file: %w", err)
 	}
-	actions.AddSummary(githubStepName, actions.SummaryRow{
+	actions.AddSummary(githubStepName, actions.SummaryRowWithCounts{
 		Result: actions.SummaryResultSuccess,
 		Msg:    "Environment variables set successfully for GitHub Actions",
+		SuccessCount: len(envValues),
 	})
 
 	return nil

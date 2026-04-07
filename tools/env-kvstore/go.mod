@@ -1,8 +1,6 @@
 module github.com/gravitational/shared-workflows/tools/env-kvstore
 
-go 1.25
-
-toolchain go1.25.8
+go 1.26
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.41.3
@@ -13,6 +11,8 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/hashicorp/go-retryablehttp v0.7.8
 )
+
+require github.com/gravitational/shared-workflows/libs v0.1.6-0.20260331132551-064b8f8dd4d8 // indirect
 
 require (
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.18 // indirect

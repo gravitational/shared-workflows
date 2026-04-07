@@ -2,6 +2,7 @@
 package actions
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 	"strings"
@@ -24,6 +25,10 @@ func MaskSecretValues(secrets []string) {
 			continue
 		}
 		fmt.Printf("::add-mask::%s\n", v)
+		stdEncoded := base64.StdEncoding.EncodeToString([]byte(v))
+		fmt.Printf("::add-mask::%s\n", stdEncoded)
+		urlEncoded := base64.URLEncoding.EncodeToString([]byte(v))
+		fmt.Printf("::add-mask::%s\n", urlEncoded)
 	}
 }
 

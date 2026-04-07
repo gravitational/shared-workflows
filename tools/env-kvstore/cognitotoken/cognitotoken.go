@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/gravitational/shared-workflows/tools/env-kvstore/config"
-	"github.com/gravitational/shared-workflows/tools/env-kvstore/actions"
+	"github.com/gravitational/shared-workflows/libs/github/actions"
 
 	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentity"
