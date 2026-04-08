@@ -96,6 +96,8 @@ type WorkflowDispatchResult struct {
 	// WorkflowRunID is the ID of the resulting workflow.
 	// You can use [GetWorkflowRunInfo] to query for more info.
 	WorkflowRunID int64
+	// HTMLURL is the URL to view the workflow run on GitHub.
+	HTMLURL string
 }
 
 // WorkflowDispatch triggers a workflow dispatch event.
@@ -121,7 +123,21 @@ func (c *Client) WorkflowDispatch(ctx context.Context, org, repo string, req Wor
 
 	return WorkflowDispatchResult{
 		WorkflowRunID: result.GetWorkflowRunID(),
+		HTMLURL:       result.GetHTMLURL(),
 	}, nil
+}
+
+// RerunWorkflowFailedJobs triggers a rerun of all failed jobs in a workflow run.
+// This is useful for workflows that have failed due to transient errors and do not require a full re-dispatch.
+func (c *Client) RerunWorkflowFailedJobs(ctx context.Context, org, repo string, runID int64) error {
+	if runID == 0 {
+		return fmt.Errorf("runID is required")
+	}
+	_, err := c.client.Actions.RerunFailedJobsByID(ctx, org, repo, runID)
+	if err != nil {
+		return fmt.Errorf("RerunFailedJobsByID API call: %w", err)
+	}
+	return nil
 }
 
 // WorkflowRunNotFoundError is a sentinel error returned when a workflow run cannot be found.
