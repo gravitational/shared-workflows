@@ -112,6 +112,15 @@ func (e *CognitoGHATokenExchanger) CreateProvider() (*stscreds.WebIdentityRolePr
 	return provider, nil
 }
 
+func (e *CognitoGHATokenExchanger) GetClaims() (config.GHAClaims, error) {
+	if e.Claims.RunID == "" || e.Claims.SHA == "" {
+		if _, err := e.GetIdentityToken(); err != nil {
+			return config.GHAClaims{}, fmt.Errorf("error retrieving identity token to populate claims: %w", err)
+		}
+	}
+	return e.Claims, nil
+}
+
 func (e *CognitoGHATokenExchanger) getAWSSessionName() (string, error) {
 	if e.ghaJWT == "" {
 		// if GHA JWT isn't set, we need to retrieve it to get the runID and SHA for the session name
