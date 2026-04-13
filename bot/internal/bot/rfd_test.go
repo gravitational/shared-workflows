@@ -43,6 +43,16 @@ func TestValidateNewRFD(t *testing.T) {
 			},
 		},
 		{
+			desc:   "cspell-only",
+			branch: "foo",
+			files: []github.PullRequestFile{
+				{
+					Name:   "rfd/cspell.json",
+					Status: github.StatusAdded,
+				},
+			},
+		},
+		{
 			desc:   "valid-rfd",
 			branch: "rfd/0001-test-123",
 			files: []github.PullRequestFile{

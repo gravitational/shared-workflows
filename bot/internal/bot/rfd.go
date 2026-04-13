@@ -66,7 +66,7 @@ func (b *Bot) ValidateNewRFD(ctx context.Context) error {
 			continue
 		}
 
-		if strings.HasPrefix(file.Name, "rfd/assets/") || !strings.HasPrefix(file.Name, "rfd/") {
+		if strings.HasPrefix(file.Name, "rfd/cspell.json") || strings.HasPrefix(file.Name, "rfd/assets/") || !strings.HasPrefix(file.Name, "rfd/") {
 			continue
 		}
 
