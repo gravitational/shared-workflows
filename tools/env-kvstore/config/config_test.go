@@ -13,6 +13,9 @@ func TestConfigValidation(t *testing.T) {
 		IdentityPoolID: "us-west-2:example-pool-id",
 		RoleARN:        "arn:aws:iam::123456789012:role/example-role",
 	}
+	validValuesConfig := ValuesConfig{
+		ValuesInput: "MY_VAR,variable,my-var",
+	}
 	tests := []struct {
 		name    string
 		config  Config
@@ -31,7 +34,7 @@ func TestConfigValidation(t *testing.T) {
 					Region:    "us-west-2",
 				},
 				GHA:    validGHAConfig,
-				Values: "MY_VAR,variable,my-var",
+				Values: validValuesConfig,
 			},
 			wantErr: false,
 		},
@@ -40,7 +43,7 @@ func TestConfigValidation(t *testing.T) {
 			config: Config{
 				Cognito: validCognitoConfig,
 				GHA:     validGHAConfig,
-				Values:  "MY_VAR,variable,my-var",
+				Values:  validValuesConfig,
 			},
 			wantErr: false,
 		},
@@ -52,7 +55,7 @@ func TestConfigValidation(t *testing.T) {
 					AccountID: "123456789012",
 				},
 				GHA:    validGHAConfig,
-				Values: "MY_VAR,secret,my-secret",
+				Values: validValuesConfig,
 			},
 			wantErr: true,
 		},
@@ -69,7 +72,7 @@ func TestConfigValidation(t *testing.T) {
 			config: Config{
 				Cognito: validCognitoConfig,
 				GHA:     validGHAConfig,
-				Values:  "INVALID_FORMAT_TOO_FEW_COLUMNS",
+				Values:  ValuesConfig{ValuesInput: "INVALID_FORMAT_TOO_FEW_COLUMNS"},
 			},
 			wantErr: true,
 		},
@@ -78,7 +81,7 @@ func TestConfigValidation(t *testing.T) {
 			config: Config{
 				Cognito: validCognitoConfig,
 				GHA:     validGHAConfig,
-				Values:  "MY_VAR,not_a_type,repo,my-secret",
+				Values:  ValuesConfig{ValuesInput: "MY_VAR,not_a_type,repo,my-secret"},
 			},
 			wantErr: true,
 		},
@@ -118,14 +121,14 @@ func TestConfigFromEnv(t *testing.T) {
 }
 
 func TestParseValues(t *testing.T) {
-	cfg := Config{
-		Values: "\n\n\nMY_VAR,variable,my-var\nANOTHER_VAR,secret,env",
+	cfg := ValuesConfig{
+		ValuesInput: "\n\n\nMY_VAR,variable,my-var\nANOTHER_VAR,secret,env",
 	}
-	values, err := cfg.ParseValues()
-	if err != nil {
+
+	if err := cfg.ParseValues(); err != nil {
 		t.Fatalf("ParseValues() error = %v", err)
 	}
-	if len(values) != 2 {
-		t.Fatalf("Expected 2 values, got %d", len(values))
+	if len(cfg.Items) != 2 {
+		t.Fatalf("Expected 2 values, got %d", len(cfg.Items))
 	}
 }

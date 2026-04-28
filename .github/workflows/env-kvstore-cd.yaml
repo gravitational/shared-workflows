@@ -6,12 +6,12 @@ on:
     branches:
       - main
     paths:
-      - tools/env-kvstore
+      - tools/env-kvstore/**
     tags:
       - "tools/env-kvstore/v[0-9]+.[0-9]+.[0-9]+**"
   pull_request:
     paths:
-      - tools/env-kvstore/workflows/cd.yaml
+      - tools/env-kvstore/**
       - .github/workflows/env-kvstore-cd.yaml
       - .github/workflows/reusable-cd.yaml
 

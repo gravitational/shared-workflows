@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/gravitational/shared-workflows/tools/env-kvstore/config"
+	"github.com/gravitational/shared-workflows/libs/github/actions"
 
 	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentity"
@@ -31,12 +32,14 @@ const (
 	fmtLoginProvider = "token.actions.githubusercontent.com%s"
 
 	minSessionDuration = 15 * time.Minute // matches Cognito's default
+
+	githubStepName = "Exchange GHA token for AWS credentials"
 )
 
 // CognitoGHATokenExchanger creates a role provider that exchanges a GitHub Actions JWT token for a Cognito OIDC token.
 // The Cognito OIDC token can include claims that map to role session tags for IAM ABAC. Implements stscreds.IdentityTokenRetriever.
 type CognitoGHATokenExchanger struct {
-	Claims           GHAClaims
+	Claims           config.GHAClaims
 	ghaJWT           string
 	cognitoOIDCToken string
 	ctx              context.Context
@@ -46,17 +49,6 @@ type CognitoGHATokenExchanger struct {
 
 	gha     config.GHAConfig
 	cognito config.CognitoConfig
-}
-
-// GHAClaims are extracted from the GitHub Actions JWT token and used to identify the
-// session and to name the Secrets Manager secrets.
-type GHAClaims struct {
-	RunID       string `json:"run_id"`
-	SHA         string `json:"sha"`
-	Repository  string `json:"repository"`
-	Enterprise  string `json:"enterprise"`
-	Environment string `json:"environment,omitempty"`
-	jwt.RegisteredClaims
 }
 
 type jwk struct {
@@ -100,6 +92,10 @@ func (e *CognitoGHATokenExchanger) GetIdentityToken() ([]byte, error) {
 func (e *CognitoGHATokenExchanger) CreateProvider() (*stscreds.WebIdentityRoleProvider, error) {
 	sessionName, err := e.getAWSSessionName()
 	if err != nil {
+		actions.AddSummary(githubStepName, actions.SummaryRow{
+			Result: actions.SummaryResultFailure,
+			Msg:    fmt.Sprintf("Failed to complete token exchange: %v", err),
+		})
 		return nil, fmt.Errorf("error getting AWS session name for Cognito role provider: %w", err)
 	}
 
@@ -132,11 +128,11 @@ func (e *CognitoGHATokenExchanger) getAWSSessionName() (string, error) {
 	}
 
 	// token signature was already validated in fetchGHAJWT, so skipping validation here
-	token, _, err := jwt.NewParser(jwt.WithPaddingAllowed()).ParseUnverified(e.ghaJWT, &GHAClaims{})
+	token, _, err := jwt.NewParser(jwt.WithPaddingAllowed()).ParseUnverified(e.ghaJWT, &config.GHAClaims{})
 	if err != nil {
 		return "", fmt.Errorf("error parsing claims to GHAClaims struct: %w", err)
 	}
-	c, ok := token.Claims.(*GHAClaims)
+	c, ok := token.Claims.(*config.GHAClaims)
 	if !ok || c == nil {
 		return "", fmt.Errorf("error asserting GHA claims to GHAClaims struct")
 	}
@@ -193,6 +189,10 @@ func (e *CognitoGHATokenExchanger) fetchGHAJWT() error {
 				return fmt.Errorf("failed to validate GHA token: %w", err)
 			}
 		}
+		actions.AddSummary(githubStepName, actions.SummaryRow{
+			Result: actions.SummaryResultSuccess,
+			Msg:    "Retrieved GHA JWT from ID Token request URL",
+		})
 		return nil
 	}
 
@@ -357,6 +357,10 @@ func (e *CognitoGHATokenExchanger) fetchCognitoOIDCToken() error {
 		return fmt.Errorf("error logging Cognito OIDC token claims: %w", err)
 	}
 
+	actions.AddSummary(githubStepName, actions.SummaryRow{
+		Result: actions.SummaryResultSuccess,
+		Msg:    "Retrieved OIDC token from Cognito",
+	})
 	return nil
 }
 
