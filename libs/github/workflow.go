@@ -51,8 +51,8 @@ type WorkflowRunInfo struct {
 	// Duration is the total time taken for the workflow since it was created til it was last updated.
 	// This is useful for tracking how long workflows are taking to run and can be used for performance monitoring or debugging.
 	Duration time.Duration
-	// RunDuration is the time taken for the workflow since it was last run til it was last updated. 
-	// This tracks the current attempt of the workflow run, so if a workflow run is retried or has multiple attempts, 
+	// RunDuration is the time taken for the workflow since it was last run til it was last updated.
+	// This tracks the current attempt of the workflow run, so if a workflow run is retried or has multiple attempts,
 	// this will reflect the duration of the current attempt rather than the total duration since creation.
 	RunDuration time.Duration
 }
@@ -163,7 +163,7 @@ func (e *WorkflowRunNotFoundError) Error() string {
 // workflowRunInfoFromObj converts a [go_github.WorkflowRun] object to a [WorkflowRunInfo].
 func workflowRunInfoFromObj(githubObj *go_github.WorkflowRun) WorkflowRunInfo {
 	// UpdatedAt is the timestamp of the last event that occurred for the workflow run, such as it being created, started, completed, or updated.
-	// This is the most reliable timestamp for calculating durations because it is updated whenever the workflow run is updated in any way. 
+	// This is the most reliable timestamp for calculating durations because it is updated whenever the workflow run is updated in any way.
 	updatedAt := githubObj.GetUpdatedAt()
 	// CreatedAt is the timestamp of when the initial workflow run was created.
 	createdAt := githubObj.GetCreatedAt()

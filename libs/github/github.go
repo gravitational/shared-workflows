@@ -38,8 +38,8 @@ const (
 
 type Client struct {
 	appTransport *installationAuthTransport
-	client *go_github.Client
-	search searchService
+	client       *go_github.Client
+	search       searchService
 }
 
 type searchService interface {
@@ -58,8 +58,6 @@ func New(ctx context.Context, token string) (*Client, error) {
 	}, nil
 }
 
-type NewForAppOptions func()
-
 // NewForApp returns a new GitHub Client with authentication for a GitHub App.
 func NewForApp(ctx context.Context, appID int64, installationID int64, privateKey []byte) (*Client, error) {
 	appTr, err := newAppTransport(ctx, appID, installationID, privateKey)
@@ -74,13 +72,13 @@ func NewForApp(ctx context.Context, appID int64, installationID int64, privateKe
 	cl := go_github.NewClient(httpClient)
 	return &Client{
 		appTransport: appTr,
-		client: cl,
-		search: cl.Search,
+		client:       cl,
+		search:       cl.Search,
 	}, nil
 }
 
 // GetAppOAuthToken returns the current OAuth token for the GitHub App installation.
-// This is useful for cases where you want to use the token outside of the GitHub client, 
+// This is useful for cases where you want to use the token outside of the GitHub client,
 // such as in API requests made by other tooling (ie git) or for debugging purposes.
 func (c *Client) GetAppOAuthToken(ctx context.Context) (string, error) {
 	if c.appTransport == nil {
