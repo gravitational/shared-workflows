@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	go_github "github.com/google/go-github/v84/github"
 )
@@ -47,6 +48,13 @@ type WorkflowRunInfo struct {
 	// Conclusion is the conclusion of the workflow run (only set when status is "completed").
 	// GitHub's Workflow API uses check run conclusions for workflow runs.
 	Conclusion CheckConclusion
+	// Duration is the total time taken for the workflow since it was created til it was last updated.
+	// This is useful for tracking how long workflows are taking to run and can be used for performance monitoring or debugging.
+	Duration time.Duration
+	// RunDuration is the time taken for the workflow since it was last run til it was last updated. 
+	// This tracks the current attempt of the workflow run, so if a workflow run is retried or has multiple attempts, 
+	// this will reflect the duration of the current attempt rather than the total duration since creation.
+	RunDuration time.Duration
 }
 
 // GetWorkflowRunInfo retrieves information about a specific workflow run by its ID.
@@ -152,14 +160,17 @@ func (e *WorkflowRunNotFoundError) Error() string {
 	return e.Message
 }
 
-func newWorkflowRunNotFoundError(message string) *WorkflowRunNotFoundError {
-	return &WorkflowRunNotFoundError{
-		Message: message,
-	}
-}
-
 // workflowRunInfoFromObj converts a [go_github.WorkflowRun] object to a [WorkflowRunInfo].
 func workflowRunInfoFromObj(githubObj *go_github.WorkflowRun) WorkflowRunInfo {
+	// UpdatedAt is the timestamp of the last event that occurred for the workflow run, such as it being created, started, completed, or updated.
+	// This is the most reliable timestamp for calculating durations because it is updated whenever the workflow run is updated in any way. 
+	updatedAt := githubObj.GetUpdatedAt()
+	// CreatedAt is the timestamp of when the initial workflow run was created.
+	createdAt := githubObj.GetCreatedAt()
+	// RunStartedAt is the timestamp of when the workflow run was started. This is typically when the workflow run starts executing.
+	// This is also updated if a workflow run is retried, so it reflects the start time of the current attempt of the workflow run.
+	runStartedAt := githubObj.GetRunStartedAt()
+
 	return WorkflowRunInfo{
 		WorkflowID:   githubObj.GetID(),
 		Name:         githubObj.GetName(),
@@ -169,6 +180,8 @@ func workflowRunInfoFromObj(githubObj *go_github.WorkflowRun) WorkflowRunInfo {
 		Repository:   githubObj.GetRepository().GetName(),
 		Status:       CheckStatus(githubObj.GetStatus()),
 		Conclusion:   CheckConclusion(githubObj.GetConclusion()),
+		Duration:     updatedAt.Sub(createdAt.Time),
+		RunDuration:  updatedAt.Sub(runStartedAt.Time),
 	}
 }
 
@@ -180,5 +193,6 @@ func (w WorkflowRunInfo) LogValue() slog.Value {
 		slog.Int64("workflow_id", w.WorkflowID),
 		slog.String("status", w.Status.String()),
 		slog.String("conclusion", w.Conclusion.String()),
+		slog.String("duration", w.Duration.String()),
 	)
 }
