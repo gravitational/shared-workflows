@@ -68,8 +68,6 @@ func New(ctx context.Context, token string) (*Client, error) {
 	}, nil
 }
 
-type NewForAppOptions func()
-
 // NewForApp returns a new GitHub Client with authentication for a GitHub App.
 func NewForApp(ctx context.Context, appID, installationID int64, privateKey []byte) (*Client, error) {
 	appTr, err := newAppTransport(ctx, appID, installationID, privateKey)

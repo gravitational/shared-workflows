@@ -94,28 +94,28 @@ func TestWorkflowDispatch(t *testing.T) {
 
 func TestRerunWorkflowFailedJobs(t *testing.T) {
 	tests := []struct {
-		name         string
+		name          string
 		workflowRunID int64
-		mockStatus   int
-		wantError    bool
+		mockStatus    int
+		wantError     bool
 	}{
 		{
-			name:         "happy path",
+			name:          "happy path",
 			workflowRunID: 22638542196,
-			mockStatus:   http.StatusOK,
-			wantError:    false,
+			mockStatus:    http.StatusOK,
+			wantError:     false,
 		},
 		{
-			name:         "API error",
+			name:          "API error",
 			workflowRunID: 22638542196,
-			mockStatus:   http.StatusInternalServerError,
-			wantError:    true,
+			mockStatus:    http.StatusInternalServerError,
+			wantError:     true,
 		},
 		{
-			name:         "missing workflow run ID",
+			name:          "missing workflow run ID",
 			workflowRunID: 0,
-			mockStatus:   http.StatusInternalServerError,
-			wantError:    true,
+			mockStatus:    http.StatusInternalServerError,
+			wantError:     true,
 		},
 	}
 
