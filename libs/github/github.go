@@ -37,8 +37,9 @@ const (
 )
 
 type Client struct {
-	client *go_github.Client
-	search searchService
+	appTransport *installationAuthTransport
+	client       *go_github.Client
+	search       searchService
 }
 
 type searchService interface {
@@ -70,9 +71,25 @@ func NewForApp(ctx context.Context, appID int64, installationID int64, privateKe
 
 	cl := go_github.NewClient(httpClient)
 	return &Client{
-		client: cl,
-		search: cl.Search,
+		appTransport: appTr,
+		client:       cl,
+		search:       cl.Search,
 	}, nil
+}
+
+// GetAppOAuthToken returns the current OAuth token for the GitHub App installation.
+// This is useful for cases where you want to use the token outside of the GitHub client,
+// such as in API requests made by other tooling (ie git) or for debugging purposes.
+func (c *Client) GetAppOAuthToken(ctx context.Context) (string, error) {
+	if c.appTransport == nil {
+		return "", fmt.Errorf("client is not configured for GitHub App authentication")
+	}
+
+	token, err := c.appTransport.getAccessToken(ctx)
+	if err != nil {
+		return "", fmt.Errorf("getting access token from transport: %w", err)
+	}
+	return token, nil
 }
 
 // installationAuthTransport is a middleware that adds GitHub App authentication to HTTP requests.
