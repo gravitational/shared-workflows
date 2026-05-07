@@ -57,11 +57,11 @@ func (r *Repo) BranchNameForHead() (string, error) {
 // TimestampForRef will get the timestamp for the given reference.
 // Will work for symbolic references such as tags, HEAD, branches
 func (r *Repo) TimestampForRef(ref string) (time.Time, error) {
-	t, err := r.RunCmd("show", "-s", "--format=%cI", ref)
-	if err != nil {
-		return time.Time{}, trace.Wrap(err, trace.BadParameter("can't get timestamp for ref: %q", ref))
-	}
-	return time.Parse(time.RFC3339, t)
+    t, err := r.RunCmd("log", "-1", "--format=%cI", ref)
+    if err != nil {
+        return time.Time{}, trace.Wrap(err, trace.BadParameter("can't get timestamp for ref: %q", ref))
+    }
+    return time.Parse(time.RFC3339, t)
 }
 
 // TimestampForLatestCommit will get the timestamp for the last commit.
