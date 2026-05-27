@@ -1,5 +1,5 @@
 TOOL_NAME = env-kvstore
-PACKAGE_PATH = ./cmd/env-kvstore.go
+PACKAGE_PATH = ./cmd
 VERSION = v0.0.1
 
 

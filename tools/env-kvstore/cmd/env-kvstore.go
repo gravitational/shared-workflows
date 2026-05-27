@@ -77,7 +77,7 @@ func run(ctx context.Context, config config.Config) error {
 		return fmt.Errorf("error setting environment values for GHA workflow: %w", err)
 	}
 
-	uploader := &MigrationUploader{
+	uploader := &migrationUploader{
 		awsConfig:       awsCfg,
 		ghaClaims:       tokenExchanger.Claims,
 		migrationConfig: valueProvider,

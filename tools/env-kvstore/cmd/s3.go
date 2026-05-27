@@ -23,10 +23,10 @@ type migrationConfigGetter interface {
 	GetMigrationConfig() (kvstore.MigrationConfig, bool)
 }
 
-type MigrationUploader struct {
-	awsConfig               aws.Config
-	ghaClaims               config.GHAClaims
-	migrationConfig         migrationConfigGetter
+type migrationUploader struct {
+	awsConfig       aws.Config
+	ghaClaims       config.GHAClaims
+	migrationConfig migrationConfigGetter
 }
 
 func generateS3Key(ghaClaims config.GHAClaims) (string, error) {
@@ -40,7 +40,7 @@ func generateS3Key(ghaClaims config.GHAClaims) (string, error) {
 	return fmt.Sprintf("%s/%s/%s/%s/%s", ghaClaims.Enterprise, ghaClaims.Repository, ghaClaims.Workflow, env, fmt.Sprintf("%s.json", ghaClaims.RunID)), nil
 }
 
-func (u *MigrationUploader) Upload(ctx context.Context) error {
+func (u *migrationUploader) Upload(ctx context.Context) error {
 	migrationConfig, ok := u.migrationConfig.GetMigrationConfig()
 	if !ok {
 		migrationSummary("Migration configuration not found. Skipping collection of values.", true)
