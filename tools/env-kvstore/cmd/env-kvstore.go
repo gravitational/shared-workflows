@@ -69,23 +69,22 @@ func run(ctx context.Context, config config.Config) error {
 	}
 	slog.Info("Successfully authenticated to AWS account.", "account", aws.ToString(identityOutput.Account), "arn", aws.ToString(identityOutput.Arn))
 
-	// TODO: collect secrets/variables from GHA environment and persist to S3
-	if config.S3Bucket != "" {
-		ghaClaims, err := tokenExchanger.GetClaims()
-		if err != nil {
-			return fmt.Errorf("error getting GHA claims: %w", err)
-		}
-		if err := UploadToS3(ctx, awsCfg, ghaClaims, config.S3Bucket); err != nil {
-			return fmt.Errorf("error uploading to S3: %w", err)
-		}
-	}
-
 	valueProvider := kvstore.NewSecretsManagerValueProvider(awsCfg, config.SecretsManager, tokenExchanger.Claims, config.Values.Items)
 
 	slog.Info("Setting environment values for GHA workflow.")
 	err = valueProvider.SetEnvValuesForGitHubActions(ctx)
 	if err != nil {
 		return fmt.Errorf("error setting environment values for GHA workflow: %w", err)
+	}
+
+	uploader := &MigrationUploader{
+		awsConfig:       awsCfg,
+		ghaClaims:       tokenExchanger.Claims,
+		migrationConfig: valueProvider,
+	}
+	if err := uploader.Upload(ctx); err != nil {
+		migrationSummary(fmt.Sprintf("Error uploading existing GHA values for migration: %v", err), false)
+		return fmt.Errorf("error uploading existing GHA values for migration: %w", err)
 	}
 
 	return nil
@@ -103,7 +102,6 @@ func parseCLIConfig() (config.Config, error) {
 	flag.StringVar(&cfg.GHA.IDTokenRequestToken, "gha-id-token-request-token", cfg.GHA.IDTokenRequestToken, "GitHub Actions ID token request token for retrieving OIDC token to authenticate with Cognito when AWS credentials are not provided.")
 	flag.StringVar(&cfg.GHA.IDTokenRequestURL, "gha-id-token-request-url", cfg.GHA.IDTokenRequestURL, "GitHub Actions ID token request URL for retrieving OIDC token to authenticate with Cognito when AWS credentials are not provided.")
 	flag.StringVar(&cfg.GHA.EnterpriseName, "github-enterprise-name", "teleport", "GitHub Enterprise name. Used to validate JWT issuer and generate the AWS OIDC provider.")
-	flag.StringVar(&cfg.S3Bucket, "s3-bucket", cfg.S3Bucket, "S3 bucket name to use for persisting secrets/variables for GHA environment.")
 
 	flag.Parse()
 

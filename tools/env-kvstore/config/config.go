@@ -12,7 +12,6 @@ type Config struct {
 	SecretsManager SecretsManagerConfig
 	Values         ValuesConfig
 	GHA            GHAConfig
-	S3Bucket	   string
 }
 
 // CognitoConfig holds the necessary information for performing Cognito authentication.
@@ -58,7 +57,6 @@ func NewFromEnv() Config {
 	cognitoIdentityPoolID := os.Getenv("INPUT_COGNITO-IDENTITY-POOL-ID")
 	cognitoRoleARN := os.Getenv("INPUT_COGNITO-ROLE-ARN")
 	values := os.Getenv("INPUT_VALUES")
-	s3Bucket := os.Getenv("INPUT_S3_BUCKET")
 	ghaIDTokenRequestToken := os.Getenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
 	ghaIDTokenRequestURL := os.Getenv("ACTIONS_ID_TOKEN_REQUEST_URL")
 
@@ -79,7 +77,6 @@ func NewFromEnv() Config {
 			IDTokenRequestToken: ghaIDTokenRequestToken,
 			IDTokenRequestURL:   ghaIDTokenRequestURL,
 		},
-		S3Bucket: s3Bucket,
 	}
 }
 
