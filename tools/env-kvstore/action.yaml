@@ -1,6 +1,6 @@
 ---
-name: Upload normalized test results
-description: Captures metadata, normalizes the test results and uploads to s3.
+name: Load build values
+description: Populates environment secrets and variables from kvstore
 
 inputs:
   github-token:
@@ -32,9 +32,8 @@ inputs:
   existing-gh-variables:
     description: "Migration: set to {{ tojson(variables) }} to persist existing variables to S3"
     default: "{}"
-  s3-bucket:
-    description: "Migration: S3 bucket to persist the existing GHA secrets/vars"
-    default: ""
+  tool-version:
+    description: Version of the tool to use
 
 runs:
   using: composite
@@ -46,16 +45,6 @@ runs:
         tool-name: env-kvstore
         version: ${{ inputs.tool-version }}
         tag-prefix: tools/env-kvstore/
-    - name: Save existing GHA secrets to a file
-      if: ${{ inputs.s3-bucket != '' }}
-      id: save_existing_values
-      shell: bash
-      working-directory: ${{ github.action_path }}
-      env:
-        GHA_SECRETS: "${{ inputs.existing-gh-secrets }}"
-        GHA_VARIABLES: "${{ inputs.existing-gh-variables }}"
-      run: |
-        printf '{"secrets":%s,"variables":%s}' "${GHA_SECRETS}" "${GHA_VARIABLES}" > existing_values_s3_upload.json
     - name: Retrieve variables and secrets from KVStore
       id: retrieve_from_kvstore
       shell: bash
@@ -70,12 +59,8 @@ runs:
         INPUT_COGNITO-IDENTITY-POOL-ID: "${{ inputs.cognito-identity-pool-id }}"
         INPUT_COGNITO-REGION: "${{ inputs.cognito-region }}"
         INPUT_COGNITO-ROLE-ARN: "${{ inputs.cognito-role-arn }}"
-        INPUT_S3-BUCKET: "${{ inputs.s3-bucket }}"
+        INPUT_VALUES: "${{ inputs.values }}"
+        GHA_SECRETS_CONTEXT: "${{ inputs.existing-gh-secrets }}"
+        GHA_VARS_CONTEXT: "${{ inputs.existing-gh-variables }}"
       run: |
         env-kvstore
-    - name: Cleanup
-      if: ${{ always() }}
-      id: cleanup
-      shell: bash
-      working-directory: ${{ github.action_path }}
-      run: rm existing_values_s3_upload.json || true
