@@ -123,10 +123,6 @@ func (c *Config) Validate() error {
 		c.SecretsManager.AccountID = accountFromRoleARN
 	}
 
-	if c.Values.ValuesInput == "" {
-		return fmt.Errorf("at least one value must be specified to retrieve from KVStore")
-	}
-
 	if err := c.Values.ParseValues(); err != nil {
 		return fmt.Errorf("cannot parse values: %v", err)
 	}
