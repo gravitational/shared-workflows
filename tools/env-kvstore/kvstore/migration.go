@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"filippo.io/age"
+	"filippo.io/age/armor"
 )
 
 const (
@@ -72,13 +73,22 @@ func (p SecretsManagerValueProvider) GetMigrationConfig() (MigrationConfig, bool
 }
 
 func ageEncrypt(plainText string, recipient age.Recipient) (string, error) {
-	data, err := age.EncryptReader(strings.NewReader(plainText), recipient)
+	var data strings.Builder
+	armorWriter := armor.NewWriter(&data)
+
+	w, err := age.Encrypt(armorWriter, recipient)
 	if err != nil {
 		return "", fmt.Errorf("failed to provision age encryptor: %w", err)
 	}
-	encryptedBytes, err := io.ReadAll(data)
-	if err != nil {
+	if _, err := io.WriteString(w, plainText); err != nil {
 		return "", fmt.Errorf("failed to encrypt data: %w", err)
 	}
-	return string(encryptedBytes), nil
+	if err := w.Close(); err != nil {
+		return "", fmt.Errorf("failed to close encryptor: %w", err)
+	}
+	if err := armorWriter.Close(); err != nil {
+		return "", fmt.Errorf("failed to close ascii encoder: %w", err)
+	}
+
+	return data.String(), nil
 }
