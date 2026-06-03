@@ -24,13 +24,12 @@ inputs:
     required: true
     description: "Role to use for retrieving Secrets Manager secrets. Assumed via OIDC using Cognito token."
   values:
-    required: true
     description: "Values to retrieve from KVStore and set as environment variables. CSV: environment variable name, value type (variable|secret), override key"
   existing-gh-secrets:
-    description: "Migration: set to {{ tojson(secrets) }} to persist existing secrets to S3"
+    description: "Migration: set to ${{ tojson(secrets) }} to persist existing secrets to S3"
     default: "{}"
   existing-gh-variables:
-    description: "Migration: set to {{ tojson(variables) }} to persist existing variables to S3"
+    description: "Migration: set to ${{ tojson(vars) }} to persist existing variables to S3"
     default: "{}"
   tool-version:
     description: Version of the tool to use

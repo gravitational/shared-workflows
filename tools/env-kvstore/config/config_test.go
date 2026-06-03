@@ -65,7 +65,7 @@ func TestConfigValidation(t *testing.T) {
 				Cognito: validCognitoConfig,
 				GHA:     validGHAConfig,
 			},
-			wantErr: true,
+			wantErr: false,
 		},
 		{
 			name: "invalid values format",

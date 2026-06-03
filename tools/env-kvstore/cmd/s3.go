@@ -20,7 +20,8 @@ const (
 )
 
 type migrationConfigGetter interface {
-	GetMigrationConfig() (kvstore.MigrationConfig, bool)
+	GetMigrationConfig() (kvstore.MigrationConfig, error)
+	HasMigrationConfig() bool
 }
 
 type migrationUploader struct {
@@ -41,11 +42,13 @@ func generateS3Key(ghaClaims config.GHAClaims) (string, error) {
 }
 
 func (u *migrationUploader) Upload(ctx context.Context) error {
-	migrationConfig, ok := u.migrationConfig.GetMigrationConfig()
-	if !ok {
-		migrationSummary("Migration configuration not found. Skipping collection of values.", true)
-		slog.Info("No valid migration configuration found, skipping upload to S3.")
-		return nil
+	migrationConfig, err := u.migrationConfig.GetMigrationConfig()
+	if err != nil {
+		if !u.migrationConfig.HasMigrationConfig() {
+			migrationSummary("Missing or incomplete migration configuration. Skipping collection of values.", true)
+			return nil
+		}
+		return fmt.Errorf("error getting migration configuration: %w", err)
 	}
 
 	bucket := migrationConfig.S3Bucket
