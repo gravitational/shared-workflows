@@ -1,11 +1,28 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/gravitational/shared-workflows/tools/env-kvstore/config"
+	"github.com/gravitational/shared-workflows/tools/env-kvstore/kvstore"
 )
+
+type stubMigrationConfigGetter struct {
+	config    kvstore.MigrationConfig
+	err       error
+	hasConfig bool
+}
+
+func (s stubMigrationConfigGetter) GetMigrationConfig() (kvstore.MigrationConfig, error) {
+	return s.config, s.err
+}
+
+func (s stubMigrationConfigGetter) HasMigrationConfig() bool {
+	return s.hasConfig
+}
 
 func TestGenerateS3Key(t *testing.T) {
 	tests := []struct {
@@ -69,4 +86,36 @@ func TestGenerateS3Key(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestMigrationUploaderUpload(t *testing.T) {
+	t.Run("skip error is non-fatal", func(t *testing.T) {
+		uploader := migrationUploader{
+			migrationConfig: stubMigrationConfigGetter{
+				err:       kvstore.NewSkipMigrationError("skip upload"),
+				hasConfig: true,
+			},
+		}
+
+		if err := uploader.Upload(context.Background()); err != nil {
+			t.Fatalf("Upload() error = %v, want nil", err)
+		}
+	})
+
+	t.Run("generic migration config error is returned", func(t *testing.T) {
+		uploader := migrationUploader{
+			migrationConfig: stubMigrationConfigGetter{
+				err:       fmt.Errorf("boom"),
+				hasConfig: true,
+			},
+		}
+
+		err := uploader.Upload(context.Background())
+		if err == nil {
+			t.Fatal("Upload() error = nil, want error")
+		}
+		if !strings.Contains(err.Error(), "error getting migration configuration") {
+			t.Fatalf("Upload() error = %q, want wrapped migration configuration error", err.Error())
+		}
+	})
 }

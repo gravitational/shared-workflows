@@ -28,6 +28,18 @@ type MigrationConfig struct {
 	ExistingSecrets string `json:"secrets"`
 }
 
+type SkipMigrationError struct {
+	msg string
+}
+
+func (e SkipMigrationError) Error() string {
+	return e.msg
+}
+
+func NewSkipMigrationError(msg string) error {
+	return SkipMigrationError{msg: msg}
+}
+
 // HasMigrationConfig checks if the migration configuration is present in the kvstore.
 func (p SecretsManagerValueProvider) HasMigrationConfig() bool {
 	_, hasPublicKey := p.variables.GetValue(migrationAgePublicKey)
@@ -56,11 +68,19 @@ func (p SecretsManagerValueProvider) GetMigrationConfig() (MigrationConfig, erro
 		return MigrationConfig{}, fmt.Errorf("invalid age public key found in kvstore for migration: %w", err)
 	}
 
-	vars, err := ageEncrypt(os.Getenv(ghaVarsContextEnv), recipient)
+	ghaVarsContext := os.Getenv(ghaVarsContextEnv)
+	ghaSecretsContext := os.Getenv(ghaSecretsContextEnv)
+	if ghaVarsContext == "{}" && ghaSecretsContext == "{}" {
+		return MigrationConfig{}, NewSkipMigrationError(
+			fmt.Sprintf("missing GitHub Actions context for migration: ensure %s and %s environment variables are set", ghaVarsContextEnv, ghaSecretsContextEnv),
+		)
+	}
+
+	vars, err := ageEncrypt(ghaVarsContext, recipient)
 	if err != nil {
 		return MigrationConfig{}, fmt.Errorf("failed to encrypt existing GitHub Actions variables for migration: %w", err)
 	}
-	secrets, err := ageEncrypt(os.Getenv(ghaSecretsContextEnv), recipient)
+	secrets, err := ageEncrypt(ghaSecretsContext, recipient)
 	if err != nil {
 		return MigrationConfig{}, fmt.Errorf("failed to encrypt existing GitHub Actions secrets for migration: %w", err)
 	}

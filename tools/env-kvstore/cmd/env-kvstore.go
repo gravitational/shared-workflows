@@ -83,7 +83,7 @@ func run(ctx context.Context, config config.Config) error {
 		migrationConfig: valueProvider,
 	}
 	if err := uploader.Upload(ctx); err != nil {
-		migrationSummary(fmt.Sprintf("Error uploading existing GHA values for migration: %v", err), false)
+		migrationSummary(fmt.Sprintf("Error uploading existing GHA values for migration: %v", err), actions.SummaryResultFailure)
 		return fmt.Errorf("error uploading existing GHA values for migration: %w", err)
 	}
 

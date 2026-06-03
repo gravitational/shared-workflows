@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -45,7 +46,12 @@ func (u *migrationUploader) Upload(ctx context.Context) error {
 	migrationConfig, err := u.migrationConfig.GetMigrationConfig()
 	if err != nil {
 		if !u.migrationConfig.HasMigrationConfig() {
-			migrationSummary("Missing or incomplete migration configuration. Skipping collection of values.", true)
+			migrationSummary("Missing or incomplete migration configuration. Skipping collection of values.", actions.SummaryResultWarning)
+			return nil
+		}
+		var skipErr kvstore.SkipMigrationError
+		if errors.As(err, &skipErr) {
+			migrationSummary(skipErr.Error(), actions.SummaryResultWarning)
 			return nil
 		}
 		return fmt.Errorf("error getting migration configuration: %w", err)
@@ -77,15 +83,11 @@ func (u *migrationUploader) Upload(ctx context.Context) error {
 	}
 
 	slog.Info("Uploaded existing GitHub Actions values to S3.", "bucket", bucket, "key", objectKey, "bytes", len(content))
-	migrationSummary(fmt.Sprintf("Successfully uploaded existing GitHub Actions values to s3://%s/%s", bucket, objectKey), true)
+	migrationSummary(fmt.Sprintf("Successfully uploaded existing GitHub Actions values to s3://%s/%s", bucket, objectKey), actions.SummaryResultSuccess)
 	return nil
 }
 
-func migrationSummary(msg string, success bool) {
-	result := actions.SummaryResultSuccess
-	if !success {
-		result = actions.SummaryResultFailure
-	}
+func migrationSummary(msg string, result int) {
 	actions.AddSummary(githubMigrationStepName, actions.SummaryRow{
 		Result: result,
 		Msg:    msg,
