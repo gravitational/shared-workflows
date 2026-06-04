@@ -34,15 +34,12 @@ const (
 	// Dependabot is the GitHub's bot author/account name.
 	// See https://github.com/dependabot.
 	Dependabot = "dependabot[bot]"
-	// DependabotBatcher is the name of the batcher that groups Dependabot PRs.
-	// See https://github.com/Legal-and-General/dependabot-batcher.
-	DependabotBatcher = "dependabot-batcher[bot]"
 	// RenovateBotPrivate is the name of the app that runs the Renovate action in
 	// private repos(teleport.e).
 	RenovateBotPrivate = "private-renovate-gha[bot]"
 	// RenovateBotPublic is the name of the app that runs the Renovate action in
 	// public repos(teleport).
-	RenovateBotPublic = "public-renovate-gha[bot]"
+	RenovateBotPublic = "teleport-renovate[bot]"
 	// PostReleaseBot is the name of the bot user that creates post-release PRs
 	// such as AMI and docs version updates.
 	PostReleaseBot = "teleport-post-release-automation[bot]"
@@ -68,7 +65,7 @@ var (
 	// require a single approver. The map key is the repo (cloud|teleport|teleport.e) and the
 	// value is a list of authors. BOTS ONLY - DO NOT INCLUDE EMPLOYEE GITHUB HANDLES.
 	singleApproverAuthors = map[string][]string{
-		"cloud": {Dependabot, DependabotBatcher, RenovateBotPrivate, RenovateBotPublic},
+		"cloud": {Dependabot, RenovateBotPrivate, RenovateBotPublic},
 	}
 )
 
@@ -84,7 +81,7 @@ func SingleApproverAuthors(repository string) []string {
 
 func isAllowedRobot(author string) bool {
 	switch author {
-	case Dependabot, DependabotBatcher, RenovateBotPrivate, RenovateBotPublic, PostReleaseBot:
+	case Dependabot, RenovateBotPrivate, RenovateBotPublic, PostReleaseBot:
 		return true
 	}
 	return false
