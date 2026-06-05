@@ -166,14 +166,6 @@ func TestIsInternal(t *testing.T) {
 			expect: true,
 		},
 		{
-			desc: "dependabot batcher is internal",
-			assignments: &Assignments{
-				c: &Config{},
-			},
-			author: DependabotBatcher,
-			expect: true,
-		},
-		{
 			desc: "renovate public is internal",
 			assignments: &Assignments{
 				c: &Config{},
@@ -1091,24 +1083,6 @@ func TestCheckInternal(t *testing.T) {
 			desc:       "core-dependabot-code-approval-success",
 			repository: "teleport",
 			author:     Dependabot,
-			reviews: []github.Review{
-				{Author: "3", State: Approved}, // owner (not admin)
-				{Author: "4", State: Approved}, // not owner
-			},
-			code:   true,
-			result: true,
-		},
-		{
-			desc:       "core-dependabot-batcher-code-not-approved-failure",
-			repository: "teleport",
-			author:     DependabotBatcher,
-			code:       true,
-			result:     false,
-		},
-		{
-			desc:       "core-dependabot-batcher-code-approval-success",
-			repository: "teleport",
-			author:     DependabotBatcher,
 			reviews: []github.Review{
 				{Author: "3", State: Approved}, // owner (not admin)
 				{Author: "4", State: Approved}, // not owner
