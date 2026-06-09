@@ -88,6 +88,14 @@ func (b *Bot) backportReviewers(ctx context.Context) ([]string, error) {
 
 	var originalReviewers []string
 
+	// makeMapOfExistingMembers uses GitHub's `FetchAllOrgMembers`, this will fetch all members of the organization by
+	// continuously fetching (100) members per call. This is currently more efficient than  making individual calls
+	// to `IsOrgMember` for each backport reviewer.
+	currentOrgUserMap, err := b.makeMapOfExistingMembers(ctx, b.c.Environment.Organization)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
 	// Append list of reviewers that have yet to submit a review.
 	reviewers, err := b.c.GitHub.ListReviewers(ctx,
 		b.c.Environment.Organization,
@@ -98,7 +106,10 @@ func (b *Bot) backportReviewers(ctx context.Context) ([]string, error) {
 	}
 	for _, reviewer := range reviewers {
 		// Don't request reviews from bots.
-		if !strings.Contains(reviewer, "[bot]") {
+		if strings.Contains(reviewer, "[bot]") {
+			continue
+		}
+		if _, found := currentOrgUserMap[reviewer]; found {
 			originalReviewers = append(originalReviewers, reviewer)
 		}
 	}
@@ -111,9 +122,14 @@ func (b *Bot) backportReviewers(ctx context.Context) ([]string, error) {
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
+
 	for _, review := range reviews {
 		// Don't request reviews from bots.
-		if !strings.Contains(review.Author, "[bot]") {
+		if strings.Contains(review.Author, "[bot]") {
+			continue
+		}
+
+		if _, found := currentOrgUserMap[review.Author]; found {
 			originalReviewers = append(originalReviewers, review.Author)
 		}
 	}
@@ -168,6 +184,22 @@ func (b *Bot) findOriginalPR(ctx context.Context, organization string, repositor
 
 	log.Printf("Assign: Found original PR #%v.", original)
 	return n, nil
+}
+
+// makeMapOfExistingMembers fetches all members in the provided org, and builds a map of users for fast lookups
+func (b *Bot) makeMapOfExistingMembers(ctx context.Context, organization string) (map[string]bool, error) {
+	currentOrgMemberUserNameList, err := b.c.GitHub.FetchAllOrgMembers(ctx, organization)
+	if err != nil {
+		log.Printf("Assign: Failed to fetch org members %v: %v.", organization, err)
+		return nil, trace.Wrap(err)
+	}
+
+	memberLoginToIsExistingOrgUser := make(map[string]bool)
+	for _, currentOrgMember := range currentOrgMemberUserNameList {
+		memberLoginToIsExistingOrgUser[currentOrgMember] = true
+	}
+
+	return memberLoginToIsExistingOrgUser, nil
 }
 
 func dedup(author string, reviewers []string) []string {

@@ -95,6 +95,9 @@ type Client interface {
 
 	// ListCommitFiles returns all filenames recursively from the tree at a given commit SHA whose prefix matches pathPrefix.
 	ListCommitFiles(ctx context.Context, organization string, repository string, sha string, path string) ([]string, error)
+
+	// FetchAllOrgMembers fetches all members in the provided org, it will continuously execute requests until it fetches all members
+	FetchAllOrgMembers(ctx context.Context, org string) ([]string, error)
 }
 
 // Config contains configuration for the bot.

@@ -39,117 +39,103 @@ func TestBackportReviewers(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	const (
+		botUser           = "espa[bot]lini"
+		luke              = "luke"
+		anakin            = "anakin"
+		palpatine         = "palpatine"
+		noLongerInOrgUser = "reviewer-no-longer-in-org-user"
+		author            = "someUserForTest"
+	)
+
 	tests := []struct {
-		desc      string
-		pull      github.PullRequest
-		reviewers []string
-		reviews   []github.Review
-		err       bool
-		expected  []string
+		desc       string
+		pull       github.PullRequest
+		reviewers  []string
+		reviews    []github.Review
+		orgMembers []string
+		err        bool
+		expected   []string
 	}{
 		{
-			desc: "backport-original-pr-number-approved",
-			pull: github.PullRequest{
-				Author:     "baz",
-				Repository: "bar",
-				UnsafeHead: github.Branch{
-					Ref: "baz/fix",
-				},
-				UnsafeTitle: "Backport #0 to branch/v8",
-				UnsafeBody:  "",
-				Fork:        false,
-			},
-			reviewers: []string{"3", "this is a bot[bot]"},
+			desc:      "backport-original-pr-number-approved",
+			pull:      pr("Backport #0 to branch/v8", ""),
+			reviewers: []string{luke, botUser},
 			reviews: []github.Review{
-				{Author: "4", State: review.Approved},
+				{Author: anakin, State: review.Approved},
 			},
-			err:      false,
-			expected: []string{"3", "4"},
+			orgMembers: []string{author, luke, anakin},
+			err:        false,
+			expected:   []string{luke, anakin},
 		},
 		{
-			desc: "backport-original-url-approved",
-			pull: github.PullRequest{
-				Author:     "baz",
-				Repository: "bar",
-				UnsafeHead: github.Branch{
-					Ref: "baz/fix",
-				},
-				UnsafeTitle: "Fixed an issue",
-				UnsafeBody:  "https://github.com/gravitational/teleport/pull/0",
-				Fork:        false,
-			},
-			reviewers: []string{"3"},
+			desc:      "backport-original-url-approved",
+			pull:      pr("Fixed an issue", "https://github.com/gravitational/teleport/pull/0"),
+			reviewers: []string{luke},
 			reviews: []github.Review{
-				{Author: "4", State: review.Approved},
+				{Author: anakin, State: review.Approved},
 			},
-			err:      false,
-			expected: []string{"3", "4"},
+			orgMembers: []string{author, luke, anakin},
+			err:        false,
+			expected:   []string{luke, anakin},
 		},
 		{
-			desc: "backport-reviewed-by-bot",
-			pull: github.PullRequest{
-				Author:     "baz",
-				Repository: "bar",
-				UnsafeHead: github.Branch{
-					Ref: "baz/fix",
-				},
-				UnsafeTitle: "Fixed an issue",
-				UnsafeBody:  "https://github.com/gravitational/teleport/pull/0",
-				Fork:        false,
-			},
-			reviewers: []string{"3"},
+			desc:      "backport-reviewed-by-bot",
+			pull:      pr("Fixed an issue", "https://github.com/gravitational/teleport/pull/0"),
+			reviewers: []string{luke},
 			reviews: []github.Review{
-				{Author: "4", State: review.Approved},
-				{Author: "espa[bot]lini", State: review.Approved},
+				{Author: anakin, State: review.Approved},
+				{Author: botUser, State: review.Approved},
 			},
-			err:      false,
-			expected: []string{"3", "4"},
+			orgMembers: []string{author, luke, anakin},
+			err:        false,
+			expected:   []string{luke, anakin},
 		},
 		{
-			desc: "backport-multiple-reviews",
-			pull: github.PullRequest{
-				Author:     "baz",
-				Repository: "bar",
-				UnsafeHead: github.Branch{
-					Ref: "baz/fix",
-				},
-
-				UnsafeTitle: "Fixed feature",
-				UnsafeBody:  "",
-				Fork:        false,
-			},
+			desc:      "backport-multiple-reviews",
+			pull:      pr("Fixed an issue", ""),
 			reviewers: []string{"3"},
 			reviews: []github.Review{
-				{Author: "4", State: review.Commented},
-				{Author: "4", State: review.ChangesRequested},
-				{Author: "4", State: review.Approved},
-				{Author: "9", State: review.Approved},
+				{Author: anakin, State: review.Commented},
+				{Author: anakin, State: review.ChangesRequested},
+				{Author: anakin, State: review.Approved},
+				{Author: palpatine, State: review.Approved},
+			},
+			orgMembers: []string{author, luke, anakin},
+			err:        true,
+			expected:   []string{},
+		},
+		{
+			desc:       "backport-original-not-found",
+			pull:       pr("Fixed feature", ""),
+			orgMembers: []string{anakin, author},
+			reviewers:  []string{luke},
+			reviews: []github.Review{
+				{Author: anakin, State: review.Approved},
 			},
 			err:      true,
 			expected: []string{},
 		},
 		{
-			desc: "backport-original-not-found",
-			pull: github.PullRequest{
-				Author:     "baz",
-				Repository: "bar",
-				UnsafeHead: github.Branch{
-					Ref: "baz/fix",
-				},
-				UnsafeTitle: "Fixed feature",
-				UnsafeBody:  "",
-				Fork:        false,
-			},
-			reviewers: []string{"3"},
+			desc:       "backport-reviewer-left-org",
+			pull:       pr("Backport #0 to branch/v8", ""),
+			orgMembers: []string{luke, anakin, author},
+			reviewers:  []string{luke, anakin, noLongerInOrgUser},
 			reviews: []github.Review{
-				{Author: "4", State: review.Approved},
+				{Author: luke, State: review.Approved},
+				{Author: anakin, State: review.Approved},
+				{Author: noLongerInOrgUser, State: review.Approved},
 			},
-			err:      true,
-			expected: []string{},
+			err:      false,
+			expected: []string{luke, anakin},
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
+			githubUserIDToIsMember := make(map[string]struct{})
+			for _, member := range test.orgMembers {
+				githubUserIDToIsMember[member] = struct{}{}
+			}
 			b := &Bot{
 				c: &Config{
 					Environment: &env.Environment{
@@ -162,9 +148,10 @@ func TestBackportReviewers(t *testing.T) {
 					},
 					Review: r,
 					GitHub: &fakeGithub{
-						pull:      test.pull,
-						reviewers: test.reviewers,
-						reviews:   test.reviews,
+						pull:       test.pull,
+						reviewers:  test.reviewers,
+						reviews:    test.reviews,
+						orgMembers: githubUserIDToIsMember,
 					},
 				},
 			}
@@ -172,5 +159,18 @@ func TestBackportReviewers(t *testing.T) {
 			require.Equal(t, err != nil, test.err)
 			require.ElementsMatch(t, reviewers, test.expected)
 		})
+	}
+}
+
+func pr(title, body string) github.PullRequest {
+	return github.PullRequest{
+		Author:     "baz",
+		Repository: "repositoryNameForTest",
+		UnsafeHead: github.Branch{
+			Ref: "baz/fix",
+		},
+		UnsafeTitle: title,
+		UnsafeBody:  body,
+		Fork:        false,
 	}
 }
