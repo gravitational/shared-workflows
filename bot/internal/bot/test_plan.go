@@ -19,6 +19,8 @@ var (
 	checkboxRegex         = regexp.MustCompile(`- \[([ xX])\]`)
 )
 
+const noTestPlanLabel = "no-test-plan"
+
 // ValidateManualTestPlan checks that the PR description contains a manual test
 // plan which details where the tests were run and which test cases were exercised.
 // For example, the following used a cloud staging tenant named rjones to validate
@@ -44,7 +46,6 @@ func (b *Bot) ValidateManualTestPlan(ctx context.Context) error {
 		return trace.Wrap(err, "failed to retrieve pull request for https://github.com/%s/%s/pull/%d", b.c.Environment.Organization, b.c.Environment.Repository, b.c.Environment.Number)
 	}
 
-	const noTestPlanLabel string = "no-test-plan"
 	if slices.Contains(pull.UnsafeLabels, noTestPlanLabel) {
 		log.Printf("PR contains %q label, skipping test plan check", noTestPlanLabel)
 		return nil
@@ -104,4 +105,44 @@ func validateTestPlanContents(body string) error {
 	}
 
 	return nil
+}
+
+func (b *Bot) getManualTestPlanEntries(prBody string) []string {
+	loc := testPlanHeadingRegex.FindStringIndex(prBody)
+	if loc == nil {
+		return nil
+	}
+
+	// Take everything after the heading start.
+	rest := prBody[loc[0]:]
+
+	// Find all checkbox positions to locate the last one.
+	matches := checkboxRegex.FindAllStringIndex(rest, -1)
+	if len(matches) == 0 {
+		return nil
+	}
+
+	// Start from the last test case and find the end of its text block.
+	// Include non-empty lines that aren't a new list item or heading
+	// that belong to the final test case.
+	lastCheckboxStart := matches[len(matches)-1][0]
+	lines := strings.Split(rest[lastCheckboxStart:], "\n")
+
+	// Always include the test case line itself (lines[0]), then scan forward.
+	endOffset := lastCheckboxStart + len(lines[0])
+	for _, line := range lines[1:] {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "- ") || strings.HasPrefix(trimmed, "#") {
+			break
+		}
+		endOffset += 1 + len(line) // +1 for the newline
+	}
+
+	section := strings.TrimRight(rest[:endOffset], " \t\r\n")
+	if section == "" {
+		return nil
+	}
+
+	log.Printf("Found manual test plan section")
+	return []string{section}
 }
