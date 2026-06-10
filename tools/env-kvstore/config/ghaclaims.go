@@ -12,5 +12,6 @@ type GHAClaims struct {
 	Repository  string `json:"repository"`
 	Enterprise  string `json:"enterprise"`
 	Environment string `json:"environment,omitempty"`
+	Workflow    string `json:"workflow"`
 	jwt.RegisteredClaims
 }

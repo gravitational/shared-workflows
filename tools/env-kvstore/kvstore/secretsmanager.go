@@ -103,15 +103,15 @@ func (s *SecretsManagerValueProvider) SetEnvValuesForGitHubActions(ctx context.C
 
 	if err := actions.WriteGithubEnv(envValues); err != nil {
 		actions.AddSummary(githubStepName, actions.SummaryRowWithCounts{
-			Result: actions.SummaryResultFailure,
-			Msg:    fmt.Sprintf("Failed to set environment variables for GitHub Actions: %v", err),
+			Result:       actions.SummaryResultFailure,
+			Msg:          fmt.Sprintf("Failed to set environment variables for GitHub Actions: %v", err),
 			FailureCount: 1,
 		})
 		return fmt.Errorf("error appending environment variable definitions to GITHUB_ENV file: %w", err)
 	}
 	actions.AddSummary(githubStepName, actions.SummaryRowWithCounts{
-		Result: actions.SummaryResultSuccess,
-		Msg:    "Environment variables set successfully for GitHub Actions",
+		Result:       actions.SummaryResultSuccess,
+		Msg:          "Environment variables set successfully for GitHub Actions",
 		SuccessCount: len(envValues),
 	})
 

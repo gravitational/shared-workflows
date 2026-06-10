@@ -1,6 +1,6 @@
 ---
-name: Upload normalized test results
-description: Captures metadata, normalizes the test results and uploads to s3.
+name: Load build values
+description: Populates environment secrets and variables from kvstore
 
 inputs:
   github-token:
@@ -24,8 +24,13 @@ inputs:
     required: true
     description: "Role to use for retrieving Secrets Manager secrets. Assumed via OIDC using Cognito token."
   values:
-    required: true
     description: "Values to retrieve from KVStore and set as environment variables. CSV: environment variable name, value type (variable|secret), override key"
+  existing-gh-secrets:
+    description: "Migration: set to ${{ tojson(secrets) }} to persist existing secrets to S3"
+    default: "{}"
+  existing-gh-variables:
+    description: "Migration: set to ${{ tojson(vars) }} to persist existing variables to S3"
+    default: "{}"
 
 runs:
   using: composite
@@ -50,6 +55,9 @@ runs:
         INPUT_COGNITO-ACCOUNT-ID: "${{ inputs.cognito-account-id }}"
         INPUT_COGNITO-IDENTITY-POOL-ID: "${{ inputs.cognito-identity-pool-id }}"
         INPUT_COGNITO-REGION: "${{ inputs.cognito-region }}"
-        INPUT_CODNITO-ROLE-ARN: "${{ inputs.cognito-role-arn }}"
+        INPUT_COGNITO-ROLE-ARN: "${{ inputs.cognito-role-arn }}"
+        INPUT_VALUES: "${{ inputs.values }}"
+        GHA_SECRETS_CONTEXT: "${{ inputs.existing-gh-secrets }}"
+        GHA_VARS_CONTEXT: "${{ inputs.existing-gh-variables }}"
       run: |
         env-kvstore
