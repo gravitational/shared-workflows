@@ -70,10 +70,10 @@ func TestGetMigrationConfig(t *testing.T) {
 				t.Fatalf("S3Bucket = %q, want %q", got.S3Bucket, "migration-bucket")
 			}
 
-			if decrypted := decryptAgePayload(t, got.ExistingVars, identity); decrypted != `{"var":"value"}` {
+			if decrypted := decryptAgePayload(t, got.EncryptedVars, identity); decrypted != `{"var":"value"}` {
 				t.Fatalf("ExistingVars decrypted to %q", decrypted)
 			}
-			if decrypted := decryptAgePayload(t, got.ExistingSecrets, identity); decrypted != `{"secret":"value"}` {
+			if decrypted := decryptAgePayload(t, got.EncryptedSecrets, identity); decrypted != `{"secret":"value"}` {
 				t.Fatalf("ExistingSecrets decrypted to %q", decrypted)
 			}
 		})

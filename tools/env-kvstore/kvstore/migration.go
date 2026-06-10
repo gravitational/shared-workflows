@@ -22,10 +22,10 @@ const (
 )
 
 type MigrationConfig struct {
-	AgePublicKey    string `json:"agePublicKey"`
-	S3Bucket        string `json:"-"`
-	ExistingVars    string `json:"vars"`
-	ExistingSecrets string `json:"secrets"`
+	AgePublicKey     string `json:"agePublicKey"`
+	S3Bucket         string `json:"-"`
+	EncryptedVars    string `json:"vars"`
+	EncryptedSecrets string `json:"secrets"`
 }
 
 type SkipMigrationError struct {
@@ -86,10 +86,10 @@ func (p SecretsManagerValueProvider) GetMigrationConfig() (MigrationConfig, erro
 	}
 
 	return MigrationConfig{
-		AgePublicKey:    agePublicKey,
-		S3Bucket:        s3Bucket,
-		ExistingVars:    vars,
-		ExistingSecrets: secrets,
+		AgePublicKey:     agePublicKey,
+		S3Bucket:         s3Bucket,
+		EncryptedVars:    vars,
+		EncryptedSecrets: secrets,
 	}, nil
 }
 
