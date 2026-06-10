@@ -43,12 +43,13 @@ func generateS3Key(ghaClaims config.GHAClaims) (string, error) {
 }
 
 func (u *migrationUploader) Upload(ctx context.Context) error {
+	if !u.migrationConfig.HasMigrationConfig() {
+		migrationSummary("Migration config not present; skipping collection of existing GitHub Actions values.", actions.SummaryResultInfo)
+		return nil
+	}
+
 	migrationConfig, err := u.migrationConfig.GetMigrationConfig()
 	if err != nil {
-		if !u.migrationConfig.HasMigrationConfig() {
-			migrationSummary("Migration config not present; skipping collection of existing GitHub Actions values.", actions.SummaryResultInfo)
-			return nil
-		}
 		var skipErr kvstore.SkipMigrationError
 		if errors.As(err, &skipErr) {
 			migrationSummary(skipErr.Error(), actions.SummaryResultWarning)
