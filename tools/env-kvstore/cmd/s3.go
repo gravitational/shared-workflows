@@ -46,7 +46,7 @@ func (u *migrationUploader) Upload(ctx context.Context) error {
 	migrationConfig, err := u.migrationConfig.GetMigrationConfig()
 	if err != nil {
 		if !u.migrationConfig.HasMigrationConfig() {
-			migrationSummary("Missing or incomplete migration configuration. Skipping collection of values.", actions.SummaryResultWarning)
+			migrationSummary("Migration config not present; skipping collection of existing GitHub Actions values.", actions.SummaryResultInfo)
 			return nil
 		}
 		var skipErr kvstore.SkipMigrationError
