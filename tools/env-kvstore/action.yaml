@@ -31,8 +31,6 @@ inputs:
   existing-gh-variables:
     description: "Migration: set to ${{ tojson(vars) }} to persist existing variables to S3"
     default: "{}"
-  tool-version:
-    description: Version of the tool to use
 
 runs:
   using: composite

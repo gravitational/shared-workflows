@@ -47,9 +47,9 @@ func (p SecretsManagerValueProvider) HasMigrationConfig() bool {
 	return hasPublicKey && hasS3Bucket
 }
 
-// GetMigrationConfig checks for the presence of migration configuration
-// returns the migration configuration if found, along with a boolean indicating
-// its presence.
+// GetMigrationConfig retrieves the migration configuration from kvstore and encrypts the provided GHA vars/secrets contexts.
+// Returns a SkipMigrationError when migration should be skipped (e.g. no contexts were provided).
+// Otherwise returns the migration configuration or an error.
 func (p SecretsManagerValueProvider) GetMigrationConfig() (MigrationConfig, error) {
 	s3Bucket, ok := p.variables.GetValue(migrationS3BucketKey)
 	if !ok {

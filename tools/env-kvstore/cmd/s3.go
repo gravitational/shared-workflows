@@ -39,7 +39,7 @@ func generateS3Key(ghaClaims config.GHAClaims) (string, error) {
 	if env == "" {
 		env = "__noenv__"
 	}
-	return fmt.Sprintf("%s/%s/%s/%s/%s", ghaClaims.Enterprise, ghaClaims.Repository, ghaClaims.Workflow, env, fmt.Sprintf("%s.json", ghaClaims.RunID)), nil
+	return fmt.Sprintf("%s/%s/%s/%s/%s.json", ghaClaims.Enterprise, ghaClaims.Repository, ghaClaims.Workflow, env, ghaClaims.RunID), nil
 }
 
 func (u *migrationUploader) Upload(ctx context.Context) error {
