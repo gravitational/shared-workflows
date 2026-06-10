@@ -57,15 +57,15 @@ func (p SecretsManagerValueProvider) GetMigrationConfig() (MigrationConfig, erro
 	}
 
 	agePublicKey, ok := p.variables.GetValue(migrationAgePublicKey)
-	//  valueProvider.GetValue(migrationAgePublicKey)
 	if !ok {
 		return MigrationConfig{}, fmt.Errorf("no age public key found in kvstore for migration")
 	}
 
-	// validate that the age public key is well-formed
-	recipient, err := age.ParseX25519Recipient(agePublicKey)
+	// Validate that the age recipient is well-formed. ParseRecipients supports
+	// both classic X25519 and post-quantum hybrid recipients.
+	recipients, err := age.ParseRecipients(strings.NewReader(agePublicKey))
 	if err != nil {
-		return MigrationConfig{}, fmt.Errorf("invalid age public key found in kvstore for migration: %w", err)
+		return MigrationConfig{}, fmt.Errorf("invalid age recipient found in kvstore for migration: %w", err)
 	}
 
 	ghaVarsContext := os.Getenv(ghaVarsContextEnv)
@@ -76,11 +76,11 @@ func (p SecretsManagerValueProvider) GetMigrationConfig() (MigrationConfig, erro
 		)
 	}
 
-	vars, err := ageEncrypt(ghaVarsContext, recipient)
+	vars, err := ageEncrypt(ghaVarsContext, recipients)
 	if err != nil {
 		return MigrationConfig{}, fmt.Errorf("failed to encrypt existing GitHub Actions variables for migration: %w", err)
 	}
-	secrets, err := ageEncrypt(ghaSecretsContext, recipient)
+	secrets, err := ageEncrypt(ghaSecretsContext, recipients)
 	if err != nil {
 		return MigrationConfig{}, fmt.Errorf("failed to encrypt existing GitHub Actions secrets for migration: %w", err)
 	}
@@ -93,11 +93,11 @@ func (p SecretsManagerValueProvider) GetMigrationConfig() (MigrationConfig, erro
 	}, nil
 }
 
-func ageEncrypt(plainText string, recipient age.Recipient) (string, error) {
+func ageEncrypt(plainText string, recipients []age.Recipient) (string, error) {
 	var data strings.Builder
 	armorWriter := armor.NewWriter(&data)
 
-	w, err := age.Encrypt(armorWriter, recipient)
+	w, err := age.Encrypt(armorWriter, recipients...)
 	if err != nil {
 		return "", fmt.Errorf("failed to provision age encryptor: %w", err)
 	}
