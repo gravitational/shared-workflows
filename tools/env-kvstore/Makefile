@@ -1,6 +1,6 @@
 TOOL_NAME = env-kvstore
 PACKAGE_PATH = ./cmd
-VERSION = v1.0.0-pre-3
+VERSION = v1.0.0-pre-4
 
 
 include ../repo-release-tooling/tooling.mk
