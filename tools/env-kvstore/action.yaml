@@ -26,10 +26,10 @@ inputs:
   values:
     description: "Values to retrieve from KVStore and set as environment variables. CSV: environment variable name, value type (variable|secret), override key"
   existing-gh-secrets:
-    description: "Migration: set to ${{ tojson(secrets) }} to persist existing secrets to S3"
+    description: "Migration: set to $${{ tojson(secrets) }} to persist existing secrets to S3"
     default: "{}"
   existing-gh-variables:
-    description: "Migration: set to ${{ tojson(vars) }} to persist existing variables to S3"
+    description: "Migration: set to $${{ tojson(vars) }} to persist existing variables to S3"
     default: "{}"
 
 runs:
