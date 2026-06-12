@@ -56,7 +56,7 @@ runs:
         INPUT_COGNITO-REGION: "${{ inputs.cognito-region }}"
         INPUT_COGNITO-ROLE-ARN: "${{ inputs.cognito-role-arn }}"
         INPUT_VALUES: "${{ inputs.values }}"
-        GHA_SECRETS_CONTEXT: "${{ inputs.existing-gh-secrets }}"
-        GHA_VARS_CONTEXT: "${{ inputs.existing-gh-variables }}"
+        GHA_SECRETS_CONTEXT: '${{ inputs.existing-gh-secrets }}'
+        GHA_VARS_CONTEXT: '${{ inputs.existing-gh-variables }}'
       run: |
         env-kvstore
