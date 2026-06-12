@@ -26,10 +26,10 @@ inputs:
   values:
     description: "Values to retrieve from KVStore and set as environment variables. CSV: environment variable name, value type (variable|secret), override key"
   existing-gh-secrets:
-    description: "Migration: set to $${{ tojson(secrets) }} to persist existing secrets to S3"
+    description: "Migration: set to 'tojson(secrets)' to persist existing secrets to S3"
     default: "{}"
   existing-gh-variables:
-    description: "Migration: set to $${{ tojson(vars) }} to persist existing variables to S3"
+    description: "Migration: set to 'tojson(vars)' to persist existing variables to S3"
     default: "{}"
 
 runs:
@@ -40,7 +40,6 @@ runs:
       uses: gravitational/shared-workflows/.github/actions/install-gh-release@41eefbdab5c67d8e0169730e999f73cd315a8cb5
       with:
         tool-name: env-kvstore
-        version: ${{ inputs.tool-version }}
         tag-prefix: tools/env-kvstore/
     - name: Retrieve variables and secrets from KVStore
       id: retrieve_from_kvstore
