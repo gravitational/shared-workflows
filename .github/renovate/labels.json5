@@ -1,0 +1,86 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "packageRules": [
+    // Labels for specific version change types
+    {
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "addLabels": [
+        "renovate/type/major"
+      ]
+    },
+    {
+      "matchUpdateTypes": [
+        "minor"
+      ],
+      "addLabels": [
+        "renovate/type/minor"
+      ]
+    },
+    {
+      "matchUpdateTypes": [
+        "patch"
+      ],
+      "addLabels": [
+        "renovate/type/patch"
+      ]
+    },
+    {
+      "matchUpdateTypes": [
+        "digest"
+      ],
+      "addLabels": [
+        "renovate/type/digest"
+      ]
+    },
+    // Labels for specific artifact types
+    {
+      "matchDatasources": [
+        "github-releases",
+        "github-tags"
+      ],
+      "addLabels": [
+        "renovate/github-release"
+      ]
+    },
+    {
+      "matchManagers": [
+        "github-actions"
+      ],
+      "addLabels": [
+        "renovate/github-action"
+      ]
+    },
+    {
+      "matchManagers": [
+        "gomod"
+      ],
+      "addLabels": [
+        "renovate/golang"
+      ]
+    },
+    // Labels for specific directories
+    {
+      "description": "Label Github workflow PRs",
+      "matchFileNames": [
+        "**/workflows/*.yml",
+        "**/workflows/*.yaml"
+      ],
+      "addLabels": [
+        "renovate/workflow/{{{ replace '\\.ya?ml$' '' (replace '^\\.github\\/workflows\\/' '' packageFile) }}}"
+      ]
+    },
+    {
+      "description": "Label Renovate PRs",
+      "matchFileNames": [
+        ".github/renovate*",
+        ".github/renovate/**",
+        "renovate.json5"
+      ],
+      "addLabels": [
+        "renovate/config/{{{ replace '\\.js(?:on5?)?$' '' (replace '^\\.github\\/' '' packageFile) }}}"
+      ]
+    }
+  ]
+}
