@@ -106,5 +106,17 @@
         "number": 43150,
         "title": "[v16] Adds `tctl desktop bootstrap`, updates docs.",
         "url": "https://github.com/gravitational/teleport/pull/43150"
+    },
+    {
+        "body": "backport  #42161 to branch/v16\r\nchangelog-enterprise: Adds an enterprise changelog for testing.\r\n",
+        "number": 43150,
+        "title": "[v16] This only has enterprise changelogs.",
+        "url": "https://github.com/gravitational/teleport/pull/43150"
+    },
+    {
+        "body": "backport  #42161 to branch/v16\r\nchangelog-enterprise: Adds a second enterprise changelog for testing.\r\nchangelog: Adds a normal changelog between two enterprise for testing.\r\nchangelog-enterprise: Adds a third enterprise changelog for testing.\r\n",
+        "number": 43150,
+        "title": "[v16] This only has enterprise changelogs.",
+        "url": "https://github.com/gravitational/teleport/pull/43150"
     }
 ]

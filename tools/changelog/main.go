@@ -44,13 +44,23 @@ var (
 		"The tag/version to generate the changelog from. It will be of the form vXX.Y.Z, e.g. v15.1.1",
 	).Envar("BASE_TAG").String()
 
+	privateRepoName = kingpin.Flag(
+		"private-repo-name",
+		"The name of the private repository.",
+	).Envar("PRIVATE_REPO_NAME").String()
+
+	monoRepoEnabled = kingpin.Flag(
+		"mono-repo-enabled",
+		"Whether the repository is a mono-repo.",
+	).Envar("MONO_REPO_ENABLED").Bool()
+
 	dir = kingpin.Arg("dir", "directory of the teleport repo.").Required().String()
 )
 
 func main() {
 	kingpin.Parse()
 
-	ossRepo, entRepo, err := initGit(*dir)
+	ossRepo, err := git.NewRepoFromDirectory(*dir)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -71,61 +81,81 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	timeLastEntRelease, timeLastEntMod, err := entTimestamps(entRepo, lastVersion)
-	if err != nil {
-		log.Fatal(err)
-	}
 
 	cl, err := github.NewClientFromGHAuth(context.Background())
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	// Bump the time of the last release (both OSS and Enterprise) by 1 second
-	// as we do not want to include the commit in the last release.
+	// This is to exclude the commit of the last release from the changelog.
 	timeLastRelease = timeLastRelease.Add(1 * time.Second)
-	timeLastEntRelease = timeLastEntRelease.Add(1 * time.Second)
-	timeLastEntMod = timeLastEntMod.Add(1 * time.Second)
+
+	// By default, we pull from the OSS repository
+	// However, we have situations where we need to pull from a private repository.
+	// In these cases, the PR links are not relevant to external users so we exclude them.
+	var repoName = "teleport"
+	var excludePRLinks = false
+	if *privateRepoName != "" {
+		repoName = *privateRepoName
+		excludePRLinks = true
+	}
 
 	// Generate changelogs
 	ctx := context.Background()
-	ossCLGen := &changelogGenerator{
+	coreRepoScraper := &changelogScraper{
 		ghclient: cl,
-		repo:     "teleport",
+		repo:     repoName,
 	}
-	entCLGen := &changelogGenerator{
-		ghclient:       cl,
-		repo:           "teleport.e",
-		excludePRLinks: true,
-	}
-	ossCL, err := ossCLGen.generateChangelog(ctx, branch, timeLastRelease, github.SearchTimeNow)
-	if err != nil {
-		log.Fatal(err)
-	}
-	entCL, err := entCLGen.generateChangelog(ctx, branch, timeLastEntRelease, timeLastEntMod)
+	changelogs, err := coreRepoScraper.scrapeForChangelogs(ctx, branch, timeLastRelease, github.SearchTimeNow)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	fmt.Println(ossCL)
-	if entCL != "" {
-		fmt.Println("Enterprise:")
-		fmt.Println(entCL)
+	if !*monoRepoEnabled { // If not a monorepo, we need to gather enterprise changelogs from the enterprise repository
+		enterpriseChangelogs, err := gatherEnterpriseChangelogs(ctx, cl, branch, lastVersion)
+		if err != nil {
+			log.Fatal(err)
+		}
+		changelogs = append(changelogs, enterpriseChangelogs...)
 	}
+
+	rendered, err := renderChangelog(renderOpts{
+		changelogs:         changelogs,
+		excludeCorePRLinks: excludePRLinks,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(rendered)
+
 }
 
-// initGit will initialize git repo for teleport OSS and Enterprise.
-func initGit(repoRootDir string) (oss, ent *git.Repo, err error) {
-	oss, err = git.NewRepoFromDirectory(repoRootDir)
+// gatherEnterpriseChangelogs gathers the changelogs from the enterprise-only repository.
+func gatherEnterpriseChangelogs(ctx context.Context, cl *github.Client, branch string, lastVersion string) ([]changelogInfo, error) {
+	// Initialize from the e subdir which contains the repository information for enterprise-only changes
+	enterpriseRepo, err := git.NewRepoFromDirectory(filepath.Join(*dir, "e"))
 	if err != nil {
-		return oss, ent, trace.Wrap(err)
+		return []changelogInfo{}, trace.Wrap(err)
 	}
 
-	ent, err = git.NewRepoFromDirectory(filepath.Join(repoRootDir, "e"))
+	timeLastEntRelease, timeLastEntMod, err := entTimestamps(enterpriseRepo, lastVersion)
 	if err != nil {
-		return oss, ent, trace.Wrap(err)
+		return []changelogInfo{}, trace.Wrap(err)
 	}
-	return
+	timeLastEntRelease = timeLastEntRelease.Add(1 * time.Second)
+	timeLastEntMod = timeLastEntMod.Add(1 * time.Second)
+
+	entCLGen := &changelogScraper{
+		ghclient:          cl,
+		repo:              "teleport.e",
+		markAllEnterprise: true,
+	}
+
+	entCL, err := entCLGen.scrapeForChangelogs(ctx, branch, timeLastEntRelease, timeLastEntMod)
+	if err != nil {
+		return []changelogInfo{}, trace.Wrap(err)
+	}
+	return entCL, nil
 }
 
 // getBranch will return branch if parsed otherwise will attempt to find it

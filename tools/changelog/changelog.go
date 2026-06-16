@@ -17,11 +17,9 @@ limitations under the License.
 package main
 
 import (
-	"bytes"
 	"context"
 	"regexp"
 	"strings"
-	"text/template"
 	"time"
 	"unicode"
 
@@ -35,38 +33,42 @@ type changelogInfo struct {
 	Summary string
 	Number  int
 	URL     string
+	// IsEnterprise indicates if the changelog is for an enterprise feature
+	IsEnterprise bool
 }
-
-const (
-	clTemplate = `
-{{- range . -}}
-* {{.Summary}} [#{{.Number}}]({{.URL}})
-{{ end -}}
-`
-	clTemplateNoLink = `
-{{- range . -}}
-* {{.Summary}}
-{{ end -}}
-`
-)
 
 var (
 	// clPattern will match a changelog format with the summary as a subgroup.
 	// e.g. will match a line "changelog: this is a changelog" with subgroup "this is a changelog".
 	clPattern = regexp.MustCompile(`[Cc]hangelog: +(.*)`)
-
-	clParsedTmpl       = template.Must(template.New("cl").Parse(clTemplate))
-	clParsedTmplNoLink = template.Must(template.New("cl").Parse(clTemplateNoLink))
+	// entCLPattern will match an enterprise changelog format with the summary as a subgroup.
+	// e.g. will match a line "changelog-enterprise: this is an enterprise changelog" with subgroup "this is an enterprise changelog".
+	entCLPattern = regexp.MustCompile(`[Cc]hangelog-[Ee]nterprise: +(.*)`)
 )
 
-type changelogGenerator struct {
-	repo           string
-	ghclient       *github.Client
-	excludePRLinks bool
+// changelogScraper is used to scrape changelog information from GitHub pull requests.
+type changelogScraper struct {
+	repo     string
+	ghclient ghClient
+	// markAllEnterprise indicates if all changelogs should be marked as enterprise
+	markAllEnterprise bool
 }
 
-// generateChangelog will pull a PRs from branch between two points in time and generate a changelog from them.
-func (c *changelogGenerator) generateChangelog(ctx context.Context, branch string, fromTime, toTime time.Time) (string, error) {
+// ghClient is a small interface for the GitHub client to allow for easier testing.
+type ghClient interface {
+	ListChangelogPullRequests(ctx context.Context, owner, repo string, opts *github.ListChangelogPullRequestsOpts) ([]github.ChangelogPR, error)
+}
+
+// scrapeForChangelogs will search for pull requests between two points in time and attempt to extract changelog information from them.
+// This only considers PRs that have been labeled with the "changelog" label. Other PRs will be ignored.
+// In the case of no changelog lines found, this will use the PR title as the changelog with a NOCL prefix.
+//
+// Examples of changelog lines this will match:
+//   - "changelog: this is a changelog"
+//   - "changelog-enterprise: this is an enterprise changelog"
+//
+// Multiple changelog lines can be specified in a single PR.
+func (c *changelogScraper) scrapeForChangelogs(ctx context.Context, branch string, fromTime, toTime time.Time) ([]changelogInfo, error) {
 	// Search github for changelog pull requests
 	prs, err := c.ghclient.ListChangelogPullRequests(
 		ctx,
@@ -79,56 +81,55 @@ func (c *changelogGenerator) generateChangelog(ctx context.Context, branch strin
 		},
 	)
 	if err != nil {
-		return "", trace.Wrap(err)
+		return []changelogInfo{}, trace.Wrap(err)
 	}
 
-	return c.toChangelog(prs)
-}
-
-// toChangelog will take the output from the search and format it into a changelog.
-func (c *changelogGenerator) toChangelog(prs []github.ChangelogPR) (string, error) {
-	var clList []changelogInfo
+	changelogs := []changelogInfo{}
 	for _, pr := range prs {
-		clList = append(clList, newChangelogInfoFromPR(pr)...)
+		changelogs = append(changelogs, c.extractChangelogsFromPR(pr)...)
 	}
 
-	var buff bytes.Buffer
-	tmpl := clParsedTmpl
-	if c.excludePRLinks {
-		tmpl = clParsedTmplNoLink
-	}
-	if err := tmpl.Execute(&buff, clList); err != nil {
-		return "", trace.Wrap(err)
-	}
-
-	return buff.String(), nil
+	return changelogs, nil
 }
 
-// convertPRToChangelog will convert the list of PRs to a nicer format.
-func newChangelogInfoFromPR(pr github.ChangelogPR) []changelogInfo {
+// extractChangelogsFromPR will attempt to extract changelog information from a given PR.
+// This will look for changelog entries in the PR body and return a list of changelog information.
+func (c *changelogScraper) extractChangelogsFromPR(pr github.ChangelogPR) []changelogInfo {
 	var result []changelogInfo
 
 	info := changelogInfo{
-		Summary: "NOCL: " + pr.Title, // default summary
-		Number:  pr.Number,
-		URL:     pr.URL,
+		Summary:      "NOCL: " + pr.Title, // default summary
+		Number:       pr.Number,
+		URL:          pr.URL,
+		IsEnterprise: c.markAllEnterprise,
 	}
 
-	changelogs := findChangelogs(pr.Body)
-	if len(changelogs) == 0 {
-		return []changelogInfo{info}
-	}
-	for _, summary := range changelogs {
+	changelogLines := findChangelogLines(pr.Body, clPattern)
+	for _, summary := range changelogLines {
 		info.Summary = prettierSummary(summary)
 		result = append(result, info)
 	}
+
+	entChangelogLines := findChangelogLines(pr.Body, entCLPattern)
+	if len(entChangelogLines) > 0 {
+		for _, summary := range entChangelogLines {
+			info.Summary = prettierSummary(summary)
+			info.IsEnterprise = true
+			result = append(result, info)
+		}
+	}
+
+	if len(result) == 0 {
+		return []changelogInfo{info}
+	}
+
 	return result
 }
 
-// findChangelogs will parse a body of a PR to find it's changelogs.
-func findChangelogs(commentBody string) []string {
+// findChangelogLines will parse a body of a PR with a given pattern to find its changelogs.
+func findChangelogLines(commentBody string, pattern *regexp.Regexp) []string {
 	var result []string
-	matches := clPattern.FindAllStringSubmatch(commentBody, -1)
+	matches := pattern.FindAllStringSubmatch(commentBody, -1)
 	for _, m := range matches {
 		// If a match is found then we should get a non empty slice
 		// 0 index will be the whole match including "changelog: *"
