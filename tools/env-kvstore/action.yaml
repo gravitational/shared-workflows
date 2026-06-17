@@ -41,6 +41,7 @@ runs:
       with:
         tool-name: env-kvstore
         tag-prefix: tools/env-kvstore/
+        install-dir: ${{ runner.temp }}/env-kvstore
     - name: Retrieve variables and secrets from KVStore
       id: retrieve_from_kvstore
       shell: bash
