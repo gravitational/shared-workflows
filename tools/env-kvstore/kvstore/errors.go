@@ -1,24 +1,11 @@
 package kvstore
 
-import (
-	"errors"
-
-	smtypes "github.com/aws/aws-sdk-go-v2/service/secretsmanager/types"
-)
-
-// envStoreNotFoundError is used to indicate that an environment specific secret or variable
-// store was expected but not found or is empty.
-type envStoreNotFoundError struct {
+// envStoreError is used to indicate that an environment specific secret or variable
+// store could not be retrieved from secrets manager.
+type envStoreError struct {
 	msg string
 }
 
-func (e envStoreNotFoundError) Error() string {
+func (e envStoreError) Error() string {
 	return e.msg
-}
-
-// isResourceNotFoundException tests whether errors from aws.secretsmanager.GetSecretValue
-// indicate the requested secret is missing.
-func isResourceNotFoundException(err error) bool {
-	var notFoundException *smtypes.ResourceNotFoundException
-	return errors.As(err, &notFoundException)
 }

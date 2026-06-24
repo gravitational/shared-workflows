@@ -197,7 +197,7 @@ func (s *SecretsManagerValueProvider) initializeStores(ctx context.Context) erro
 	slog.Debug("Creating secrets store", "repoSecretsARN", repoSecretsARN, "envSecretsARN", envSecretsARN)
 	secrets, err := s.repoOrEnvStoreFromSecretARNs(ctx, repoSecretsARN, envSecretsARN)
 	if err != nil {
-		if !errors.As(err, &envStoreNotFoundError{}) {
+		if !errors.As(err, &envStoreError{}) {
 			s.emitStoreInitFailureSummary(err, "secrets")
 			return err
 		}
@@ -214,7 +214,7 @@ func (s *SecretsManagerValueProvider) initializeStores(ctx context.Context) erro
 	slog.Debug("Creating variables store", "repoVariablesARN", repoVariablesARN, "envVariablesARN", envVariablesARN)
 	variables, err := s.repoOrEnvStoreFromSecretARNs(ctx, repoVariablesARN, envVariablesARN)
 	if err != nil {
-		if !errors.As(err, &envStoreNotFoundError{}) {
+		if !errors.As(err, &envStoreError{}) {
 			s.emitStoreInitFailureSummary(err, "variables")
 			return err
 		}
@@ -255,24 +255,15 @@ func (s SecretsManagerValueProvider) repoOrEnvStoreFromSecretARNs(ctx context.Co
 
 	envStore, err := s.mapStoreFromSecretARN(ctx, envArn)
 	if err != nil {
-		if isResourceNotFoundException(err) {
-			envStore = &MapBackedKVStore{store: map[string]string{}}
-		} else {
-			return nil, fmt.Errorf("error retrieving environment-specific values from Secrets Manager: %w", err)
-		}
+		slog.Error("Failed to retrieve environment specific values.", "secretArn", envArn, "error", err)
+		envStore = &MapBackedKVStore{store: map[string]string{}}
 	}
 
-	// When the workflow is running in the context of a specific GHA environment, we expect to find
-	// environment-specific values in Secrets Manager.
-	// Emit a warning when no environment-specific values are stored at all.
-	// If an empty environment store is retrieved from Secrets Manager, the environment is configured to
-	// use repo-level values only.
-	if envArn != "" && envStore.IsEmpty() && isResourceNotFoundException(err) {
+	// This case is expected when migrating existing GHA workflows and the envrionment store has not yet
+	// been created.
+	if envArn != "" && envStore.IsEmpty() && err != nil {
 		slog.Warn("no environment-specific values found in Secrets Manager, only repo-level values will be available", "environment", s.ghaClaims.Environment, "arn", envArn)
-		err = envStoreNotFoundError{msg: fmt.Sprintf("no environment-specific values found in Secrets Manager for environment %s", s.ghaClaims.Environment)}
-	}
-	if envArn != "" && envStore.IsEmpty() && err == nil {
-		slog.Info("environment-specific values are empty in Secrets Manager, only repo-level values will be available", "environment", s.ghaClaims.Environment, "arn", envArn)
+		err = envStoreError{msg: fmt.Sprintf("no environment-specific values found in Secrets Manager for environment %s", s.ghaClaims.Environment)}
 	}
 
 	return &RepoOrEnvKVStore{
