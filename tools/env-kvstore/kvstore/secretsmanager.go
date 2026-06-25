@@ -255,15 +255,9 @@ func (s SecretsManagerValueProvider) repoOrEnvStoreFromSecretARNs(ctx context.Co
 
 	envStore, err := s.mapStoreFromSecretARN(ctx, envArn)
 	if err != nil {
-		slog.Error("Failed to retrieve environment specific values.", "secretArn", envArn, "error", err)
+		slog.Warn("Failed to retrieve environment-specific values from Secrets Manager, only repo-level values will be available", "environment", s.ghaClaims.Environment, "arn", envArn, "error", err)
+		err = envStoreError{arn: envArn}
 		envStore = &MapBackedKVStore{store: map[string]string{}}
-	}
-
-	// This case is expected when migrating existing GHA workflows and the envrionment store has not yet
-	// been created.
-	if envArn != "" && envStore.IsEmpty() && err != nil {
-		slog.Warn("no environment-specific values found in Secrets Manager, only repo-level values will be available", "environment", s.ghaClaims.Environment, "arn", envArn)
-		err = envStoreError{msg: fmt.Sprintf("no environment-specific values found in Secrets Manager for environment %s", s.ghaClaims.Environment)}
 	}
 
 	return &RepoOrEnvKVStore{
