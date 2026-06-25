@@ -13,3 +13,11 @@ type envStoreError struct {
 func (e envStoreError) Error() string {
 	return fmt.Sprintf("unable to retrieve environment-specific values from Secrets Manager (ARN: %s)", e.arn)
 }
+
+type unmarshalError struct {
+	arn string
+}
+
+func (e unmarshalError) Error() string {
+	return fmt.Sprintf("unable to unmarshal values from Secrets Manager (ARN: %s)", e.arn)
+}

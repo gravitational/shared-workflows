@@ -242,7 +242,7 @@ func (s *SecretsManagerValueProvider) emitStoreInitFailureSummary(err error, sto
 func (s *SecretsManagerValueProvider) emitEnvStoreWarning(storeType string) {
 	actions.AddSummary(githubStepName, actions.SummaryRowWithCounts{
 		Result:       actions.SummaryResultWarning,
-		Msg:          fmt.Sprintf("Environment specific %s do not exist for environment \"%v\"", storeType, s.ghaClaims.Environment),
+		Msg:          fmt.Sprintf("Environment specific %s could not be retrieved for environment \"%v\"", storeType, s.ghaClaims.Environment),
 		WarningCount: 1,
 	})
 }
@@ -256,7 +256,9 @@ func (s SecretsManagerValueProvider) repoOrEnvStoreFromSecretARNs(ctx context.Co
 	envStore, err := s.mapStoreFromSecretARN(ctx, envArn)
 	if err != nil {
 		slog.Warn("Failed to retrieve environment-specific values from Secrets Manager, only repo-level values will be available", "environment", s.ghaClaims.Environment, "arn", envArn, "error", err)
-		err = envStoreError{arn: envArn}
+		if !errors.As(err, &unmarshalError{}) {
+			err = envStoreError{arn: envArn}
+		}
 		envStore = &MapBackedKVStore{store: map[string]string{}}
 	}
 
@@ -275,12 +277,14 @@ func (s SecretsManagerValueProvider) mapStoreFromSecretARN(ctx context.Context, 
 	slog.Debug("Retrieving secret value from AWS Secrets Manager", "arn", arn)
 	secretOutput, err := client.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{SecretId: aws.String(arn)})
 	if err != nil {
+		slog.Error("Failed to retrieve secret value from AWS Secrets Manager", "arn", arn, "error", err)
 		return nil, err
 	}
 
 	kvMap := make(map[string]string, len(s.valuesConfig))
 	if err := json.Unmarshal([]byte(aws.ToString(secretOutput.SecretString)), &kvMap); err != nil {
-		return nil, fmt.Errorf("error unmarshalling value from Secrets Manager: %w", err)
+		slog.Error("Failed to unmarshal secret value from AWS Secrets Manager", "arn", arn, "error", err)
+		return nil, unmarshalError{arn: arn}
 	}
 
 	return &MapBackedKVStore{store: kvMap}, nil
