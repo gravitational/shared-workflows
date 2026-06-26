@@ -14,6 +14,12 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 )
 
+// SecretsManagerClient is the interface for AWS Secrets Manager API calls used by this package.
+// The concrete *secretsmanager.Client satisfies this interface; it can be replaced with a mock in tests.
+type SecretsManagerClient interface {
+	GetSecretValue(ctx context.Context, params *secretsmanager.GetSecretValueInput, optFns ...func(*secretsmanager.Options)) (*secretsmanager.GetSecretValueOutput, error)
+}
+
 const (
 	repoARNFormat = "arn:aws:secretsmanager:%s:%s:secret:%s/repo/%s"
 	envARNFormat  = "arn:aws:secretsmanager:%s:%s:secret:%s/repo/%s/env/%s"
@@ -22,8 +28,8 @@ const (
 )
 
 type SecretsManagerValueProvider struct {
-	awsConfig aws.Config
-	smConfig  config.SecretsManagerConfig
+	smClient SecretsManagerClient
+	smConfig config.SecretsManagerConfig
 	// valuesConfig is the list of environment variables to retrieve from Secrets Manager
 	valuesConfig []config.EnvValue
 	// ghaClaims stores the parsed claims from the GHA JWT - used to construct ARNs for Secrets Manager and for naming the AWS session
@@ -77,9 +83,9 @@ func envSecretARN(valueType string, arnDetails arnTemplateFields) string {
 		arnDetails.environment)
 }
 
-func NewSecretsManagerValueProvider(awsConfig aws.Config, smConfig config.SecretsManagerConfig, ghaClaims config.GHAClaims, valuesConfig []config.EnvValue) *SecretsManagerValueProvider {
+func NewSecretsManagerValueProvider(smClient SecretsManagerClient, smConfig config.SecretsManagerConfig, ghaClaims config.GHAClaims, valuesConfig []config.EnvValue) *SecretsManagerValueProvider {
 	return &SecretsManagerValueProvider{
-		awsConfig:    awsConfig,
+		smClient:     smClient,
 		smConfig:     smConfig,
 		ghaClaims:    ghaClaims,
 		valuesConfig: valuesConfig,
@@ -197,7 +203,7 @@ func (s *SecretsManagerValueProvider) initializeStores(ctx context.Context) erro
 	slog.Debug("Creating secrets store", "repoSecretsARN", repoSecretsARN, "envSecretsARN", envSecretsARN)
 	secrets, err := s.repoOrEnvStoreFromSecretARNs(ctx, repoSecretsARN, envSecretsARN)
 	if err != nil {
-		if !errors.As(err, &envStoreNotFoundError{}) {
+		if !errors.As(err, &envStoreError{}) {
 			s.emitStoreInitFailureSummary(err, "secrets")
 			return err
 		}
@@ -214,7 +220,7 @@ func (s *SecretsManagerValueProvider) initializeStores(ctx context.Context) erro
 	slog.Debug("Creating variables store", "repoVariablesARN", repoVariablesARN, "envVariablesARN", envVariablesARN)
 	variables, err := s.repoOrEnvStoreFromSecretARNs(ctx, repoVariablesARN, envVariablesARN)
 	if err != nil {
-		if !errors.As(err, &envStoreNotFoundError{}) {
+		if !errors.As(err, &envStoreError{}) {
 			s.emitStoreInitFailureSummary(err, "variables")
 			return err
 		}
@@ -242,7 +248,7 @@ func (s *SecretsManagerValueProvider) emitStoreInitFailureSummary(err error, sto
 func (s *SecretsManagerValueProvider) emitEnvStoreWarning(storeType string) {
 	actions.AddSummary(githubStepName, actions.SummaryRowWithCounts{
 		Result:       actions.SummaryResultWarning,
-		Msg:          fmt.Sprintf("Environment specific %s do not exist for environment \"%v\"", storeType, s.ghaClaims.Environment),
+		Msg:          fmt.Sprintf("Environment specific %s could not be retrieved for environment \"%v\"", storeType, s.ghaClaims.Environment),
 		WarningCount: 1,
 	})
 }
@@ -255,24 +261,11 @@ func (s SecretsManagerValueProvider) repoOrEnvStoreFromSecretARNs(ctx context.Co
 
 	envStore, err := s.mapStoreFromSecretARN(ctx, envArn)
 	if err != nil {
-		if isResourceNotFoundException(err) {
-			envStore = &MapBackedKVStore{store: map[string]string{}}
-		} else {
-			return nil, fmt.Errorf("error retrieving environment-specific values from Secrets Manager: %w", err)
+		slog.Warn("Failed to retrieve environment-specific values from Secrets Manager, only repo-level values will be available", "environment", s.ghaClaims.Environment, "arn", envArn, "error", err)
+		if !errors.As(err, &unmarshalError{}) {
+			err = envStoreError{arn: envArn}
 		}
-	}
-
-	// When the workflow is running in the context of a specific GHA environment, we expect to find
-	// environment-specific values in Secrets Manager.
-	// Emit a warning when no environment-specific values are stored at all.
-	// If an empty environment store is retrieved from Secrets Manager, the environment is configured to
-	// use repo-level values only.
-	if envArn != "" && envStore.IsEmpty() && isResourceNotFoundException(err) {
-		slog.Warn("no environment-specific values found in Secrets Manager, only repo-level values will be available", "environment", s.ghaClaims.Environment, "arn", envArn)
-		err = envStoreNotFoundError{msg: fmt.Sprintf("no environment-specific values found in Secrets Manager for environment %s", s.ghaClaims.Environment)}
-	}
-	if envArn != "" && envStore.IsEmpty() && err == nil {
-		slog.Info("environment-specific values are empty in Secrets Manager, only repo-level values will be available", "environment", s.ghaClaims.Environment, "arn", envArn)
+		envStore = &MapBackedKVStore{store: map[string]string{}}
 	}
 
 	return &RepoOrEnvKVStore{
@@ -285,17 +278,18 @@ func (s SecretsManagerValueProvider) mapStoreFromSecretARN(ctx context.Context, 
 	if arn == "" {
 		return &MapBackedKVStore{store: map[string]string{}}, nil
 	}
-	client := secretsmanager.NewFromConfig(s.awsConfig)
 
 	slog.Debug("Retrieving secret value from AWS Secrets Manager", "arn", arn)
-	secretOutput, err := client.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{SecretId: aws.String(arn)})
+	secretOutput, err := s.smClient.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{SecretId: aws.String(arn)})
 	if err != nil {
+		slog.Error("Failed to retrieve secret value from AWS Secrets Manager", "arn", arn, "error", err)
 		return nil, err
 	}
 
 	kvMap := make(map[string]string, len(s.valuesConfig))
 	if err := json.Unmarshal([]byte(aws.ToString(secretOutput.SecretString)), &kvMap); err != nil {
-		return nil, fmt.Errorf("error unmarshalling value from Secrets Manager: %w", err)
+		slog.Error("Failed to unmarshal secret value from AWS Secrets Manager", "arn", arn, "error", err)
+		return nil, unmarshalError{arn: arn}
 	}
 
 	return &MapBackedKVStore{store: kvMap}, nil
