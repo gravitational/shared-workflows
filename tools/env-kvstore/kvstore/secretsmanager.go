@@ -14,6 +14,12 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 )
 
+// SecretsManagerClient is the interface for AWS Secrets Manager API calls used by this package.
+// The concrete *secretsmanager.Client satisfies this interface; it can be replaced with a mock in tests.
+type SecretsManagerClient interface {
+	GetSecretValue(ctx context.Context, params *secretsmanager.GetSecretValueInput, optFns ...func(*secretsmanager.Options)) (*secretsmanager.GetSecretValueOutput, error)
+}
+
 const (
 	repoARNFormat = "arn:aws:secretsmanager:%s:%s:secret:%s/repo/%s"
 	envARNFormat  = "arn:aws:secretsmanager:%s:%s:secret:%s/repo/%s/env/%s"
@@ -22,8 +28,8 @@ const (
 )
 
 type SecretsManagerValueProvider struct {
-	awsConfig aws.Config
-	smConfig  config.SecretsManagerConfig
+	smClient SecretsManagerClient
+	smConfig config.SecretsManagerConfig
 	// valuesConfig is the list of environment variables to retrieve from Secrets Manager
 	valuesConfig []config.EnvValue
 	// ghaClaims stores the parsed claims from the GHA JWT - used to construct ARNs for Secrets Manager and for naming the AWS session
@@ -77,9 +83,9 @@ func envSecretARN(valueType string, arnDetails arnTemplateFields) string {
 		arnDetails.environment)
 }
 
-func NewSecretsManagerValueProvider(awsConfig aws.Config, smConfig config.SecretsManagerConfig, ghaClaims config.GHAClaims, valuesConfig []config.EnvValue) *SecretsManagerValueProvider {
+func NewSecretsManagerValueProvider(smClient SecretsManagerClient, smConfig config.SecretsManagerConfig, ghaClaims config.GHAClaims, valuesConfig []config.EnvValue) *SecretsManagerValueProvider {
 	return &SecretsManagerValueProvider{
-		awsConfig:    awsConfig,
+		smClient:     smClient,
 		smConfig:     smConfig,
 		ghaClaims:    ghaClaims,
 		valuesConfig: valuesConfig,
@@ -272,10 +278,9 @@ func (s SecretsManagerValueProvider) mapStoreFromSecretARN(ctx context.Context, 
 	if arn == "" {
 		return &MapBackedKVStore{store: map[string]string{}}, nil
 	}
-	client := secretsmanager.NewFromConfig(s.awsConfig)
 
 	slog.Debug("Retrieving secret value from AWS Secrets Manager", "arn", arn)
-	secretOutput, err := client.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{SecretId: aws.String(arn)})
+	secretOutput, err := s.smClient.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{SecretId: aws.String(arn)})
 	if err != nil {
 		slog.Error("Failed to retrieve secret value from AWS Secrets Manager", "arn", arn, "error", err)
 		return nil, err

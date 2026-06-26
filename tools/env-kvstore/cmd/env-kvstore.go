@@ -16,6 +16,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awscfg "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 )
 
@@ -69,7 +70,8 @@ func run(ctx context.Context, config config.Config) error {
 	}
 	slog.Info("Successfully authenticated to AWS account.", "account", aws.ToString(identityOutput.Account), "arn", aws.ToString(identityOutput.Arn))
 
-	valueProvider := kvstore.NewSecretsManagerValueProvider(awsCfg, config.SecretsManager, tokenExchanger.Claims, config.Values.Items)
+	smClient := secretsmanager.NewFromConfig(awsCfg)
+	valueProvider := kvstore.NewSecretsManagerValueProvider(smClient, config.SecretsManager, tokenExchanger.Claims, config.Values.Items)
 
 	slog.Info("Setting environment values for GHA workflow.")
 	err = valueProvider.SetEnvValuesForGitHubActions(ctx)
