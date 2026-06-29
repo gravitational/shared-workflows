@@ -17,55 +17,62 @@ limitations under the License.
 package main
 
 import (
-	"bytes"
-	"encoding/json"
-	"os"
-	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/gravitational/shared-workflows/libs/github"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
-func decodeTestData(t *testing.T, data []byte) []github.ChangelogPR {
-	prs := []github.ChangelogPR{}
-	dec := json.NewDecoder(bytes.NewReader(data))
-	require.NoError(t, dec.Decode(&prs))
-	return prs
+func TestChangelogScraper(t *testing.T) {
+	// Test the changelog scraper functionality
+	scraper := &changelogScraper{
+		repo: "test-repo",
+		ghclient: &fakeGitHubClient{
+			testFileName: "testdata/listed-prs.json",
+		},
+	}
+
+	data, err := scraper.scrapeForChangelogs(t.Context(), "master", time.Now(), time.Now())
+	assert.NoError(t, err)
+	assert.NotEmpty(t, data)
+	assert.Len(t, data, 23)
+
+	coreCLCount := 0
+	entCLCount := 0
+	for _, item := range data {
+		if !item.IsEnterprise {
+			coreCLCount++
+		} else {
+			entCLCount++
+		}
+	}
+	assert.Equal(t, 20, coreCLCount)
+	assert.Equal(t, 3, entCLCount)
 }
 
-func TestToChangelog(t *testing.T) {
-	testCases := []struct {
-		name           string
-		expectedFile   string
-		excludePRLinks bool
-	}{
-		{
-			name:           "include-links",
-			expectedFile:   "expected-cl.md",
-			excludePRLinks: false,
-		},
-		{
-			name:           "exclude-links",
-			expectedFile:   "expected-cl-no-links.md",
-			excludePRLinks: true,
-		},
+func TestFindChangelogLinesCoreAndEnterpriseMarkers(t *testing.T) {
+	body := `
+- changelog: core fix
+* changelog-enterprise: paid feature
+`
+
+	assert.Equal(t, []string{"core fix"}, findChangelogLines(body, clPattern))
+	assert.Equal(t, []string{"paid feature"}, findChangelogLines(body, entCLPattern))
+}
+
+func TestExtractChangelogsFromPREnterpriseOnly(t *testing.T) {
+	pr := github.ChangelogPR{
+		Title:  "Fallback title",
+		Number: 42,
+		URL:    "https://example.test/pull/42",
+		Body:   "changelog-enterprise: enterprise behavior",
 	}
 
-	for _, tt := range testCases {
-		t.Run(tt.name, func(t *testing.T) {
-			prsText, err := os.ReadFile(filepath.Join("testdata", "listed-prs.json"))
-			require.NoError(t, err)
-			expectedCL, err := os.ReadFile(filepath.Join("testdata", tt.expectedFile))
-			require.NoError(t, err)
+	scraper := &changelogScraper{}
 
-			prs := decodeTestData(t, prsText)
-
-			gen := &changelogGenerator{excludePRLinks: tt.excludePRLinks}
-			got, err := gen.toChangelog(prs)
-			assert.NoError(t, err)
-			assert.Equal(t, string(expectedCL), got)
-		})
-	}
+	items := scraper.extractChangelogsFromPR(pr)
+	assert.Len(t, items, 1)
+	assert.Equal(t, "Enterprise behavior.", items[0].Summary)
+	assert.True(t, items[0].IsEnterprise)
 }
