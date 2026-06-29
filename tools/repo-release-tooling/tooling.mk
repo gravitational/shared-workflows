@@ -47,8 +47,13 @@ clean:
 
 .PHONY: print-tool-name print-version lint test generate binary tarball container-image clean
 
+ADDLICENSE_ARGS = -l apache -c 'Gravitational, Inc.' \
+	-ignore 'workflows/**'
+
 fix-license:
-	go run github.com/google/addlicense@v1.0.0 -l apache \
-		-c 'Gravitational, Inc.' \
-		-ignore 'workflows/**' \
-		.
+	go run github.com/google/addlicense@v1.0.0 $(ADDLICENSE_ARGS) .
+
+lint-license:
+	@echo "Checking license headers..."
+	@echo "If you see any output below, it means that some files are missing license headers."
+	go run github.com/google/addlicense@v1.0.0 -check $(ADDLICENSE_ARGS) .
