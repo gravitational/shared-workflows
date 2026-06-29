@@ -46,3 +46,9 @@ clean:
 	@docker image rm -f "$(TOOL_NAME):$(CONTAINER_VERSION)" 2> /dev/null > /dev/null
 
 .PHONY: print-tool-name print-version lint test generate binary tarball container-image clean
+
+fix-license:
+	go run github.com/google/addlicense@v1.0.0 -l apache \
+		-c 'Gravitational, Inc.' \
+		-ignore 'workflows/**' \
+		.
