@@ -51,7 +51,7 @@ var (
 
 	monoRepoEnabled = kingpin.Flag(
 		"mono-repo-enabled",
-		"Whether the repository is a mono-repo.",
+		"Whether the repository is a mono-repo. When true, only generates changelogs from the core repository. When false, also includes changelogs from the enterprise repository.",
 	).Envar("MONO_REPO_ENABLED").Bool()
 
 	dir = kingpin.Arg("dir", "directory of the teleport repo.").Required().String()
