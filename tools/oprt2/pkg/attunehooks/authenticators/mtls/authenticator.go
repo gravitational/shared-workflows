@@ -75,35 +75,54 @@ func (a *Authenticator) Name() string {
 }
 
 func (a *Authenticator) setHostPort(attuneEndpoint string) error {
-	attuneEndpointURL, err := url.Parse(attuneEndpoint)
-	if err == nil {
-		a.attuneEndpointHost = attuneEndpointURL.Hostname()
-		if a.attuneEndpointHost == "" {
-			return fmt.Errorf("the Attune endpoint does not contain a hostname: %q", attuneEndpoint)
+	asUrl := func() (string, string, bool) {
+		endpointURL, err := url.Parse(attuneEndpoint)
+		if err != nil {
+			return "", "", false
 		}
 
-		a.attuneEndpointPort = attuneEndpointURL.Port()
-		if a.attuneEndpointPort != "" {
-			return nil
+		host := endpointURL.Hostname()
+		if host == "" {
+			return "", "", false
 		}
 
-		switch attuneEndpointURL.Scheme {
+		port := endpointURL.Port()
+		if port != "" {
+			return host, port, true
+		}
+
+		switch endpointURL.Scheme {
 		case "https":
-			a.attuneEndpointPort = "443"
-			return nil
+			port = "443"
+			return host, port, true
 		case "http":
-			a.attuneEndpointPort = "80"
-			return nil
+			port = "80"
+			return host, port, true
 		}
+
+		return "", "", false
 	}
 
-	if host, port, err := net.SplitHostPort(attuneEndpoint); err == nil {
-		a.attuneEndpointHost = host
-		a.attuneEndpointPort = port
-		return nil
+	asHostPortCombo := func() (string, string, bool) {
+		host, port, err := net.SplitHostPort(attuneEndpoint)
+		return host, port, err == nil
 	}
 
-	return fmt.Errorf("failed to parse Attune endpoint: %q", attuneEndpoint)
+	// First try as a URL
+	host, port, found := asUrl()
+	// If that fails, try as a host:port combo
+	if !found {
+		host, port, found = asHostPortCombo()
+	}
+
+	// If still not found, error
+	if !found {
+		return fmt.Errorf("failed to parse Attune endpoint: %q", attuneEndpoint)
+	}
+
+	a.attuneEndpointHost = host
+	a.attuneEndpointPort = port
+	return nil
 }
 
 func (a *Authenticator) setup(ctx context.Context) error {
