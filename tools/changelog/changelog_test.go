@@ -22,34 +22,35 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"text/template"
 
 	"github.com/gravitational/shared-workflows/libs/github"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func decodeTestData(t *testing.T, data []byte) []github.ChangelogPR {
-	prs := []github.ChangelogPR{}
+func decodeTestData(t *testing.T, data []byte) []github.PullRequest {
+	var prs []github.PullRequest
 	dec := json.NewDecoder(bytes.NewReader(data))
 	require.NoError(t, dec.Decode(&prs))
 	return prs
 }
 
-func TestToChangelog(t *testing.T) {
+func TestRender(t *testing.T) {
 	testCases := []struct {
-		name           string
-		expectedFile   string
-		excludePRLinks bool
+		name         string
+		expectedFile string
+		tmpl         *template.Template
 	}{
 		{
-			name:           "include-links",
-			expectedFile:   "expected-cl.md",
-			excludePRLinks: false,
+			name:         "include-links",
+			expectedFile: "expected-cl.md",
+			tmpl:         tmplLinks,
 		},
 		{
-			name:           "exclude-links",
-			expectedFile:   "expected-cl-no-links.md",
-			excludePRLinks: true,
+			name:         "exclude-links",
+			expectedFile: "expected-cl-no-links.md",
+			tmpl:         tmplNoLinks,
 		},
 	}
 
@@ -62,8 +63,8 @@ func TestToChangelog(t *testing.T) {
 
 			prs := decodeTestData(t, prsText)
 
-			gen := &changelogGenerator{excludePRLinks: tt.excludePRLinks}
-			got, err := gen.toChangelog(prs)
+			gen := &generator{tmpl: tt.tmpl}
+			got, err := gen.render(prs)
 			assert.NoError(t, err)
 			assert.Equal(t, string(expectedCL), got)
 		})
