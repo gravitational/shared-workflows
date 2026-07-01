@@ -27,7 +27,6 @@ func newFakeClient(mux *http.ServeMux) (*Client, func()) {
 
 	return &Client{
 		client: cl,
-		search: cl.Search,
 	}, closer
 }
 
