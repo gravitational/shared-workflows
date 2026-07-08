@@ -30,20 +30,17 @@ func IsAvailable() error {
 	return err
 }
 
-// RunCmd runs git and returns output (stdout/stderr, depends on the cmd result) and error
+// RunCmd runs git in the repository and returns its trimmed stdout.
 func (r *Repo) RunCmd(args ...string) (string, error) {
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
+	var stdout, stderr bytes.Buffer
 
 	cmd := exec.Command("git", args...)
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	cmd.Dir = r.dir
 
-	err := cmd.Run()
-
-	if err != nil {
-		return strings.TrimSpace(stderr.String()), trace.Wrap(err)
+	if err := cmd.Run(); err != nil {
+		return "", trace.Wrap(err, "git %v: %s", args, strings.TrimSpace(stderr.String()))
 	}
 
 	return strings.TrimSpace(stdout.String()), nil
