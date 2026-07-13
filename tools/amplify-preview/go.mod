@@ -1,6 +1,6 @@
 module github.com/gravitational/shared-workflows/tools/amplify-preview
 
-go 1.24
+go 1.25.0
 
 toolchain go1.25.5
 
@@ -32,7 +32,7 @@ require (
 	github.com/gravitational/trace v1.5.1 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/xhit/go-str2duration/v2 v2.1.0 // indirect
-	golang.org/x/net v0.41.0 // indirect
+	golang.org/x/net v0.55.0 // indirect
 	golang.org/x/oauth2 v0.30.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
