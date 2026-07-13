@@ -10,7 +10,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/gravitational/trace v1.5.0
 	github.com/stretchr/testify v1.11.1
-	golang.org/x/crypto v0.46.0
+	golang.org/x/crypto v0.52.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -114,12 +114,12 @@ require (
 	go.opentelemetry.io/otel/sdk v1.43.0 // indirect
 	go.opentelemetry.io/otel/sdk/metric v1.43.0 // indirect
 	go.opentelemetry.io/otel/trace v1.43.0 // indirect
-	golang.org/x/net v0.48.0 // indirect
+	golang.org/x/net v0.54.0 // indirect
 	golang.org/x/oauth2 v0.34.0 // indirect
-	golang.org/x/sync v0.19.0 // indirect
-	golang.org/x/sys v0.42.0 // indirect
-	golang.org/x/term v0.38.0 // indirect
-	golang.org/x/text v0.32.0 // indirect
+	golang.org/x/sync v0.20.0 // indirect
+	golang.org/x/sys v0.45.0 // indirect
+	golang.org/x/term v0.43.0 // indirect
+	golang.org/x/text v0.37.0 // indirect
 	golang.org/x/time v0.9.0 // indirect
 	google.golang.org/api v0.219.0 // indirect
 	google.golang.org/genproto v0.0.0-20250127172529-29210b9bc287 // indirect
