@@ -235,6 +235,7 @@ func createBotLocal(ctx context.Context, flags flags) (*bot.Bot, error) {
 // reviewers flag value: assign, bloat, check, exclude-flakes or rfd
 func workflowNeedsReviewers(workflow string) bool {
 	return workflow == "assign" ||
+		workflow == "backport" ||
 		workflow == "bloat" ||
 		workflow == "check" ||
 		workflow == "exclude-flakes" ||

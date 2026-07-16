@@ -65,6 +65,16 @@ func TestParseFlagsWorkflowNeedsReviewers(t *testing.T) {
 			wantErr:  true,
 		},
 		{
+			desc:     "backport without reviewers",
+			workflow: "backport",
+			wantErr:  true,
+		},
+		{
+			desc:     "bloat without reviewers",
+			workflow: "bloat",
+			wantErr:  true,
+		},
+		{
 			desc:     "check without reviewers",
 			workflow: "check",
 			wantErr:  true,
@@ -79,15 +89,22 @@ func TestParseFlagsWorkflowNeedsReviewers(t *testing.T) {
 			workflow: "rfd",
 			wantErr:  true,
 		},
-		{
-			desc:     "bloat without reviewers",
-			workflow: "bloat",
-			wantErr:  true,
-		},
 		// workflows that need reviewers – with reviewers → success
 		{
 			desc:          "assign with reviewers",
 			workflow:      "assign",
+			reviewers:     dummyReviewers,
+			wantReviewers: dummyReviewers,
+		},
+		{
+			desc:          "backport with reviewers",
+			workflow:      "backport",
+			reviewers:     dummyReviewers,
+			wantReviewers: dummyReviewers,
+		},
+		{
+			desc:          "bloat with reviewers",
+			workflow:      "bloat",
 			reviewers:     dummyReviewers,
 			wantReviewers: dummyReviewers,
 		},
@@ -106,12 +123,6 @@ func TestParseFlagsWorkflowNeedsReviewers(t *testing.T) {
 		{
 			desc:          "rfd with reviewers",
 			workflow:      "rfd",
-			reviewers:     dummyReviewers,
-			wantReviewers: dummyReviewers,
-		},
-		{
-			desc:          "bloat with reviewers",
-			workflow:      "bloat",
 			reviewers:     dummyReviewers,
 			wantReviewers: dummyReviewers,
 		},
@@ -137,11 +148,6 @@ func TestParseFlagsWorkflowNeedsReviewers(t *testing.T) {
 		{
 			desc:          "label without reviewers",
 			workflow:      "label",
-			wantReviewers: "{}",
-		},
-		{
-			desc:          "backport without reviewers",
-			workflow:      "backport",
 			wantReviewers: "{}",
 		},
 		{
