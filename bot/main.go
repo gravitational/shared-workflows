@@ -147,6 +147,9 @@ func parseFlags() (flags, error) {
 	if *token == "" {
 		return flags{}, trace.BadParameter("token missing")
 	}
+	if !workflowNeedsReviewers(*workflow) && *reviewers == "" {
+		*reviewers = "{}"
+	}
 	if *reviewers == "" && !*local {
 		return flags{}, trace.BadParameter("reviewers required for assign and check")
 	}
@@ -226,4 +229,14 @@ func createBotLocal(ctx context.Context, flags flags) (*bot.Bot, error) {
 			Number:       flags.prNumber,
 		},
 	})
+}
+
+// workflowRequiresReviewers checks whether the workflow is one that uses the
+// reviewers flag value: assign, bloat, check, exclude-flakes or rfd
+func workflowNeedsReviewers(workflow string) bool {
+	return workflow == "assign" ||
+		workflow == "bloat" ||
+		workflow == "check" ||
+		workflow == "exclude-flakes" ||
+		workflow == "rfd"
 }
