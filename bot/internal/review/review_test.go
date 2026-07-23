@@ -1202,8 +1202,7 @@ func TestCheckInternal(t *testing.T) {
 
 // TestFromString tests if configuration is correctly read in from a string.
 func TestFromString(t *testing.T) {
-	e := &env.Environment{Repository: env.TeleportRepo}
-	r, err := FromString(e, reviewers)
+	r, err := FromString(reviewers)
 	require.NoError(t, err)
 
 	require.EqualValues(t, r.c.CoreReviewers, map[string]Reviewer{
@@ -1359,6 +1358,17 @@ func TestSingleApproverAuthors(t *testing.T) {
 		})
 		require.Equal(t, -1, i, "%q is not allowed to be a single approver author in the %q repository (only bots)", name(authors, i), repo)
 	}
+}
+
+func TestEmptyConfigCheckAndSetDefaults(t *testing.T) {
+	c := emptyConfig()
+	require.NoError(t, c.CheckAndSetDefaults())
+}
+
+func TestFromStringEmptyReviewers(t *testing.T) {
+	r, err := FromString(EmptyReviewers)
+	require.NoError(t, err)
+	require.NotNil(t, r)
 }
 
 const reviewers = `
