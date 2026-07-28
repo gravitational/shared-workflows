@@ -11,9 +11,9 @@ import (
 )
 
 const (
-	GithubEnv         = "GITHUB_ENV"
-	GithubOutput	  = "GITHUB_OUTPUT"
-	GithubState	  	  = "GITHUB_STATE"
+	GithubEnv    = "GITHUB_ENV"
+	GithubOutput = "GITHUB_OUTPUT"
+	GithubState  = "GITHUB_STATE"
 )
 
 // MaskSecretValues takes in a slice of secret values and prints GitHub Actions commands to mask
@@ -24,7 +24,13 @@ func MaskSecretValues(secrets []string) {
 		if v == "" {
 			continue
 		}
-		fmt.Printf("::add-mask::%s\n", v)
+		// GHA treats a newline as the end of an ::add-mask:: command, so each line must be masked.
+		for _, line := range strings.Lines(v) {
+			if line == "" {
+				continue
+			}
+			fmt.Printf("::add-mask::%s\n", line)
+		}
 		stdEncoded := base64.StdEncoding.EncodeToString([]byte(v))
 		fmt.Printf("::add-mask::%s\n", stdEncoded)
 		urlEncoded := base64.URLEncoding.EncodeToString([]byte(v))
@@ -95,7 +101,7 @@ func generateKVContents(values map[string]string) (string, error) {
 	for k, v := range values {
 		line, err := generateKVAssignment(k, v)
 		if err != nil {
-			return "", err			
+			return "", err
 		}
 		sb.WriteString(line)
 		sb.WriteString("\n")

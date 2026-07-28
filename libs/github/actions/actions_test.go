@@ -2,6 +2,7 @@ package actions
 
 import (
 	"bytes"
+	"encoding/base64"
 	"io"
 	"os"
 	"path/filepath"
@@ -12,6 +13,44 @@ import (
 )
 
 func TestMaskSecretValues(t *testing.T) {
+	t.Run("single-line secrets, empty values skipped", func(t *testing.T) {
+		output := captureStdout(t, func() {
+			MaskSecretValues([]string{"first-secret", "", "second-secret"})
+		})
+
+		expected := "\n" +
+			"::add-mask::first-secret\n" +
+			"::add-mask::Zmlyc3Qtc2VjcmV0\n" +
+			"::add-mask::Zmlyc3Qtc2VjcmV0\n" +
+			"::add-mask::second-secret\n" +
+			"::add-mask::c2Vjb25kLXNlY3JldA==\n" +
+			"::add-mask::c2Vjb25kLXNlY3JldA==\n"
+		require.Equal(t, expected, output)
+	})
+
+	t.Run("multi-line secret is masked line by line", func(t *testing.T) {
+		secret := "-----BEGIN KEY-----\nline-two\n-----END KEY-----"
+		output := captureStdout(t, func() {
+			MaskSecretValues([]string{secret})
+		})
+
+		stdEncoded := base64.StdEncoding.EncodeToString([]byte(secret))
+		urlEncoded := base64.URLEncoding.EncodeToString([]byte(secret))
+		expected := "\n" +
+			"::add-mask::-----BEGIN KEY-----\n" +
+			"::add-mask::line-two\n" +
+			"::add-mask::-----END KEY-----\n" +
+			"::add-mask::" + stdEncoded + "\n" +
+			"::add-mask::" + urlEncoded + "\n"
+		require.Equal(t, expected, output)
+	})
+}
+
+// captureStdout redirects os.Stdout for the duration of fn and returns everything
+// written to it.
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+
 	originalStdout := os.Stdout
 	readPipe, writePipe, err := os.Pipe()
 	require.NoError(t, err)
@@ -21,7 +60,7 @@ func TestMaskSecretValues(t *testing.T) {
 		os.Stdout = originalStdout
 	})
 
-	MaskSecretValues([]string{"first-secret", "", "second-secret"})
+	fn()
 
 	require.NoError(t, writePipe.Close())
 
@@ -30,7 +69,7 @@ func TestMaskSecretValues(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, readPipe.Close())
 
-	require.Equal(t, "\n::add-mask::first-secret\n::add-mask::second-secret\n", output.String())
+	return output.String()
 }
 
 func TestWriteGithubEnv(t *testing.T) {
