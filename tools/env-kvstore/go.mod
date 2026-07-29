@@ -12,7 +12,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.41.3
 	github.com/aws/aws-sdk-go-v2/service/sts v1.41.7
 	github.com/golang-jwt/jwt/v5 v5.3.1
-	github.com/gravitational/shared-workflows/libs v0.1.6-0.20260331132551-064b8f8dd4d8
+	github.com/gravitational/shared-workflows/libs v0.1.8
 	github.com/hashicorp/go-retryablehttp v0.7.8
 )
 
