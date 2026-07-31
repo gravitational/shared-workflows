@@ -17,73 +17,71 @@ package github
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"time"
+	"slices"
+	"strings"
 
-	"github.com/google/go-github/v84/github"
+	"github.com/cli/go-gh/v2/pkg/api"
 	"github.com/gravitational/trace"
 )
 
-var SearchTimeNow = time.Unix(0, 0)
-
-// %Y-%m-%dT%H:%M:%S%z
-const searchTimeLayout = "2006-01-02T15:04:05-0700"
-
-// ChangelogPR contains all the data necessary for a changelog from the PR
-type ChangelogPR struct {
-	Body   string `json:"body,omitempty"`
-	Number int    `json:"number,omitempty"`
-	Title  string `json:"title,omitempty"`
-	URL    string `json:"url,omitempty" graphql:"url"`
+// PullRequest is a pull request in a GitHub repository.
+type PullRequest struct {
+	Body   string `json:"body"`
+	Number int    `json:"number"`
+	Title  string `json:"title"`
+	URL    string `json:"url"`
 }
 
-// ListChangelogPullRequestsOpts contains options for searching for changelog pull requests.
-type ListChangelogPullRequestsOpts struct {
-	Branch   string
-	FromDate time.Time
-	ToDate   time.Time
+// prBatchSize is the number of PRs fetched per GraphQL request, sized to
+// keep each query well within GitHub's cost limits.
+const prBatchSize = 50
+
+// PullRequests fetches the given PRs by number, returning them in the order
+// given. PRs that no longer exist (e.g. deleted) are omitted from the result.
+func (c *Client) PullRequests(ctx context.Context, org, repo string, numbers []int) ([]PullRequest, error) {
+	var result []PullRequest
+	for chunk := range slices.Chunk(numbers, prBatchSize) {
+		batch, err := c.fetchPRBatch(ctx, org, repo, chunk)
+		if err != nil {
+			return nil, trace.Wrap(err)
+		}
+		result = append(result, batch...)
+	}
+	return result, nil
 }
 
-// ListChangelogPullRequests will search for pull requests that provide changelog information.
-func (c *Client) ListChangelogPullRequests(ctx context.Context, org, repo string, opts *ListChangelogPullRequestsOpts) ([]ChangelogPR, error) {
-	var prs []ChangelogPR
-	query := fmt.Sprintf(`repo:%s/%s base:%s merged:%s -label:no-changelog`,
-		org, repo, opts.Branch, dateRangeFormat(opts.FromDate, opts.ToDate))
-	page, _, err := c.search.Issues(
-		ctx,
-		query,
-		&github.SearchOptions{
-			Sort:      "",
-			Order:     "",
-			TextMatch: false,
-			ListOptions: github.ListOptions{
-				Page:    0,
-				PerPage: 100,
-			},
-		},
-	)
+func prAlias(i int) string { return fmt.Sprintf("pr_%d", i) }
 
-	if err != nil {
-		return prs, trace.Wrap(err)
+func (c *Client) fetchPRBatch(ctx context.Context, org, repo string, numbers []int) ([]PullRequest, error) {
+	var sb strings.Builder
+	sb.WriteString(`query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) {`)
+	for i, num := range numbers {
+		fmt.Fprintf(&sb, ` %s: pullRequest(number: %d) { body number title url }`, prAlias(i), num)
+	}
+	sb.WriteString(` } }`)
+	variables := map[string]any{"owner": org, "name": repo}
+
+	var response struct {
+		Repository map[string]*PullRequest `json:"repository"`
 	}
 
-	for _, pull := range page.Issues {
-		prs = append(prs, ChangelogPR{
-			Body:   pull.GetBody(),
-			Number: pull.GetNumber(),
-			Title:  pull.GetTitle(),
-			URL:    pull.GetHTMLURL(),
-		})
+	// The API reports a missing PR as a NOT_FOUND error alongside the rest
+	// of the data, with null for the PR itself. Tolerate those; fail on
+	// anything else.
+	if err := c.graphql.DoWithContext(ctx, sb.String(), variables, &response); err != nil {
+		var gqlErr *api.GraphQLError
+		if !errors.As(err, &gqlErr) || !gqlErr.Match("NOT_FOUND", "repository.") {
+			return nil, trace.Wrap(err)
+		}
 	}
 
+	prs := make([]PullRequest, 0, len(numbers))
+	for i := range numbers {
+		if pr := response.Repository[prAlias(i)]; pr != nil {
+			prs = append(prs, *pr)
+		}
+	}
 	return prs, nil
-}
-
-// dateRangeFormat takes in a date range and will format it for GitHub search syntax.
-// to can be empty and the format will be to search everything after and including from.
-func dateRangeFormat(from, to time.Time) string {
-	if to == SearchTimeNow {
-		return fmt.Sprintf(">=%s", from.Format(searchTimeLayout))
-	}
-	return fmt.Sprintf("%s..%s", from.Format(searchTimeLayout), to.Format(searchTimeLayout))
 }

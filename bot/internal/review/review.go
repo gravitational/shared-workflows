@@ -43,6 +43,8 @@ const (
 	// PostReleaseBot is the name of the bot user that creates post-release PRs
 	// such as AMI and docs version updates.
 	PostReleaseBot = "teleport-post-release-automation[bot]"
+	// EmptyReviewers is a sentinel value used when the CLI flag is absent/empty
+	EmptyReviewers = "{}"
 )
 
 var (
@@ -170,7 +172,11 @@ type Assignments struct {
 }
 
 // FromString parses JSON formatted configuration and returns assignments.
-func FromString(e *env.Environment, reviewers string) (*Assignments, error) {
+func FromString(reviewers string) (*Assignments, error) {
+	if reviewers == EmptyReviewers {
+		log.Printf("Generating assignments/reviewers from empty configuration.")
+		return New(emptyConfig())
+	}
 	var c Config
 	if err := json.Unmarshal([]byte(reviewers), &c); err != nil {
 		return nil, trace.Wrap(err)
@@ -194,6 +200,22 @@ func New(c *Config) (*Assignments, error) {
 	return &Assignments{
 		c: c,
 	}, nil
+}
+
+// emptyConfig returns a struct initialized with empty maps and slices that can pass
+// CheckAndSetDefaults()
+func emptyConfig() *Config {
+	var c Config = Config{
+		CodeReviewersOmit: map[string]bool{},
+		RepoReviewers:     map[string]map[string]Reviewer{},
+		CoreReviewers:     map[string]Reviewer{},
+		CloudReviewers:    map[string]Reviewer{},
+		DocsReviewers:     map[string]Reviewer{},
+		DocsReviewersOmit: map[string]bool{},
+		ReleaseReviewers:  []string{},
+		Admins:            []string{},
+	}
+	return &c
 }
 
 // IsInternal checks whether the author of a PR is explicitly

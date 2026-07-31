@@ -26,6 +26,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cli/go-gh/v2/pkg/api"
 	"github.com/golang-jwt/jwt/v5"
 	go_github "github.com/google/go-github/v84/github"
 	"golang.org/x/oauth2"
@@ -36,29 +37,38 @@ const (
 	ClientTimeout = 30 * time.Second
 )
 
+// Client calls the GitHub REST and GraphQL APIs.
 type Client struct {
-	client *go_github.Client
-	search searchService
+	client  *go_github.Client
+	graphql graphQLDoer
 }
 
-type searchService interface {
-	Issues(ctx context.Context, query string, opts *go_github.SearchOptions) (*go_github.IssuesSearchResult, *go_github.Response, error)
+type graphQLDoer interface {
+	DoWithContext(ctx context.Context, query string, variables map[string]any, response any) error
 }
 
 // New returns a new GitHub Client.
 func New(ctx context.Context, token string) (*Client, error) {
-	clt := oauth2.NewClient(ctx, oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token}))
+	httpClient := oauth2.NewClient(ctx, oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token}))
+	httpClient.Timeout = ClientTimeout
+	cl := go_github.NewClient(httpClient)
 
-	clt.Timeout = ClientTimeout
-	cl := go_github.NewClient(clt)
+	gql, err := api.NewGraphQLClient(api.ClientOptions{
+		Host:      "github.com",
+		AuthToken: token,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("creating GraphQL client: %w", err)
+	}
+
 	return &Client{
-		client: cl,
-		search: cl.Search,
+		client:  cl,
+		graphql: gql,
 	}, nil
 }
 
 // NewForApp returns a new GitHub Client with authentication for a GitHub App.
-func NewForApp(ctx context.Context, appID int64, installationID int64, privateKey []byte) (*Client, error) {
+func NewForApp(ctx context.Context, appID, installationID int64, privateKey []byte) (*Client, error) {
 	appTr, err := newAppTransport(ctx, appID, installationID, privateKey)
 	if err != nil {
 		return nil, fmt.Errorf("creating client transport: %w", err)
@@ -68,10 +78,22 @@ func NewForApp(ctx context.Context, appID int64, installationID int64, privateKe
 		Timeout:   ClientTimeout,
 	}
 
+	// For the GraphQL client, appTr handles auth by always overwriting the
+	// Authorization header in its RoundTrip, so the AuthToken here is unused
+	// but required to satisfy go-gh's ClientOptions validation.
+	gql, err := api.NewGraphQLClient(api.ClientOptions{
+		Host:      "github.com",
+		AuthToken: "app-transport-managed",
+		Transport: appTr,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("creating GraphQL client: %w", err)
+	}
+
 	cl := go_github.NewClient(httpClient)
 	return &Client{
-		client: cl,
-		search: cl.Search,
+		client:  cl,
+		graphql: gql,
 	}, nil
 }
 
