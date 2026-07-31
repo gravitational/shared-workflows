@@ -74,7 +74,7 @@ func TestMapStoreFromSecretARN_Success(t *testing.T) {
 	}
 
 	p := newTestProvider(client)
-	store, err := p.mapStoreFromSecretARN(context.Background(), arn)
+	store, err := p.mapStoreFromSecretARN(t.Context(), arn)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -97,7 +97,7 @@ func TestMapStoreFromSecretARN_APIError(t *testing.T) {
 	}
 
 	p := newTestProvider(client)
-	_, err := p.mapStoreFromSecretARN(context.Background(), arn)
+	_, err := p.mapStoreFromSecretARN(t.Context(), arn)
 	if err == nil {
 		t.Fatal("expected an error, got nil")
 	}
@@ -115,7 +115,7 @@ func TestMapStoreFromSecretARN_InvalidJSON(t *testing.T) {
 	}
 
 	p := newTestProvider(client)
-	_, err := p.mapStoreFromSecretARN(context.Background(), arn)
+	_, err := p.mapStoreFromSecretARN(t.Context(), arn)
 	if err == nil {
 		t.Fatal("expected an unmarshalError, got nil")
 	}
@@ -143,7 +143,7 @@ func TestInitializeStores_Success(t *testing.T) {
 	}
 
 	p := newTestProvider(client)
-	if err := p.initializeStores(context.Background()); err != nil {
+	if err := p.initializeStores(t.Context()); err != nil {
 		t.Fatalf("initializeStores() error = %v", err)
 	}
 
@@ -177,7 +177,7 @@ func TestInitializeStores_EnvStoreFetchFails(t *testing.T) {
 	}
 
 	p := newTestProvider(client)
-	if err := p.initializeStores(context.Background()); err != nil {
+	if err := p.initializeStores(t.Context()); err != nil {
 		t.Fatalf("initializeStores() should succeed when only env store is unavailable, got %v", err)
 	}
 
@@ -198,7 +198,7 @@ func TestInitializeStores_RepoStoreFetchFails(t *testing.T) {
 	}
 
 	p := newTestProvider(client)
-	if err := p.initializeStores(context.Background()); err == nil {
+	if err := p.initializeStores(t.Context()); err == nil {
 		t.Fatal("initializeStores() should fail when repo store is unavailable, got nil")
 	}
 }
