@@ -56,7 +56,7 @@ func newTestProvider(client SecretsManagerClient) *SecretsManagerValueProvider {
 
 func TestMapStoreFromSecretARN_EmptyARN(t *testing.T) {
 	p := newTestProvider(&mockSecretsManagerClient{})
-	store, err := p.mapStoreFromSecretARN(context.Background(), "")
+	store, err := p.mapStoreFromSecretARN(t.Context(), "")
 	if err != nil {
 		t.Fatalf("expected no error for empty ARN, got %v", err)
 	}
