@@ -65,7 +65,6 @@ resource "aws_cognito_identity_pool_provider_principal_tag" "gha" {
 An IAM role that can be assumed using the Cognito token is required. The following constraints apply to the trust policy of the role:
 - restrict the audience to the specific Cognito Identity Pool
 - require a session name in the format of `runID@SHA` to ensure uniqueness and traceability of sessions
-- prevent use of the role when the GitHub workflow is triggered by a `pull_request` event (parity with GitHub - `pull_request` workflows do not have access to secrets/variables)
 - allow tagging of sessions so role and resourced policies can use ABAC based on claims mapped from the GitHub token
 
 <details>
