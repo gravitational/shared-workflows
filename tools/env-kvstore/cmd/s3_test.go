@@ -97,7 +97,7 @@ func TestMigrationUploaderUpload(t *testing.T) {
 			},
 		}
 
-		if err := uploader.Upload(context.Background()); err != nil {
+		if err := uploader.Upload(t.Context()); err != nil {
 			t.Fatalf("Upload() error = %v, want nil", err)
 		}
 	})
