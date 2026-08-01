@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -110,7 +109,7 @@ func TestMigrationUploaderUpload(t *testing.T) {
 			},
 		}
 
-		err := uploader.Upload(context.Background())
+		err := uploader.Upload(t.Context())
 		if err == nil {
 			t.Fatal("Upload() error = nil, want error")
 		}
