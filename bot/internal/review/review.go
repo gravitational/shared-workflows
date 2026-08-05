@@ -352,14 +352,7 @@ func (r *Assignments) getPreferredReviewers(teamReviewers map[string]Reviewer, s
 				// we need to check if the reviewer has a rule that excludes the file.
 				potentialReviewers := make([]string, 0, len(reviewers))
 				for _, reviewer := range reviewers {
-					excluded := false
-					for _, excludedPath := range reviewersToExcludedPath[reviewer] {
-						if strings.HasPrefix(file.Name, excludedPath) {
-							excluded = true
-							break
-						}
-					}
-					if !excluded {
+					if !reviewerExcludesPath(reviewersToExcludedPath[reviewer], file.Name) {
 						potentialReviewers = append(potentialReviewers, reviewer)
 					}
 				}
@@ -402,15 +395,7 @@ func (r *Assignments) getAllPreferredReviewers(reviewers map[string]Reviewer, se
 					continue
 				}
 
-				excluded := false
-				for _, excludedPath := range reviewersToExcludedPath[rev] {
-					if strings.HasPrefix(file.Name, excludedPath) {
-						excluded = true
-						break
-					}
-				}
-
-				if !excluded {
+				if !reviewerExcludesPath(reviewersToExcludedPath[rev], file.Name) {
 					assigned[rev] = struct{}{}
 					preferredReviewers = append(preferredReviewers, rev)
 				}
@@ -418,6 +403,16 @@ func (r *Assignments) getAllPreferredReviewers(reviewers map[string]Reviewer, se
 		}
 	}
 	return preferredReviewers
+}
+
+// reviewerExcludesPath returns true if the reviewer has a rule that excludes the file.
+func reviewerExcludesPath(excludedPaths []string, path string) bool {
+	for _, excludedPath := range excludedPaths {
+		if strings.HasPrefix(path, excludedPath) {
+			return true
+		}
+	}
+	return false
 }
 
 // getPreferredReviewersMap builds a map of preferred reviewers for file paths, and a map of excluded file paths for reviewers.
