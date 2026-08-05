@@ -1265,6 +1265,8 @@ func TestGetCodeReviewers(t *testing.T) {
 				"4": {Owner: false, PreferredReviewerFor: []string{"lib/srv/app"}, PreferredOnly: true},
 				"5": {Owner: false, PreferredReviewerFor: []string{"lib/srv/db"}},
 				"6": {Owner: false},
+				"7": {Owner: true, PreferredReviewerFor: []string{"chart/teleport-operator", "!chart/teleport-operator/crds"}, PreferredOnly: true},
+				"8": {Owner: false, PreferredReviewerFor: []string{"chart/teleport-operator", "!chart/teleport-operator/crds"}, PreferredOnly: true},
 			},
 			Admins: []string{
 				"100",
@@ -1329,6 +1331,25 @@ func TestGetCodeReviewers(t *testing.T) {
 				{Name: "lib/srv/db/engine.go"},
 			},
 			expected: []string{"100", "200"},
+		},
+		{
+			description: "excluded paths only",
+			author:      "3",
+			files: []github.PullRequestFile{
+				{Name: "chart/teleport-operator/crds/teleport_v1alpha1_cluster.yaml"},
+				{Name: "chart/teleport-operator/crds/teleport_v1alpha1_node.yaml"},
+			},
+			expected: []string{"2", "5"},
+		},
+		{
+			description: "both excluded paths and non-excluded paths",
+			author:      "3",
+			files: []github.PullRequestFile{
+				{Name: "chart/teleport-operator/crds/teleport_v1alpha1_cluster.yaml"},
+				{Name: "chart/teleport-operator/crds/teleport_v1alpha1_node.yaml"},
+				{Name: "chart/teleport-operator/templates/configmap.yaml"},
+			},
+			expected: []string{"7", "8"},
 		},
 	}
 

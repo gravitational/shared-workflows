@@ -341,13 +341,27 @@ func (r *Assignments) getPreferredReviewers(teamReviewers map[string]Reviewer, s
 	// To avoid assigning too many reviewers iterate over paths that we have
 	// preferred reviewers for and see if any of them are among the changeset.
 	coveredPaths := make(map[string]struct{})
-	for path, reviewers := range r.getPreferredReviewersMap(teamReviewers, set) {
+	index := r.indexPreferredReviewersMap(teamReviewers, set)
+	for path, reviewers := range index.pathToReviewers {
 		if _, ok := coveredPaths[path]; ok {
 			continue
 		}
 		for _, file := range files {
 			if strings.HasPrefix(file.Name, path) {
-				reviewer := reviewers[r.c.Rand.Intn(len(reviewers))]
+				// Before marking that the preferred path is covered,
+				// we need to check if the reviewer has a rule that excludes the file.
+				potentialReviewers := make([]string, 0, len(reviewers))
+				for _, reviewer := range reviewers {
+					if !index.reviewerExcludesPath(reviewer, file.Name) {
+						potentialReviewers = append(potentialReviewers, reviewer)
+					}
+				}
+
+				if len(potentialReviewers) == 0 {
+					continue
+				}
+
+				reviewer := potentialReviewers[r.c.Rand.Intn(len(potentialReviewers))]
 				log.Printf("Picking %v as preferred reviewer for %v which matches %v.", reviewer, file.Name, path)
 				preferredReviewers = append(preferredReviewers, reviewer)
 				for _, path := range teamReviewers[reviewer].PreferredReviewerFor {
@@ -361,8 +375,8 @@ func (r *Assignments) getPreferredReviewers(teamReviewers map[string]Reviewer, s
 }
 
 // getAllPreferredReviewers returns a list of reviewers that would be
-// preferrable to review the provided changeset. Includes all preferred
-// reviewers for each file path in the changeset.
+// preferrable to review the provided changeset. Includes 1 preferred
+// reviewer for each file path in the changeset.
 func (r *Assignments) getAllPreferredReviewers(reviewers map[string]Reviewer, set []string, files []github.PullRequestFile) (preferredReviewers []string) {
 	// Check each key in the preferred reviewer map, which is a file path
 	// that reviewers are assigned to. For any file names in the changeset
@@ -370,7 +384,8 @@ func (r *Assignments) getAllPreferredReviewers(reviewers map[string]Reviewer, se
 	// to the set of preferred reviewers. Look up each reviewer in a map to
 	// avoid duplication.
 	assigned := make(map[string]struct{})
-	for path, reviewers := range r.getPreferredReviewersMap(reviewers, set) {
+	index := r.indexPreferredReviewersMap(reviewers, set)
+	for path, reviewers := range index.pathToReviewers {
 		for _, file := range files {
 			if !strings.HasPrefix(file.Name, path) {
 				continue
@@ -379,25 +394,52 @@ func (r *Assignments) getAllPreferredReviewers(reviewers map[string]Reviewer, se
 				if _, ok := assigned[rev]; ok {
 					continue
 				}
-				assigned[rev] = struct{}{}
-				preferredReviewers = append(preferredReviewers, rev)
+
+				if !index.reviewerExcludesPath(rev, file.Name) {
+					assigned[rev] = struct{}{}
+					preferredReviewers = append(preferredReviewers, rev)
+				}
 			}
 		}
 	}
 	return preferredReviewers
 }
 
-// getPreferredReviewersMap builds a map of preferred reviewers for file paths.
-func (r *Assignments) getPreferredReviewersMap(reviewers map[string]Reviewer, set []string) map[string][]string {
-	m := make(map[string][]string)
+type preferredReviewersIndex struct {
+	pathToReviewers         map[string][]string
+	reviewersToExcludedPath map[string][]string
+}
+
+func (i preferredReviewersIndex) reviewerExcludesPath(reviewer, path string) bool {
+	for _, excludedPath := range i.reviewersToExcludedPath[reviewer] {
+		if strings.HasPrefix(path, excludedPath) {
+			return true
+		}
+	}
+	return false
+}
+
+// indexPreferredReviewersMap builds an index of preferred reviewers for file paths, and of excluded file paths for reviewers.
+func (r *Assignments) indexPreferredReviewersMap(reviewers map[string]Reviewer, set []string) preferredReviewersIndex {
+	index := preferredReviewersIndex{
+		pathToReviewers:         make(map[string][]string),
+		reviewersToExcludedPath: make(map[string][]string),
+	}
 	for _, name := range set {
 		if reviewer, ok := reviewers[name]; ok {
 			for _, path := range reviewer.PreferredReviewerFor {
-				m[path] = append(m[path], name)
+				if len(path) == 0 {
+					continue
+				}
+				if path[0] == '!' {
+					index.reviewersToExcludedPath[name] = append(index.reviewersToExcludedPath[name], path[1:])
+				} else {
+					index.pathToReviewers[path] = append(index.pathToReviewers[path], name)
+				}
 			}
 		}
 	}
-	return m
+	return index
 }
 
 // getAdminReviewers returns the list of admin reviewers. Respects code
