@@ -341,8 +341,8 @@ func (r *Assignments) getPreferredReviewers(teamReviewers map[string]Reviewer, s
 	// To avoid assigning too many reviewers iterate over paths that we have
 	// preferred reviewers for and see if any of them are among the changeset.
 	coveredPaths := make(map[string]struct{})
-	pathToPreferredReviewers, reviewersToExcludedPath := r.getPreferredReviewersMap(teamReviewers, set)
-	for path, reviewers := range pathToPreferredReviewers {
+	index := r.indexPreferredReviewersMap(teamReviewers, set)
+	for path, reviewers := range index.pathToReviewers {
 		if _, ok := coveredPaths[path]; ok {
 			continue
 		}
@@ -352,7 +352,7 @@ func (r *Assignments) getPreferredReviewers(teamReviewers map[string]Reviewer, s
 				// we need to check if the reviewer has a rule that excludes the file.
 				potentialReviewers := make([]string, 0, len(reviewers))
 				for _, reviewer := range reviewers {
-					if !reviewerExcludesPath(reviewersToExcludedPath[reviewer], file.Name) {
+					if !index.reviewerExcludesPath(reviewer, file.Name) {
 						potentialReviewers = append(potentialReviewers, reviewer)
 					}
 				}
@@ -384,8 +384,8 @@ func (r *Assignments) getAllPreferredReviewers(reviewers map[string]Reviewer, se
 	// to the set of preferred reviewers. Look up each reviewer in a map to
 	// avoid duplication.
 	assigned := make(map[string]struct{})
-	pathToPreferredReviewers, reviewersToExcludedPath := r.getPreferredReviewersMap(reviewers, set)
-	for path, reviewers := range pathToPreferredReviewers {
+	index := r.indexPreferredReviewersMap(reviewers, set)
+	for path, reviewers := range index.pathToReviewers {
 		for _, file := range files {
 			if !strings.HasPrefix(file.Name, path) {
 				continue
@@ -395,7 +395,7 @@ func (r *Assignments) getAllPreferredReviewers(reviewers map[string]Reviewer, se
 					continue
 				}
 
-				if !reviewerExcludesPath(reviewersToExcludedPath[rev], file.Name) {
+				if !index.reviewerExcludesPath(rev, file.Name) {
 					assigned[rev] = struct{}{}
 					preferredReviewers = append(preferredReviewers, rev)
 				}
@@ -405,9 +405,13 @@ func (r *Assignments) getAllPreferredReviewers(reviewers map[string]Reviewer, se
 	return preferredReviewers
 }
 
-// reviewerExcludesPath returns true if the reviewer has a rule that excludes the file.
-func reviewerExcludesPath(excludedPaths []string, path string) bool {
-	for _, excludedPath := range excludedPaths {
+type preferredReviewersIndex struct {
+	pathToReviewers         map[string][]string
+	reviewersToExcludedPath map[string][]string
+}
+
+func (i preferredReviewersIndex) reviewerExcludesPath(reviewer, path string) bool {
+	for _, excludedPath := range i.reviewersToExcludedPath[reviewer] {
 		if strings.HasPrefix(path, excludedPath) {
 			return true
 		}
@@ -415,12 +419,12 @@ func reviewerExcludesPath(excludedPaths []string, path string) bool {
 	return false
 }
 
-// getPreferredReviewersMap builds a map of preferred reviewers for file paths, and a map of excluded file paths for reviewers.
-func (r *Assignments) getPreferredReviewersMap(reviewers map[string]Reviewer, set []string) (map[string][]string, map[string][]string) {
-	// map[path][]reviewers
-	included := make(map[string][]string)
-	// map[reviewer][]excluded-paths
-	excluded := make(map[string][]string)
+// indexPreferredReviewersMap builds an index of preferred reviewers for file paths, and of excluded file paths for reviewers.
+func (r *Assignments) indexPreferredReviewersMap(reviewers map[string]Reviewer, set []string) preferredReviewersIndex {
+	index := preferredReviewersIndex{
+		pathToReviewers:         make(map[string][]string),
+		reviewersToExcludedPath: make(map[string][]string),
+	}
 	for _, name := range set {
 		if reviewer, ok := reviewers[name]; ok {
 			for _, path := range reviewer.PreferredReviewerFor {
@@ -428,14 +432,14 @@ func (r *Assignments) getPreferredReviewersMap(reviewers map[string]Reviewer, se
 					continue
 				}
 				if path[0] == '!' {
-					excluded[name] = append(excluded[name], path[1:])
+					index.reviewersToExcludedPath[name] = append(index.reviewersToExcludedPath[name], path[1:])
 				} else {
-					included[path] = append(included[path], name)
+					index.pathToReviewers[path] = append(index.pathToReviewers[path], name)
 				}
 			}
 		}
 	}
-	return included, excluded
+	return index
 }
 
 // getAdminReviewers returns the list of admin reviewers. Respects code
