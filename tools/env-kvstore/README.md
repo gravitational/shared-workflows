@@ -13,7 +13,25 @@ jobs:
       id-token: write
 ```
 
-TODO: add an example step using the action
+Example workflow job step:
+
+```yaml
+      - name: Get runtime values from kvstore
+        id: kvstore
+        uses: gravitational/shared-workflows/tools/env-kvstore@tools/env-kvstore/v1.0.3
+        with:
+          cognito-identity-pool-id: "us-west-2:12345678-1234-1234-1234-1234567890ab"
+          cognito-role-arn: "arn:aws:iam::123456789012:role/github-actions-cognito-oidc"
+          values: |
+            RENOVATE_APP_ID,variable
+            RENOVATE_PRIVATE_KEY,secret
+      - name: Generate token
+        id: generate_token
+        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
+        with:
+          app-id: ${{ env.RENOVATE_APP_ID }}
+          private-key: ${{ env.RENOVATE_PRIVATE_KEY }}
+```
 
 ## Storage and Retrieval of Secrets and Variables
 
@@ -26,6 +44,8 @@ Secrets and variables should be named as follows:
 2. Environment scoped secrets/variables: `${enterprise}/repo/${repository}/env/${environment}/secrets` and `${enterprise}/repo/${repository}/env/${environment}/variables`
 
 Each Secret Manager secret contains a JSON object with key-value pairs for each individual secret and variable.
+
+Terraform modules for creating compatible secrets stores are provided in https://github.com/gravitational/kvstore.
 
 ### IAM
 
@@ -65,7 +85,6 @@ resource "aws_cognito_identity_pool_provider_principal_tag" "gha" {
 An IAM role that can be assumed using the Cognito token is required. The following constraints apply to the trust policy of the role:
 - restrict the audience to the specific Cognito Identity Pool
 - require a session name in the format of `runID@SHA` to ensure uniqueness and traceability of sessions
-- prevent use of the role when the GitHub workflow is triggered by a `pull_request` event (parity with GitHub - `pull_request` workflows do not have access to secrets/variables)
 - allow tagging of sessions so role and resourced policies can use ABAC based on claims mapped from the GitHub token
 
 <details>
@@ -88,9 +107,6 @@ An IAM role that can be assumed using the Cognito token is required. The followi
                     "cognito-identity.amazonaws.com:aud": "us-west-2:12345678-1234-1234-1234-1234567890ab",
                     "sts:RoleSessionName": "${aws:RequestTag/run_id}@${aws:RequestTag/sha}"
                 },
-                "StringNotEquals": {
-                    "aws:RequestTag/event_name": "pull_request"
-                }
             }
         },
         {
