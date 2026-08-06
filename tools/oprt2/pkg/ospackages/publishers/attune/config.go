@@ -41,7 +41,7 @@ var _ ospackages.APTPublisher = (*publisherFromConfig)(nil)
 
 // FromConfig creates a new Attune publisher instance from the provided config and Attune runner.
 func FromConfig(ctx context.Context, config config.AttuneAPTPackagePublisher, logger *slog.Logger) (ospackages.APTPublisher, error) {
-	authenticator, err := authenticators.FromConfig(config.Authentication)
+	authenticator, err := authenticators.FromConfig(ctx, config.Authentication, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Attune authenticator: %w", err)
 	}

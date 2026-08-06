@@ -14,15 +14,21 @@
  *  limitations under the License.
  */
 
-package certprovider
+package mtls
 
 import (
-	"context"
-	"crypto/tls"
+	"log/slog"
+
+	"github.com/gravitational/shared-workflows/tools/oprt2/pkg/logging"
 )
 
-// Provider provides a certificate for client authentication.
-type Provider interface {
-	// Gets a keypair for use with mTLS authentication.
-	GetClientCertificate(context.Context) (*tls.Certificate, error)
+type AuthenticatorOption func(a *Authenticator)
+
+func WithLogger(logger *slog.Logger) AuthenticatorOption {
+	return func(a *Authenticator) {
+		if logger == nil {
+			logger = logging.DiscardLogger
+		}
+		a.logger = logger
+	}
 }
