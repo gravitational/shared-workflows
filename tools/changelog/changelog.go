@@ -22,135 +22,90 @@ import (
 	"regexp"
 	"strings"
 	"text/template"
-	"time"
 	"unicode"
 
 	"github.com/gravitational/shared-workflows/libs/github"
 	"github.com/gravitational/trace"
 )
 
-// changelogInfo is used for the changelog template format.
-type changelogInfo struct {
+// entry is a single changelog entry, one line of the rendered changelog.
+type entry struct {
 	// Summary is the changelog summary extracted from a PR
 	Summary string
 	Number  int
 	URL     string
 }
 
-const (
-	clTemplate = `
+var (
+	// clPattern matches a "changelog: <summary>" line, capturing the summary.
+	clPattern = regexp.MustCompile(`[Cc]hangelog: +(.*)`)
+
+	// tmplLinks renders entries with a link to the PR; tmplNoLinks without.
+	tmplLinks = template.Must(template.New("cl").Parse(`
 {{- range . -}}
 * {{.Summary}} [#{{.Number}}]({{.URL}})
 {{ end -}}
-`
-	clTemplateNoLink = `
+`))
+	tmplNoLinks = template.Must(template.New("cl").Parse(`
 {{- range . -}}
 * {{.Summary}}
 {{ end -}}
-`
+`))
 )
 
-var (
-	// clPattern will match a changelog format with the summary as a subgroup.
-	// e.g. will match a line "changelog: this is a changelog" with subgroup "this is a changelog".
-	clPattern = regexp.MustCompile(`[Cc]hangelog: +(.*)`)
+// org is the GitHub organization the repos belong to.
+const org = "gravitational"
 
-	clParsedTmpl       = template.Must(template.New("cl").Parse(clTemplate))
-	clParsedTmplNoLink = template.Must(template.New("cl").Parse(clTemplateNoLink))
-)
-
-type changelogGenerator struct {
-	repo           string
-	ghclient       *github.Client
-	excludePRLinks bool
+type generator struct {
+	repo string
+	gh   *github.Client
+	tmpl *template.Template
 }
 
-// generateChangelog will pull a PRs from branch between two points in time and generate a changelog from them.
-func (c *changelogGenerator) generateChangelog(ctx context.Context, branch string, fromTime, toTime time.Time) (string, error) {
-	// Search github for changelog pull requests
-	prs, err := c.ghclient.ListChangelogPullRequests(
-		ctx,
-		"gravitational",
-		c.repo,
-		&github.ListChangelogPullRequestsOpts{
-			Branch:   branch,
-			FromDate: fromTime,
-			ToDate:   toTime,
-		},
-	)
+// generate fetches the given PRs and renders a changelog from them.
+func (g *generator) generate(ctx context.Context, prNumbers []int) (string, error) {
+	prs, err := g.gh.PullRequests(ctx, org, g.repo, prNumbers)
 	if err != nil {
 		return "", trace.Wrap(err)
 	}
-
-	return c.toChangelog(prs)
+	return g.render(prs)
 }
 
-// toChangelog will take the output from the search and format it into a changelog.
-func (c *changelogGenerator) toChangelog(prs []github.ChangelogPR) (string, error) {
-	var clList []changelogInfo
+// render formats the PRs' changelog entries into a changelog.
+func (g *generator) render(prs []github.PullRequest) (string, error) {
+	var entries []entry
 	for _, pr := range prs {
-		clList = append(clList, newChangelogInfoFromPR(pr)...)
+		entries = append(entries, entriesFromPR(pr)...)
 	}
 
-	var buff bytes.Buffer
-	tmpl := clParsedTmpl
-	if c.excludePRLinks {
-		tmpl = clParsedTmplNoLink
-	}
-	if err := tmpl.Execute(&buff, clList); err != nil {
+	var buf bytes.Buffer
+	if err := g.tmpl.Execute(&buf, entries); err != nil {
 		return "", trace.Wrap(err)
 	}
 
-	return buff.String(), nil
+	return buf.String(), nil
 }
 
-// convertPRToChangelog will convert the list of PRs to a nicer format.
-func newChangelogInfoFromPR(pr github.ChangelogPR) []changelogInfo {
-	var result []changelogInfo
-
-	info := changelogInfo{
-		Summary: "NOCL: " + pr.Title, // default summary
-		Number:  pr.Number,
-		URL:     pr.URL,
+// entriesFromPR extracts changelog entries from a PR's body.
+func entriesFromPR(pr github.PullRequest) []entry {
+	var entries []entry
+	for _, m := range clPattern.FindAllStringSubmatch(pr.Body, -1) {
+		entries = append(entries, entry{
+			Summary: formatSummary(m[1]),
+			Number:  pr.Number,
+			URL:     pr.URL,
+		})
 	}
-
-	changelogs := findChangelogs(pr.Body)
-	if len(changelogs) == 0 {
-		return []changelogInfo{info}
-	}
-	for _, summary := range changelogs {
-		info.Summary = prettierSummary(summary)
-		result = append(result, info)
-	}
-	return result
+	return entries
 }
 
-// findChangelogs will parse a body of a PR to find it's changelogs.
-func findChangelogs(commentBody string) []string {
-	var result []string
-	matches := clPattern.FindAllStringSubmatch(commentBody, -1)
-	for _, m := range matches {
-		// If a match is found then we should get a non empty slice
-		// 0 index will be the whole match including "changelog: *"
-		// 1 index will be the subgroup match which does not include "changelog: "
-		if len(m) > 1 {
-			result = append(result, m[1])
-		}
+func formatSummary(s string) string {
+	s = strings.TrimSpace(s)
+	// Appending the period first guarantees s is non-empty for r[0] below.
+	if !strings.HasSuffix(s, ".") {
+		s += "."
 	}
-	return result
-}
-
-func prettierSummary(cl string) string {
-	// Clean whitespace and add a period at end
-	cl = strings.TrimSpace(cl)
-	if !strings.HasSuffix(cl, ".") {
-		cl += "."
-	}
-
-	// Uppercase first letter
-	r := []rune(cl)
+	r := []rune(s)
 	r[0] = unicode.ToUpper(r[0])
-	cl = string(r)
-
-	return cl
+	return string(r)
 }
