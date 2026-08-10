@@ -2,7 +2,7 @@ module github.com/gravitational/shared-workflows/bot
 
 go 1.25.0
 
-toolchain go1.25.5
+toolchain go1.25.12
 
 require (
 	github.com/google/go-github/v89 v89.0.0
