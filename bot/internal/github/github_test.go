@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	go_github "github.com/google/go-github/v37/github"
+	go_github "github.com/google/go-github/v89/github"
 )
 
 func TestFindTreeBlobEntries(t *testing.T) {
