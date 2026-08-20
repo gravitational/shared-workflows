@@ -31,6 +31,7 @@ const (
 	CloudRepo       = "cloud"
 	TeleportRepo    = "teleport"
 	TeleportERepo   = "teleport.e"
+	CoreRepo        = "core"
 
 	// Teams
 	CoreTeam     = "Core"
