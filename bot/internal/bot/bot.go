@@ -154,7 +154,7 @@ func classifyChanges(c *Config, files []github.PullRequestFile) env.Changes {
 		),
 	}
 	switch c.Environment.Repository {
-	case env.TeleportRepo:
+	case env.CoreRepo:
 		for _, file := range files {
 			if strings.HasPrefix(file.Name, "docs/") ||
 				file.Name == "CHANGELOG.md" {

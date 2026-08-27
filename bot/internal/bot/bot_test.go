@@ -71,7 +71,7 @@ func TestClassifyChanges(t *testing.T) {
 			code:  false,
 		},
 	}
-	c := &Config{Environment: &env.Environment{Repository: env.TeleportRepo}}
+	c := &Config{Environment: &env.Environment{Repository: env.CoreRepo}}
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
 			changes := classifyChanges(c, test.files)
