@@ -192,4 +192,4 @@ func isBackport(unsafeBase string) bool {
 	return strings.HasPrefix(unsafeBase, "branch/v")
 }
 
-var pattern = regexp.MustCompile(`(?:https:\/\/github\.com\/gravitational\/teleport\/pull\/|#)([0-9]+)`)
+var pattern = regexp.MustCompile(`(?:https:\/\/github\.com\/gravitational\/core\/pull\/|#)([0-9]+)`)
