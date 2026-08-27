@@ -42,9 +42,7 @@ func (b *Bot) skipItems(ctx context.Context, skipPrefix string) ([]string, error
 			continue
 		}
 		if strings.HasPrefix(c.Body, skipPrefix) {
-			for _, testName := range strings.Fields(c.Body)[1:] {
-				itemsToSkip = append(itemsToSkip, testName)
-			}
+			itemsToSkip = append(itemsToSkip, strings.Fields(c.Body)[1:]...)
 		}
 	}
 

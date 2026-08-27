@@ -49,7 +49,7 @@ const (
 
 var (
 	// singleApproverPaths defines paths in cloud or core repos that only require a single approver.
-	// The map key is the repo (cloud|teleport|teleport.e) and the value is a list of paths.
+	// The map key is the repo (cloud|core) and the value is a list of paths.
 	singleApproverPaths = map[string][]string{
 		"cloud": {
 			"deploy/fluxcd/config/values.yaml",
@@ -64,7 +64,7 @@ var (
 	}
 
 	// singleApproverAuthors defines pull request authors in cloud or core repos that only
-	// require a single approver. The map key is the repo (cloud|teleport|teleport.e) and the
+	// require a single approver. The map key is the repo (cloud|core) and the
 	// value is a list of authors. BOTS ONLY - DO NOT INCLUDE EMPLOYEE GITHUB HANDLES.
 	singleApproverAuthors = map[string][]string{
 		"cloud": {Dependabot, RenovateBotPrivate, RenovateBotPublic},
@@ -205,7 +205,7 @@ func New(c *Config) (*Assignments, error) {
 // emptyConfig returns a struct initialized with empty maps and slices that can pass
 // CheckAndSetDefaults()
 func emptyConfig() *Config {
-	var c Config = Config{
+	c := Config{
 		CodeReviewersOmit: map[string]bool{},
 		RepoReviewers:     map[string]map[string]Reviewer{},
 		CoreReviewers:     map[string]Reviewer{},

@@ -35,7 +35,7 @@ func respondWithJSONTestdata(w http.ResponseWriter, filename string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	w.Header().Set("Content-Type", "application/json")
 	_, err = io.Copy(w, f)

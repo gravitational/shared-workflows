@@ -26,6 +26,8 @@ func MaskSecretValues(secrets []string) {
 		}
 		// GHA treats a newline as the end of an ::add-mask:: command, so each line must be masked.
 		for line := range strings.Lines(v) {
+			// strings.Lines yields lines with their terminating newline, which Printf adds back below.
+			line = strings.TrimRight(line, "\r\n")
 			if line == "" {
 				continue
 			}

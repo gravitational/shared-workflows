@@ -47,7 +47,7 @@ type Environment struct {
 	// Organization is the GitHub organization (gravitational).
 	Organization string
 
-	// Repository is the GitHub repository (teleport).
+	// Repository is the GitHub repository (core).
 	Repository string
 
 	// Number is the PR number.
@@ -145,7 +145,7 @@ func readEvent() (*Event, error) {
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	var event Event
 	if err := json.NewDecoder(f).Decode(&event); err != nil {
