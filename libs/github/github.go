@@ -235,7 +235,7 @@ func errorFromBody(body io.ReadCloser) error {
 	if body == nil {
 		return nil
 	}
-	defer body.Close()
+	defer func() { _ = body.Close() }()
 
 	data, err := io.ReadAll(body)
 	if err != nil {

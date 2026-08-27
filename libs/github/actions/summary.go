@@ -120,14 +120,14 @@ func PrintSummaryReport(title string) {
 // GITHUB_STEP_SUMMARY environment variable, which will be displayed in the GitHub Actions UI.
 func (r *summaryReporter) reportSummary(title string) {
 	output := strings.Builder{}
-	output.WriteString(fmt.Sprintf("<details>\n<summary><h2>%s</h2></summary>\n", title))
+	fmt.Fprintf(&output, "<details>\n<summary><h2>%s</h2></summary>\n", title)
 
 	for _, step := range r.steps {
 		statuses := r.stepStatuses[step]
 		if len(statuses) == 0 {
 			continue
 		}
-		output.WriteString(fmt.Sprintf("<p><h3>%s</h3></p>\n", step))
+		fmt.Fprintf(&output, "<p><h3>%s</h3></p>\n", step)
 		if len(statuses) == 0 {
 			continue
 		}

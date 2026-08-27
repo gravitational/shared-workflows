@@ -1,0 +1,14 @@
+---
+name: Shared libraries CI
+
+on:
+  pull_request:
+
+jobs:
+  test:
+    uses: ./.github/workflows/reusable-ci.yaml
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      tool-directory: ./libs
