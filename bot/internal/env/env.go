@@ -29,8 +29,8 @@ const (
 	// Repo slugs
 	AccessGraphRepo = "access-graph"
 	CloudRepo       = "cloud"
-	TeleportRepo    = "core"
-	TeleportERepo   = "core"
+	TeleportRepo    = "teleport"
+	TeleportERepo   = "teleport.e"
 
 	// Teams
 	CoreTeam     = "Core"
