@@ -536,6 +536,14 @@ func (f *fakeGithub) ListCommitFiles(ctx context.Context, organization string, r
 	return f.commitFiles, nil
 }
 
+func (f *fakeGithub) FetchAllOrgMembers(ctx context.Context, org string) ([]string, error) {
+	orgMemberUserNameList := make([]string, 0)
+	for member := range f.orgMembers {
+		orgMemberUserNameList = append(orgMemberUserNameList, member)
+	}
+	return orgMemberUserNameList, nil
+}
+
 func TestSkipFileForSizeCheck(t *testing.T) {
 	generatedFilePaths := []string{
 		// go types from proto
