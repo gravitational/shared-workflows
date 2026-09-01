@@ -40,6 +40,9 @@ var (
 	// clPattern matches a "changelog: <summary>" line, capturing the summary.
 	clPattern = regexp.MustCompile(`[Cc]hangelog: +(.*)`)
 
+	// entPattern matches "changelog-enterprise: <summary>" lines, capturing the summary.
+	entPattern = regexp.MustCompile(`[Cc]hangelog-[Ee]nterprise: +(.*)`)
+
 	// tmplLinks renders entries with a link to the PR; tmplNoLinks without.
 	tmplLinks = template.Must(template.New("cl").Parse(`
 {{- range . -}}
@@ -57,9 +60,10 @@ var (
 const org = "gravitational"
 
 type generator struct {
-	repo string
-	gh   *github.Client
-	tmpl *template.Template
+	repo            string
+	gh              *github.Client
+	tmpl            *template.Template
+	parseEnterprise bool
 }
 
 // generate fetches the given PRs and renders a changelog from them.
@@ -75,7 +79,7 @@ func (g *generator) generate(ctx context.Context, prNumbers []int) (string, erro
 func (g *generator) render(prs []github.PullRequest) (string, error) {
 	var entries []entry
 	for _, pr := range prs {
-		entries = append(entries, entriesFromPR(pr)...)
+		entries = append(entries, g.entriesFromPR(pr)...)
 	}
 
 	var buf bytes.Buffer
@@ -87,9 +91,13 @@ func (g *generator) render(prs []github.PullRequest) (string, error) {
 }
 
 // entriesFromPR extracts changelog entries from a PR's body.
-func entriesFromPR(pr github.PullRequest) []entry {
+func (g *generator) entriesFromPR(pr github.PullRequest) []entry {
+	pattern := clPattern
+	if g.parseEnterprise {
+		pattern = entPattern
+	}
 	var entries []entry
-	for _, m := range clPattern.FindAllStringSubmatch(pr.Body, -1) {
+	for _, m := range pattern.FindAllStringSubmatch(pr.Body, -1) {
 		entries = append(entries, entry{
 			Summary: formatSummary(m[1]),
 			Number:  pr.Number,
