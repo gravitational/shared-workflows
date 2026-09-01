@@ -37,7 +37,7 @@ func TestLabel(t *testing.T) {
 	}{
 		{
 			desc:   "code-only",
-			repo:   "teleport",
+			repo:   "core",
 			branch: "foo",
 			files: []github.PullRequestFile{
 				{Name: "file.go"},
@@ -47,7 +47,7 @@ func TestLabel(t *testing.T) {
 		},
 		{
 			desc:   "docs",
-			repo:   "teleport",
+			repo:   "core",
 			branch: "foo",
 			files: []github.PullRequestFile{
 				{
@@ -60,7 +60,7 @@ func TestLabel(t *testing.T) {
 		},
 		{
 			desc:   "helm",
-			repo:   "teleport",
+			repo:   "core",
 			branch: "foo",
 			files: []github.PullRequestFile{
 				{
@@ -72,7 +72,7 @@ func TestLabel(t *testing.T) {
 		},
 		{
 			desc:   "docs-and-helm",
-			repo:   "teleport",
+			repo:   "core",
 			branch: "foo",
 			files: []github.PullRequestFile{
 				{Name: "docs/docs.md"},
@@ -82,7 +82,7 @@ func TestLabel(t *testing.T) {
 		},
 		{
 			desc:   "docs-and-backport",
-			repo:   "teleport",
+			repo:   "core",
 			branch: "branch/foo",
 			files: []github.PullRequestFile{
 				{
@@ -95,7 +95,7 @@ func TestLabel(t *testing.T) {
 		},
 		{
 			desc:   "web only",
-			repo:   "teleport",
+			repo:   "core",
 			branch: "foo",
 			files: []github.PullRequestFile{
 				{
@@ -106,16 +106,16 @@ func TestLabel(t *testing.T) {
 			labels: []string{"ui", string(small)},
 		},
 		{
-			desc:   "teleport.e",
-			repo:   "teleport.e",
+			desc:   "enterprise",
+			repo:   "core",
 			branch: "foo",
 			files: []github.PullRequestFile{
 				{
-					Name:      "lib/devicetrust/file.go",
+					Name:      "e/lib/devicetrust/file.go",
 					Additions: 1,
 				},
 				{
-					Name:      "lib/okta/file.go",
+					Name:      "e/lib/okta/file.go",
 					Additions: 1,
 				},
 			},

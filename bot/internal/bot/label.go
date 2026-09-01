@@ -109,7 +109,7 @@ func deduplicate(s []string) []string {
 }
 
 var prefixes = map[string]map[string][]string{
-	env.TeleportRepo: {
+	env.CoreRepo: {
 		"bpf/":                {"bpf"},
 		"docs/":               {"documentation"},
 		"rfd/":                {"rfd"},
@@ -128,16 +128,13 @@ var prefixes = map[string]map[string][]string{
 		"tool/tsh/":           {"tsh"},
 		"tool/tbot/":          {"machine-id"},
 		"web/":                {"ui"},
-	},
-	env.TeleportERepo: {
-		"rfd/":             {"rfd"},
-		"lib/devicetrust/": {"devicetrust"},
-		"lib/idp/saml":     {"application-access", "idp"},
-		"lib/loginrule/":   {"login-rules"},
-		"lib/okta/":        {"application-access"},
-		"lib/plugins/":     {"plugins"},
-		"tool/tctl/":       {"tctl"},
-		"web/":             {"ui"},
+		"e/lib/devicetrust/":  {"devicetrust"},
+		"e/lib/idp/saml":      {"application-access", "idp"},
+		"e/lib/loginrule/":    {"login-rules"},
+		"e/lib/okta/":         {"application-access"},
+		"e/lib/plugins/":      {"plugins"},
+		"e/tool/tctl/":        {"tctl"},
+		"e/web/":              {"ui"},
 	},
 	env.CloudRepo: {
 		"api/":                       {"salescenter"},
