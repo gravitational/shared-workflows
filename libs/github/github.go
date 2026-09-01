@@ -39,6 +39,7 @@ const (
 
 // Client calls the GitHub REST and GraphQL APIs.
 type Client struct {
+	httpClient   *http.Client
 	client       *go_github.Client
 	graphql      graphQLDoer
 	appTransport *installationAuthTransport
@@ -93,10 +94,18 @@ func NewForApp(ctx context.Context, appID, installationID int64, privateKey []by
 
 	cl := go_github.NewClient(httpClient)
 	return &Client{
+		httpClient:   httpClient,
 		client:       cl,
 		graphql:      gql,
 		appTransport: appTr,
 	}, nil
+}
+
+// GetHTTPClient returns the underlying HTTP client used by the GitHub client.
+// This HTTP client is setup with a custom transport that handles GitHub App authentication,
+// so it can be used for making direct HTTP requests to the GitHub API if needed.
+func (c *Client) GetHTTPClient() *http.Client {
+	return c.httpClient
 }
 
 // GetAppOAuthToken returns the current OAuth token for the GitHub App installation.
