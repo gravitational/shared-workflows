@@ -20,17 +20,13 @@ import (
 	"context"
 	"errors"
 	"log"
-	"net/http"
-	"net/url"
-	"path"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gravitational/trace"
 
-	go_github "github.com/google/go-github/v37/github"
+	go_github "github.com/google/go-github/v89/github"
 	"golang.org/x/oauth2"
 )
 
@@ -51,11 +47,16 @@ type Client struct {
 // New returns a new GitHub Client.
 func New(ctx context.Context, token string) (*Client, error) {
 	clt := oauth2.NewClient(ctx, oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token}))
-
-	clt.Timeout = ClientTimeout
+	client, err := go_github.NewClient(
+		go_github.WithHTTPClient(clt),
+		go_github.WithTimeout(ClientTimeout),
+	)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
 
 	return &Client{
-		client: go_github.NewClient(clt),
+		client: client,
 	}, nil
 }
 
@@ -121,7 +122,7 @@ func (c *Client) ListReviews(ctx context.Context, organization string, repositor
 			reviews = append(reviews, Review{
 				Author:      r.GetUser().GetLogin(),
 				State:       r.GetState(),
-				SubmittedAt: r.GetSubmittedAt(),
+				SubmittedAt: r.GetSubmittedAt().Time,
 			})
 		}
 
@@ -215,28 +216,16 @@ type Branch struct {
 func (c *Client) ListReviewers(ctx context.Context, organization string, repository string, number int) ([]string, error) {
 	var reviewers []string
 
-	opts := &go_github.ListOptions{
-		Page:    0,
-		PerPage: perPage,
+	resp, _, err := c.client.PullRequests.ListReviewers(ctx,
+		organization,
+		repository,
+		number)
+	if err != nil {
+		return nil, trace.Wrap(err)
 	}
-	for {
-		page, resp, err := c.client.PullRequests.ListReviewers(ctx,
-			organization,
-			repository,
-			number,
-			opts)
-		if err != nil {
-			return nil, trace.Wrap(err)
-		}
 
-		for _, r := range page.Users {
-			reviewers = append(reviewers, r.GetLogin())
-		}
-
-		if resp.NextPage == 0 {
-			break
-		}
-		opts.Page = resp.NextPage
+	for _, r := range resp.Users {
+		reviewers = append(reviewers, r.GetLogin())
 	}
 
 	return reviewers, nil
@@ -573,20 +562,8 @@ func (c *Client) ListWorkflowRuns(ctx context.Context, organization string, repo
 	return runs, nil
 }
 
-// DeleteWorkflowRun is directly implemented because it is missing from go-github.
-//
-// https://docs.github.com/en/rest/reference/actions#delete-a-workflow-run
 func (c *Client) DeleteWorkflowRun(ctx context.Context, organization string, repository string, runID int64) error {
-	url := url.URL{
-		Scheme: "https",
-		Host:   "api.github.com",
-		Path:   path.Join("repos", organization, repository, "actions", "runs", strconv.FormatInt(runID, 10)),
-	}
-	req, err := c.client.NewRequest(http.MethodDelete, url.String(), nil)
-	if err != nil {
-		return trace.Wrap(err)
-	}
-	_, err = c.client.Do(ctx, req, nil)
+	_, err := c.client.Actions.DeleteWorkflowRun(ctx, organization, repository, runID)
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -594,32 +571,13 @@ func (c *Client) DeleteWorkflowRun(ctx context.Context, organization string, rep
 }
 
 // IsOrgMember checks whether [user] is a member of [org].
-//
-// https://docs.github.com/en/rest/orgs/members?apiVersion=2022-11-28#check-organization-membership-for-a-user
 func (c *Client) IsOrgMember(ctx context.Context, user string, org string) (bool, error) {
-	url := url.URL{
-		Scheme: "https",
-		Host:   "api.github.com",
-		Path:   path.Join("orgs", org, "members", user),
-	}
-	req, err := c.client.NewRequest(http.MethodGet, url.String(), nil)
+	isMember, _, err := c.client.Organizations.IsMember(ctx, org, user)
 	if err != nil {
 		return false, trace.Wrap(err)
 	}
 
-	resp, err := c.client.Do(ctx, req, nil)
-	// the go-github API returns an error if the request completed
-	// succesfully but returned a non-200 response code, so we attempt
-	// to check the response before checking the error
-	if resp != nil && resp.StatusCode != 0 {
-		return resp.StatusCode == http.StatusNoContent, nil
-	}
-
-	if err != nil {
-		return false, trace.Wrap(err)
-	}
-
-	return resp.StatusCode == http.StatusNoContent, nil
+	return isMember, nil
 }
 
 // CreateComment will leave a comment on an Issue or Pull Request.
@@ -673,8 +631,8 @@ func (c *Client) ListComments(ctx context.Context, organization string, reposito
 			result = append(result, Comment{
 				Body:      comment.GetBody(),
 				Author:    comment.GetUser().GetLogin(),
-				CreatedAt: comment.GetCreatedAt(),
-				UpdatedAt: comment.GetUpdatedAt(),
+				CreatedAt: comment.GetCreatedAt().Time,
+				UpdatedAt: comment.GetUpdatedAt().Time,
 			})
 		}
 
