@@ -39,8 +39,10 @@ const (
 
 // Client calls the GitHub REST and GraphQL APIs.
 type Client struct {
-	client  *go_github.Client
-	graphql graphQLDoer
+	httpClient   *http.Client
+	client       *go_github.Client
+	graphql      graphQLDoer
+	appTransport *installationAuthTransport
 }
 
 type graphQLDoer interface {
@@ -62,8 +64,9 @@ func New(ctx context.Context, token string) (*Client, error) {
 	}
 
 	return &Client{
-		client:  cl,
-		graphql: gql,
+		httpClient: httpClient,
+		client:     cl,
+		graphql:    gql,
 	}, nil
 }
 
@@ -92,9 +95,33 @@ func NewForApp(ctx context.Context, appID, installationID int64, privateKey []by
 
 	cl := go_github.NewClient(httpClient)
 	return &Client{
-		client:  cl,
-		graphql: gql,
+		httpClient:   httpClient,
+		client:       cl,
+		graphql:      gql,
+		appTransport: appTr,
 	}, nil
+}
+
+// GetHTTPClient returns the underlying HTTP client used by the GitHub client.
+// This HTTP client is setup with a custom transport that handles GitHub App authentication,
+// so it can be used for making direct HTTP requests to the GitHub API if needed.
+func (c *Client) GetHTTPClient() *http.Client {
+	return c.httpClient
+}
+
+// GetAppOAuthToken returns the current OAuth token for the GitHub App installation.
+// This is useful for cases where you want to use the token outside of the GitHub client,
+// such as in API requests made by other tooling (ie git) or for debugging purposes.
+func (c *Client) GetAppOAuthToken(ctx context.Context) (string, error) {
+	if c.appTransport == nil {
+		return "", fmt.Errorf("client is not configured for GitHub App authentication")
+	}
+
+	token, err := c.appTransport.getAccessToken(ctx)
+	if err != nil {
+		return "", fmt.Errorf("getting access token from transport: %w", err)
+	}
+	return token, nil
 }
 
 // installationAuthTransport is a middleware that adds GitHub App authentication to HTTP requests.
