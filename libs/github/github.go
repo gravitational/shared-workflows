@@ -64,8 +64,9 @@ func New(ctx context.Context, token string) (*Client, error) {
 	}
 
 	return &Client{
-		client:  cl,
-		graphql: gql,
+		httpClient: httpClient,
+		client:     cl,
+		graphql:    gql,
 	}, nil
 }
 
