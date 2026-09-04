@@ -21,6 +21,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"maps"
 	"net/url"
 	"os/exec"
 	"path"
@@ -109,14 +110,27 @@ func (b *Bot) Backport(ctx context.Context) error {
 			continue
 		}
 
-		labels := []string{NoChangelogLabel}
+		labelsMap := map[string]struct{}{NoChangelogLabel: {}, noTestPlanLabel: {}}
 		bodyText := fmt.Sprintf("Backport #%v to %v", b.c.Environment.Number, base)
 		if entries := b.getChangelogEntries(pull.UnsafeBody); len(entries) > 0 && !slices.Contains(pull.UnsafeLabels, NoChangelogLabel) {
-			bodyText += "\n\n"
-			labels = labels[:0]
+			delete(labelsMap, NoChangelogLabel)
+			var sb strings.Builder
 			for _, entry := range entries {
-				bodyText += fmt.Sprintf("%s%s\n", ChangelogPrefix, entry)
+				sb.WriteString(ChangelogPrefix)
+				sb.WriteString(entry)
+				sb.WriteRune('\n')
 			}
+			bodyText += "\n\n" + sb.String()
+		}
+
+		if entries := b.getManualTestPlanEntries(pull.UnsafeBody); len(entries) > 0 && !slices.Contains(pull.UnsafeLabels, noTestPlanLabel) {
+			delete(labelsMap, noTestPlanLabel)
+			var sb strings.Builder
+			for _, entry := range entries {
+				sb.WriteString(entry)
+				sb.WriteRune('\n')
+			}
+			bodyText += "\n\n" + sb.String()
 		}
 
 		rows = append(rows, row{
@@ -133,7 +147,7 @@ func (b *Bot) Backport(ctx context.Context) error {
 					"expand": []string{"1"},
 					"title":  []string{fmt.Sprintf("[%v] %v", strings.Trim(base, "branch/"), pull.UnsafeTitle)},
 					"body":   []string{bodyText},
-					"labels": labels,
+					"labels": slices.Collect(maps.Keys(labelsMap)),
 				}.Encode(),
 			},
 		})
