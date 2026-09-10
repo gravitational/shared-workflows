@@ -1,11 +1,39 @@
 package github
 
 import (
+	"context"
 	"encoding/json"
+	"io"
+	"net/http"
+	"strings"
 	"testing"
 
 	go_github "github.com/google/go-github/v37/github"
+	"github.com/stretchr/testify/require"
 )
+
+func TestListFilesIncludesPatch(t *testing.T) {
+	client := testClient(t, func(request *http.Request) (*http.Response, error) {
+		require.Equal(t, "/repos/example/repo/pulls/1/files", request.URL.Path)
+
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body: io.NopCloser(strings.NewReader(`[
+				{"filename":"file.go","status":"added","additions":2,"deletions":0,"patch":"@@ -0,0 +1,2 @@\n+\n+package example"},
+				{"filename":"binary","status":"modified","additions":0,"deletions":0}
+			]`)),
+		}, nil
+	})
+
+	files, err := client.ListFiles(context.Background(), "example", "repo", 1)
+	require.NoError(t, err)
+
+	require.Equal(t, []PullRequestFile{
+		{Name: "file.go", Status: StatusAdded, Additions: 2, Patch: "@@ -0,0 +1,2 @@\n+\n+package example"},
+		{Name: "binary", Status: StatusModified},
+	}, files)
+}
 
 func TestFindTreeBlobEntries(t *testing.T) {
 	var tree *go_github.Tree
@@ -96,4 +124,18 @@ func TestFindTreeBlobEntries(t *testing.T) {
 			}
 		}
 	}
+}
+
+func testClient(t *testing.T, handler func(*http.Request) (*http.Response, error)) *Client {
+	t.Helper()
+
+	return &Client{client: go_github.NewClient(&http.Client{
+		Transport: fileListTransport(handler),
+	})}
+}
+
+type fileListTransport func(*http.Request) (*http.Response, error)
+
+func (f fileListTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	return f(request)
 }
