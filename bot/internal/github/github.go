@@ -283,6 +283,8 @@ type PullRequestFile struct {
 	// Deletions is the number of lines removed from the file
 	Deletions int
 	Status    FileStatus
+	// Patch is the unified diff, when available from GitHub.
+	Patch string
 	// PreviousName is the name of the file prior to renaming. The GitHub
 	// API only assigns this if Status is "renamed". For deleted files, the
 	// GitHub API uses Name.
@@ -448,6 +450,7 @@ func (c *Client) ListFiles(ctx context.Context, organization string, repository 
 				Name:         file.GetFilename(),
 				Additions:    file.GetAdditions(),
 				Deletions:    file.GetDeletions(),
+				Patch:        file.GetPatch(),
 				Status:       fileStatusFromLabel(file.GetStatus()),
 				PreviousName: file.GetPreviousFilename(),
 			})

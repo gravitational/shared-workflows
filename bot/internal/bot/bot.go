@@ -255,8 +255,9 @@ func prSize(files []github.PullRequestFile) sizeLabel {
 		if skipFileForSizeCheck(f.Name) {
 			continue
 		}
-		additions += f.Additions
-		deletions += f.Deletions
+		added, deleted := changesForSizeCheck(f)
+		additions += added
+		deletions += deleted
 	}
 	delta := additions - deletions
 	switch {
