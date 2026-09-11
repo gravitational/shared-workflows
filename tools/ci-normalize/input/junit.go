@@ -24,6 +24,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gravitational/shared-workflows/tools/ci-normalize/record"
 	"github.com/gravitational/trace"
@@ -118,6 +119,60 @@ type junitFailure struct {
 // regex to match ANSI escape sequences
 var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
 
+const (
+	// messageHeadBytes is the maximum number of bytes to keep from the start of a message (1 MiB).
+	messageHeadBytes = 1 << 20
+	// messageTailBytes is the maximum number of bytes to keep from the end of a message (1 MiB).
+	messageTailBytes = 1 << 20
+)
+
+// truncateUTF8Head truncates a UTF-8 string to the first n bytes
+func truncateUTF8Head(s string, n int) string {
+	if n >= len(s) {
+		return s
+	}
+
+	// Find the last rune boundary before n
+	for n > 0 && !utf8.RuneStart(s[n-1]) {
+		n--
+	}
+
+	// If the last rune is a multi-byte rune that is cut off back up some more
+	// Oddly I am not aware of utf8 helper for this.
+	if n > 0 && s[n-1]&0xc0 == 0xc0 {
+		n--
+	}
+	return s[:n]
+}
+
+// truncateUTF8Tail is like [truncateUTF8Head] but keeps the last n bytes of the string.
+func truncateUTF8Tail(s string, n int) string {
+	if n >= len(s) {
+		return s
+	}
+
+	// Advance to the start of the first whole rune at or after len(s)-n.
+	cut := len(s) - n
+	for cut < len(s) && !utf8.RuneStart(s[cut]) {
+		cut++
+	}
+	return s[cut:]
+}
+
+// truncateMessage truncates a message to the first headBytes and last tailBytes, keeping the message valid UTF-8.
+// Test logs can be very large and we make the best effort to keep the most relevant parts of the message.
+func truncateMessage(msg string, headBytes, tailBytes int) string {
+	const truncationMarker = "\n...[bytes truncated]...\n"
+
+	if len(msg) <= (headBytes + tailBytes) {
+		return msg
+	}
+
+	head := truncateUTF8Head(msg, headBytes)
+	tail := truncateUTF8Tail(msg, tailBytes)
+	return head + truncationMarker + tail
+}
+
 // SanitizeMessage removes ANSI color codes, non-printable characters, and trims whitespace
 func sanitize(msg string) string {
 	if msg == "" {
@@ -155,7 +210,7 @@ func (jf *junitFailure) safeString() string {
 		parts = append(parts, jf.Text)
 	}
 
-	return sanitize(strings.Join(parts, "\n"))
+	return sanitize(truncateMessage(strings.Join(parts, "\n"), messageHeadBytes, messageTailBytes))
 
 }
 
@@ -168,7 +223,7 @@ func (js *junitSkipped) safeString() string {
 		return ""
 	}
 
-	return sanitize(js.Message)
+	return sanitize(truncateMessage(js.Message, messageHeadBytes, messageTailBytes))
 }
 
 type junitTestCase struct {
