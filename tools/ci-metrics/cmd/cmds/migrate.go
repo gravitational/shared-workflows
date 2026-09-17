@@ -71,23 +71,6 @@ type MigrateCommand struct {
 	dryRun bool
 }
 
-// registerAthenaConfigFlags creates the CLI interface to configure [athena.Config].
-func registerAthenaConfigFlags(cmd *kingpin.CmdClause, cfg *athena.Config) {
-	cmd.Flag("database", "Database holding both tables").
-		Required().
-		StringVar(&cfg.Database)
-
-	cmd.Flag("workgroup", "Athena workgroup").
-		Default("primary").
-		StringVar(&cfg.Workgroup)
-
-	cmd.Flag("region", "AWS region; defaults to the ambient credential chain").
-		StringVar(&cfg.Region)
-
-	cmd.Flag("results", "S3 prefix for Athena query results; unset defers to the workgroup setting").
-		StringVar(&cfg.OutputLocation)
-}
-
 // NewMigrateCommand registers the migrate subcommand on app.
 func NewMigrateCommand(app *kingpin.Application) *MigrateCommand {
 	c := &MigrateCommand{
