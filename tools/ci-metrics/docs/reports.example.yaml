@@ -1,0 +1,38 @@
+# Example ci-metrics report configuration.
+#
+#   ci-metrics report --database gh_test_metrics_v2 --config docs/reports.example.yaml
+
+# Table configuration. These are the Parquet tables the migrate command
+# writes, which carry the collapsed ISO-8601 dt column the reports window on.
+tables:
+  meta: meta_v2_parquet
+  testcases: testcases_v2_parquet
+
+# Reporting window, counting back from --to (default today) inclusive.
+window:
+  days: 14
+
+reporters:
+  console:
+    type: stdout
+    max_rows: 25
+
+reports:
+  - name: flaky
+    reporters: [console]
+    params:
+      # Minimum executions in a day before a test is considered at all, so a
+      # test that ran twice cannot top the table.
+      min_execs: 10
+      # The K in the score's execs/(execs+K)
+      smoothing: 20
+      # How many tests to keep per day.
+      top: 20
+      # Refs whose runs count, as full refs. A merge-queue run targeting one
+      # of these counts towards it, so pull request noise stays out of the
+      # ranking. Counts are summed across every branch listed rather than
+      # reported per branch.
+      branches:
+        - refs/heads/master
+        - refs/heads/branch/v18
+        - refs/heads/branch/v17

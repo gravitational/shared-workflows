@@ -22,6 +22,7 @@ import (
 
 	"github.com/gravitational/trace"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/gravitational/shared-workflows/tools/ci-metrics/athena"
@@ -39,25 +40,39 @@ func testTable() TableMigration {
 	}
 }
 
-// fakeExecutor records statements instead of running them.
-type fakeExecutor struct {
-	statements []string
-	failOn     func(statement string) error
+// mockExecutor stands in for Athena. The statements it was given are read back
+// from mock.Calls, which preserves the order they arrived in.
+type mockExecutor struct {
+	mock.Mock
 }
 
-func (f *fakeExecutor) Execute(_ context.Context, statement string) (*athena.Result, error) {
-	f.statements = append(f.statements, statement)
+var _ athena.Executor = (*mockExecutor)(nil)
 
-	if f.failOn != nil {
-		if err := f.failOn(statement); err != nil {
-			return nil, err
-		}
-	}
+func (m *mockExecutor) Execute(ctx context.Context, statement string) (*athena.Result, error) {
+	ret := m.Called(ctx, statement)
+
+	// A stubbed failure returns a nil result, which is an untyped nil in the
+	// return arguments, so the assertion has to be the two-value form.
+	result, _ := ret.Get(0).(*athena.Result)
+	return result, ret.Error(1)
+}
+
+// statement returns the SQL passed to the nth Execute call.
+func (m *mockExecutor) statement(t *testing.T, n int) string {
+	t.Helper()
+
+	require.Greater(t, len(m.Calls), n, "Execute was not called %d times", n+1)
+	return m.Calls[n].Arguments.String(1)
+}
+
+// testResult is what a successful Execute returns. The values are arbitrary
+// but non-zero, so a test asserting on them cannot pass against a zero value.
+func testResult() *athena.Result {
 	return &athena.Result{
 		QueryExecutionID: "test",
 		DataScannedBytes: 1024,
 		EngineTime:       time.Second,
-	}, nil
+	}
 }
 
 func TestRender(t *testing.T) {
@@ -143,7 +158,9 @@ func TestOptionsValidation(t *testing.T) {
 func TestRunOneStatementPerDay(t *testing.T) {
 	t.Parallel()
 
-	exec := &fakeExecutor{}
+	exec := &mockExecutor{}
+	exec.On("Execute", mock.Anything, mock.Anything).Return(testResult(), nil)
+
 	err := Run(context.Background(), exec, Options{
 		Database:       "db",
 		TableMigration: testTable(),
@@ -152,16 +169,18 @@ func TestRunOneStatementPerDay(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	require.Len(t, exec.statements, 3)
+	exec.AssertNumberOfCalls(t, "Execute", 3)
 
-	assert.Contains(t, exec.statements[0], "'2026-09-13'")
-	assert.Contains(t, exec.statements[2], "'2026-09-15'")
+	assert.Contains(t, exec.statement(t, 0), "'2026-09-13'")
+	assert.Contains(t, exec.statement(t, 2), "'2026-09-15'")
 }
 
 func TestRunSingleDay(t *testing.T) {
 	t.Parallel()
 
-	exec := &fakeExecutor{}
+	exec := &mockExecutor{}
+	exec.On("Execute", mock.Anything, mock.Anything).Return(testResult(), nil)
+
 	err := Run(context.Background(), exec, Options{
 		Database:       "db",
 		TableMigration: testTable(),
@@ -169,20 +188,20 @@ func TestRunSingleDay(t *testing.T) {
 		To:             date(2026, time.September, 1),
 	})
 	require.NoError(t, err)
-	require.Len(t, exec.statements, 1)
+	exec.AssertNumberOfCalls(t, "Execute", 1)
 }
 
 func TestRunStopsAtFirstFailure(t *testing.T) {
 	t.Parallel()
 
-	exec := &fakeExecutor{
-		failOn: func(statement string) error {
-			if strings.Contains(statement, "'2026-09-02'") {
-				return trace.Errorf("boom")
-			}
-			return nil
-		},
-	}
+	exec := &mockExecutor{}
+	// Registered before the catch-all: testify matches against the first
+	// expectation whose arguments satisfy the call, so the specific one has to
+	// come first or it would never be reached.
+	exec.On("Execute", mock.Anything, mock.MatchedBy(func(statement string) bool {
+		return strings.Contains(statement, "'2026-09-02'")
+	})).Return(nil, trace.Errorf("boom"))
+	exec.On("Execute", mock.Anything, mock.Anything).Return(testResult(), nil)
 
 	err := Run(context.Background(), exec, Options{
 		Database:       "db",
@@ -192,17 +211,25 @@ func TestRunStopsAtFirstFailure(t *testing.T) {
 	})
 	assert.Error(t, err)
 
-	require.Len(t, exec.statements, 2)
+	// The first day succeeds and the second fails, so a fifth day's worth of
+	// statements would mean Run carried on past the error.
+	exec.AssertNumberOfCalls(t, "Execute", 2)
 }
 
 func TestRunRejectsReversedPeriod(t *testing.T) {
 	t.Parallel()
 
-	err := Run(context.Background(), &fakeExecutor{}, Options{
+	// No expectations are set, so any call would panic as unexpected: the
+	// window has to be rejected before a statement is built.
+	exec := &mockExecutor{}
+
+	err := Run(context.Background(), exec, Options{
 		Database:       "db",
 		TableMigration: testTable(),
 		From:           date(2026, time.September, 5),
 		To:             date(2026, time.September, 1),
 	})
 	assert.Error(t, err)
+
+	exec.AssertNotCalled(t, "Execute", mock.Anything, mock.Anything)
 }
