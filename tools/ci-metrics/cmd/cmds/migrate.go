@@ -17,20 +17,45 @@ package cmds
 import (
 	"context"
 	"fmt"
-	"slices"
 	"strings"
 	"time"
 
+	kingpin "github.com/alecthomas/kingpin/v2"
 	"github.com/gravitational/trace"
-	cli "github.com/urfave/cli/v3"
 
 	"github.com/gravitational/shared-workflows/tools/ci-metrics/athena"
 	"github.com/gravitational/shared-workflows/tools/ci-metrics/migrate"
 )
 
-// migrateCommand copies one table of JSONL test records into its Parquet
+// dateValue parses a YYYY-MM-DD command line value into a UTC time. kingpin
+// carries no time parser, so the flag supplies its own [kingpin.Value].
+type dateValue struct {
+	target *time.Time
+}
+
+// Set implements [kingpin.Value].
+func (d *dateValue) Set(value string) error {
+	parsed, err := time.ParseInLocation(time.DateOnly, value, time.UTC)
+	if err != nil {
+		return trace.BadParameter("invalid date %q, expected YYYY-MM-DD", value)
+	}
+	*d.target = parsed
+	return nil
+}
+
+// String implements [kingpin.Value].
+func (d *dateValue) String() string {
+	if d.target == nil || d.target.IsZero() {
+		return ""
+	}
+	return d.target.Format(time.DateOnly)
+}
+
+// MigrateCommand copies one table of JSONL test records into its Parquet
 // counterpart over one period.
-type migrateCommand struct {
+type MigrateCommand struct {
+	cmd *kingpin.CmdClause
+
 	athenaConfig athena.Config
 
 	table migrate.TableMigration
@@ -38,138 +63,93 @@ type migrateCommand struct {
 	to    time.Time
 	days  int
 
+	// fromSet and daysSet record whether the user passed the flag, since
+	// kingpin does not support mutually exclusive flag groups.
+	fromSet bool
+	daysSet bool
+
 	dryRun bool
 }
 
-// flagsForAthenaConfig creates CLI interface to configure [athena.Config]
-func flagsForAthenaConfig(cfg *athena.Config) []cli.Flag {
-	return []cli.Flag{
-		&cli.StringFlag{
-			Name:        "database",
-			Aliases:     []string{"db"},
-			Usage:       "Database holding both tables",
-			Required:    true,
-			Destination: &cfg.Database,
-		},
-		&cli.StringFlag{
-			Name:        "workgroup",
-			Usage:       "Athena workgroup",
-			Value:       "primary",
-			Destination: &cfg.Workgroup,
-		},
-		&cli.StringFlag{
-			Name:        "region",
-			Usage:       "AWS region; defaults to the ambient credential chain",
-			Destination: &cfg.Region,
-		},
-		&cli.StringFlag{
-			Name:        "output-location",
-			Aliases:     []string{"results"},
-			Usage:       "S3 prefix for Athena query results; unset defers to the workgroup setting",
-			Destination: &cfg.OutputLocation,
-		},
-	}
+// registerAthenaConfigFlags creates the CLI interface to configure [athena.Config].
+func registerAthenaConfigFlags(cmd *kingpin.CmdClause, cfg *athena.Config) {
+	cmd.Flag("database", "Database holding both tables").
+		Required().
+		StringVar(&cfg.Database)
+
+	cmd.Flag("workgroup", "Athena workgroup").
+		Default("primary").
+		StringVar(&cfg.Workgroup)
+
+	cmd.Flag("region", "AWS region; defaults to the ambient credential chain").
+		StringVar(&cfg.Region)
+
+	cmd.Flag("results", "S3 prefix for Athena query results; unset defers to the workgroup setting").
+		StringVar(&cfg.OutputLocation)
 }
 
-// newMigrateCommand builds the migrate subcommand.
-func NewMigrateCommand() *cli.Command {
-	c := &migrateCommand{
-		to: time.Now(),
+// NewMigrateCommand registers the migrate subcommand on app.
+func NewMigrateCommand(app *kingpin.Application) *MigrateCommand {
+	c := &MigrateCommand{
+		to: time.Now().UTC(),
 	}
 
-	return &cli.Command{
-		Name:  "migrate",
-		Usage: "Copy one table of JSONL test records into Parquet, one day at a time",
-		Arguments: []cli.Argument{
-			&cli.StringArg{
-				Name:        "type",
-				Required:    true,
-				Destination: &c.table.Type,
-			},
-		},
-		Flags: append([]cli.Flag{
-			&cli.StringFlag{
-				Name:        "source",
-				Aliases:     []string{"src"},
-				Usage:       "JSONL table to read",
-				Required:    true,
-				Destination: &c.table.Source,
-			},
-			&cli.StringFlag{
-				Name:        "destination",
-				Aliases:     []string{"dst"},
-				Usage:       "Parquet table to write",
-				Required:    true,
-				Destination: &c.table.Destination,
-			},
+	c.cmd = app.Command("migrate", "Copy one table of JSONL test records into Parquet, one day at a time")
 
-			&cli.TimestampFlag{
-				Name:  "to",
-				Usage: "Last day to migrate, inclusive (YYYY-MM-DD)",
-				Config: cli.TimestampConfig{
-					Layouts:  []string{time.DateOnly},
-					Timezone: time.UTC,
-				},
-				Destination: &c.to,
-				Value:       time.Now().UTC(),
-				DefaultText: "now",
-			},
-			&cli.BoolFlag{
-				Name:        "dryrun",
-				Aliases:     []string{"dry"},
-				Usage:       "Print the statements without executing them",
-				Destination: &c.dryRun,
-			},
-		},
-			flagsForAthenaConfig(&c.athenaConfig)...),
+	c.cmd.Arg("type", "Record type, one of "+strings.Join(migrate.Types(), ", ")).
+		Required().
+		EnumVar(&c.table.Type, migrate.Types()...)
 
-		MutuallyExclusiveFlags: []cli.MutuallyExclusiveFlags{
-			{
-				Required: true,
-				Flags: [][]cli.Flag{
-					{
-						&cli.TimestampFlag{
-							Name:  "from",
-							Usage: "First day to migrate (YYYY-MM-DD)",
-							Config: cli.TimestampConfig{
-								Layouts:  []string{time.DateOnly},
-								Timezone: time.UTC,
-							},
-							Destination: &c.from,
-						},
-					},
-					{
-						&cli.IntFlag{
-							Name:        "days",
-							Usage:       "Migrate the last `N` days ending today",
-							Destination: &c.days,
-						},
-					},
-				},
-			},
-		},
+	c.cmd.Flag("source", "JSONL table to read").
+		Required().
+		StringVar(&c.table.Source)
 
-		Action: func(ctx context.Context, cmd *cli.Command) error {
-			return trace.Wrap(c.run(ctx, cmd))
-		},
-	}
+	c.cmd.Flag("destination", "Parquet table to write").
+		Required().
+		StringVar(&c.table.Destination)
+
+	// --from and --days are mutually exclusive, and exactly one is required.
+	// Both conditions are enforced in Run.
+	c.cmd.Flag("from", "First day to migrate (YYYY-MM-DD); mutually exclusive with --days").
+		PlaceHolder("YYYY-MM-DD").
+		IsSetByUser(&c.fromSet).
+		SetValue(&dateValue{target: &c.from})
+
+	c.cmd.Flag("days", "Migrate the last N days ending today; mutually exclusive with --from").
+		PlaceHolder("N").
+		IsSetByUser(&c.daysSet).
+		IntVar(&c.days)
+
+	c.cmd.Flag("to", "Last day to migrate, inclusive (YYYY-MM-DD); defaults to today").
+		PlaceHolder("YYYY-MM-DD").
+		SetValue(&dateValue{target: &c.to})
+
+	c.cmd.Flag("dryrun", "Print the statements without executing them").
+		BoolVar(&c.dryRun)
+
+	registerAthenaConfigFlags(c.cmd, &c.athenaConfig)
+
+	return c
 }
 
-func (c *migrateCommand) run(ctx context.Context, cmd *cli.Command) error {
-	// The record type selects the column list, so an unknown one has no
-	// sensible interpretation. Positional arguments carry no enum constraint,
-	// so check it here.
-	if !slices.Contains(migrate.Types(), c.table.Type) {
-		return trace.BadParameter("unknown record type %q, expected one of %s",
-			c.table.Type, strings.Join(migrate.Types(), ", "))
-	}
+// FullCommand returns the command path used to dispatch on the parse result.
+func (c *MigrateCommand) FullCommand() string {
+	return c.cmd.FullCommand()
+}
 
+func (c *MigrateCommand) Run(ctx context.Context) error {
 	var from time.Time
 	to := c.to
-	if cmd.IsSet("days") {
+
+	switch {
+	case c.fromSet && c.daysSet:
+		return trace.BadParameter("--from and --days are mutually exclusive")
+	case c.daysSet:
 		from = to.AddDate(0, 0, -c.days)
-	} else {
+	case c.fromSet:
 		from = c.from.UTC()
+	default:
+		return trace.BadParameter("one of --from or --days is required")
 	}
 
 	if to.Before(from) {
@@ -201,5 +181,4 @@ func (c *migrateCommand) run(ctx context.Context, cmd *cli.Command) error {
 		From:           from,
 		To:             to,
 	}), "running migration")
-
 }
