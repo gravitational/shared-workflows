@@ -31,18 +31,44 @@ import (
 // migrateCommand copies one table of JSONL test records into its Parquet
 // counterpart over one period.
 type migrateCommand struct {
-	database       string
-	workgroup      string
-	region         string
-	outputLocation string
+	athenaConfig athena.Config
 
 	table migrate.TableMigration
-
-	from time.Time
-	to   time.Time
-	days int
+	from  time.Time
+	to    time.Time
+	days  int
 
 	dryRun bool
+}
+
+// flagsForAthenaConfig creates CLI interface to configure [athena.Config]
+func flagsForAthenaConfig(cfg *athena.Config) []cli.Flag {
+	return []cli.Flag{
+		&cli.StringFlag{
+			Name:        "database",
+			Aliases:     []string{"db"},
+			Usage:       "Database holding both tables",
+			Required:    true,
+			Destination: &cfg.Database,
+		},
+		&cli.StringFlag{
+			Name:        "workgroup",
+			Usage:       "Athena workgroup",
+			Value:       "primary",
+			Destination: &cfg.Workgroup,
+		},
+		&cli.StringFlag{
+			Name:        "region",
+			Usage:       "AWS region; defaults to the ambient credential chain",
+			Destination: &cfg.Region,
+		},
+		&cli.StringFlag{
+			Name:        "output-location",
+			Aliases:     []string{"results"},
+			Usage:       "S3 prefix for Athena query results; unset defers to the workgroup setting",
+			Destination: &cfg.OutputLocation,
+		},
+	}
 }
 
 // newMigrateCommand builds the migrate subcommand.
@@ -61,7 +87,7 @@ func NewMigrateCommand() *cli.Command {
 				Destination: &c.table.Type,
 			},
 		},
-		Flags: []cli.Flag{
+		Flags: append([]cli.Flag{
 			&cli.StringFlag{
 				Name:        "source",
 				Aliases:     []string{"src"},
@@ -75,30 +101,6 @@ func NewMigrateCommand() *cli.Command {
 				Usage:       "Parquet table to write",
 				Required:    true,
 				Destination: &c.table.Destination,
-			},
-			&cli.StringFlag{
-				Name:        "database",
-				Aliases:     []string{"db"},
-				Usage:       "Database holding both tables",
-				Required:    true,
-				Destination: &c.database,
-			},
-			&cli.StringFlag{
-				Name:        "workgroup",
-				Usage:       "Athena workgroup",
-				Value:       "primary",
-				Destination: &c.workgroup,
-			},
-			&cli.StringFlag{
-				Name:        "region",
-				Usage:       "AWS region; defaults to the ambient credential chain",
-				Destination: &c.region,
-			},
-			&cli.StringFlag{
-				Name:        "output-location",
-				Aliases:     []string{"results"},
-				Usage:       "S3 prefix for Athena query results; unset defers to the workgroup setting",
-				Destination: &c.outputLocation,
 			},
 
 			&cli.TimestampFlag{
@@ -119,6 +121,7 @@ func NewMigrateCommand() *cli.Command {
 				Destination: &c.dryRun,
 			},
 		},
+			flagsForAthenaConfig(&c.athenaConfig)...),
 
 		MutuallyExclusiveFlags: []cli.MutuallyExclusiveFlags{
 			{
@@ -176,31 +179,24 @@ func (c *migrateCommand) run(ctx context.Context, cmd *cli.Command) error {
 	}
 
 	fmt.Printf("%s.%s -> %s.%s, %s .. %s\n",
-		c.database, c.table.Source, c.database, c.table.Destination,
+		c.athenaConfig.Database, c.table.Source, c.athenaConfig.Database, c.table.Destination,
 		from.Format(time.DateOnly), to.Format(time.DateOnly))
 
 	var exec athena.Executor
 	var err error
 
-	cfg := athena.Config{
-		Database:       c.database,
-		Workgroup:      c.workgroup,
-		Region:         c.region,
-		OutputLocation: c.outputLocation,
-	}
-
 	if !c.dryRun {
-		if exec, err = athena.NewFromConfig(ctx, cfg); err != nil {
+		if exec, err = athena.NewFromConfig(ctx, c.athenaConfig); err != nil {
 			return trace.Wrap(err, "creating athena client")
 		}
 	} else {
-		if exec, err = athena.NewNoop(ctx, cfg); err != nil {
+		if exec, err = athena.NewNoop(ctx, c.athenaConfig); err != nil {
 			return trace.Wrap(err, "creating no-op client")
 		}
 	}
 
 	return trace.Wrap(migrate.Run(ctx, exec, migrate.Options{
-		Database:       c.database,
+		Database:       c.athenaConfig.Database,
 		TableMigration: c.table,
 		From:           from,
 		To:             to,
