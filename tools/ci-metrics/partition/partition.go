@@ -101,11 +101,11 @@ func PeriodPredicate(alias string, from, to time.Time) (string, error) {
 	}
 
 	switch len(clauses) {
+	case 0:
+		return "", trace.BadParameter("no valid clauses produced (this is a bug)")
 	case 1:
 		return clauses[0], nil
 	default:
 		return "(" + strings.Join(clauses, "\n       OR ") + ")", nil
-	case 0:
-		return "", trace.BadParameter("no valid clauses produced (this is a bug)")
 	}
 }
