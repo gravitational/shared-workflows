@@ -21,15 +21,17 @@ import (
 	"os/signal"
 	"syscall"
 
+	kingpin "github.com/alecthomas/kingpin/v2"
+	"github.com/gravitational/trace"
+
 	"github.com/gravitational/shared-workflows/tools/ci-metrics/cmd/cmds"
-	cli "github.com/urfave/cli/v3"
 )
 
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	if err := run(ctx, os.Args); err != nil {
+	if err := run(ctx, os.Args[1:]); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
@@ -37,34 +39,31 @@ func main() {
 
 // run builds the root command and executes it.
 func run(ctx context.Context, args []string) error {
-	var cancel context.CancelFunc
-	defer func() {
-		if cancel != nil {
-			cancel()
-		}
-	}()
+	app := kingpin.New("ci-metrics", "Compaction and reporting over normalized CI test results")
+	app.HelpFlag.Short('h')
 
-	cmd := &cli.Command{
-		Name:    "ci-metrics",
-		Usage:   "Compaction and reporting over normalized CI test results",
-		Suggest: true,
-		Commands: []*cli.Command{
-			cmds.NewMigrateCommand(),
-		},
-		Flags: []cli.Flag{
-			&cli.DurationFlag{
-				Name:  "timeout",
-				Local: false,
-				Usage: "Maximum execution time (e.g. 30s, 2m); 0 means no timeout",
-			},
-		},
-		Before: func(ctx context.Context, cmd *cli.Command) (context.Context, error) {
-			if timeout := cmd.Duration("timeout"); timeout > 0 {
-				ctx, cancel = context.WithTimeout(ctx, timeout)
-			}
-			return ctx, nil
-		},
+	timeout := app.Flag(
+		"timeout",
+		"Maximum execution time (e.g. 30s, 2m); 0 means no timeout",
+	).Default("0").Duration()
+
+	migrateCmd := cmds.NewMigrateCommand(app)
+
+	command, err := app.Parse(args)
+	if err != nil {
+		return trace.Wrap(err, "parsing command line arguments")
 	}
 
-	return cmd.Run(ctx, args)
+	if *timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, *timeout)
+		defer cancel()
+	}
+
+	switch command {
+	case migrateCmd.FullCommand():
+		return trace.Wrap(migrateCmd.Run(ctx))
+	default:
+		return trace.NotImplemented("unimplemented command %q", command)
+	}
 }
