@@ -5,17 +5,10 @@
 -- rather than a predicate per calendar month. Both sides of the join carry
 -- their own dt, so it is applied twice to prune each.
 --
--- Only runs on the configured branches count, which keeps pull request noise
--- out of the ranking. Merge-queue runs are admitted wholesale and their ref
--- normalised back to the branch they target, so a queued run counts towards
--- that branch.
+-- Both merge queue and target branches are used for filtering, this removes
+-- the noise from the data by excluding PR runs.
 --
--- A test is a flake candidate only when it both passed and failed on the same
--- day, so the scored CTE drops anything that always passed (fails = 0) or
--- always failed (fails = execs) - a consistent failure is broken, not flaky.
---
--- This is kept deliberately identical to the query run by hand against Athena
--- so that the two can be compared directly.
+-- Note that:
 --
 --   * agg groups by branch but scored drops it, so a test flaky on two
 --     branches yields one row per branch
