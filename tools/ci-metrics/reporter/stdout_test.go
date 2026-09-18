@@ -51,7 +51,7 @@ func testDocument() *report.Document {
 						{Name: "SCORE", Align: report.AlignRight},
 					},
 					Rows: []report.Row{
-						{{Text: "1"}, {Text: "TestA"}, {Text: "0.5000", Severity: report.SeverityBad}},
+						{{Text: "1"}, {Text: "TestA"}, {Text: "0.5000"}},
 						{{Text: "2"}, {Text: "TestWithALongName"}, {Text: "0.1000"}},
 					},
 					TotalRows: 2,

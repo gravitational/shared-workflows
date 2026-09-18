@@ -85,22 +85,10 @@ type Column struct {
 	Align Align
 }
 
-// Severity is the significance of a [Cell], which reporters may show as
-// colour or a glyph.
-type Severity int
-
-const (
-	SeverityNone Severity = iota
-	SeverityOK
-	SeverityWarn
-	SeverityBad
-)
-
 // Cell is one value of a [Table], formatted for display.
 type Cell struct {
-	Text     string
-	Link     string
-	Severity Severity
+	Text string
+	Link string
 }
 
 // Metric is a single named figure, optionally with its movement since the
