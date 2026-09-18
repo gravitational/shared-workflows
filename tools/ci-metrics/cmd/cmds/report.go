@@ -17,10 +17,8 @@ package cmds
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"slices"
-	"strings"
 	"time"
 
 	kingpin "github.com/alecthomas/kingpin/v2"
@@ -54,13 +52,6 @@ type ReportCommand struct {
 	// kingpin does not support mutually exclusive flag groups.
 	fromSet bool
 	daysSet bool
-
-	only      []string
-	reporters []string
-
-	// out is where reports and the run header are written. A nil out means
-	// [os.Stdout]; tests set it to capture the output.
-	out io.Writer
 }
 
 // NewReportCommand registers the report subcommand on app.
@@ -99,15 +90,6 @@ func NewReportCommand(app *kingpin.Application) *ReportCommand {
 		IsSetByUser(&c.daysSet).
 		IntVar(&c.days)
 
-	c.cmd.Flag("only", "Run only the named report(s), repeatable").
-		PlaceHolder("REPORT").
-		StringsVar(&c.only)
-
-	c.cmd.Flag("reporter", "Override every configured destination with the given reporter "+
-		"type(s), repeatable; use this to iterate locally without posting anywhere").
-		PlaceHolder("TYPE").
-		StringsVar(&c.reporters)
-
 	registerAthenaConfigFlags(c.cmd, &c.athenaConfig)
 
 	return c
@@ -128,18 +110,7 @@ func (c *ReportCommand) Run(ctx context.Context) error {
 	return trace.Wrap(c.run(ctx))
 }
 
-// writer resolves where to send report output, falling back to stdout when the
-// command carries no writer of its own.
-func (c *ReportCommand) writer() io.Writer {
-	if c.out != nil {
-		return c.out
-	}
-	return os.Stdout
-}
-
 func (c *ReportCommand) run(ctx context.Context) error {
-	out := c.writer()
-
 	from, to, err := c.window()
 	if err != nil {
 		return trace.Wrap(err)
@@ -152,12 +123,7 @@ func (c *ReportCommand) run(ctx context.Context) error {
 		To:       to,
 	}
 
-	selected, err := c.selectReports()
-	if err != nil {
-		return trace.Wrap(err)
-	}
-
-	sinks, byName, err := c.buildReporters(out, selected)
+	sinks, byName, err := c.buildReporters()
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -178,14 +144,11 @@ func (c *ReportCommand) run(ctx context.Context) error {
 		return trace.Wrap(err)
 	}
 
-	if _, err := fmt.Fprintf(out, "%s, %s .. %s, reporters: %s\n",
-		c.athenaConfig.Database, report.Day(from), report.Day(to), sinks.Name()); err != nil {
-		return trace.Wrap(err, "writing header")
-	}
+	fmt.Printf("%s, %s .. %s, reporters: %s\n",
+		c.athenaConfig.Database, report.Day(from), report.Day(to), sinks.Name())
 
-	// One failing report should not hide the others, so collect and continue.
 	var errs []error
-	for _, rc := range selected {
+	for _, rc := range c.reportConfig.Reports {
 		def, ok := report.Get(rc.Name)
 		if !ok {
 			errs = append(errs, trace.BadParameter("unknown report %q", rc.Name))
@@ -261,60 +224,13 @@ func (c *ReportCommand) window() (from, to time.Time, err error) {
 	return from, to, nil
 }
 
-// selectReports applies --only to the configured reports.
-func (c *ReportCommand) selectReports() ([]report.ReportConfig, error) {
-	if len(c.only) == 0 {
-		return c.reportConfig.Reports, nil
-	}
-
-	var out []report.ReportConfig
-	seen := make(map[string]struct{}, len(c.only))
-	for _, name := range c.only {
-		i := slices.IndexFunc(c.reportConfig.Reports, func(r report.ReportConfig) bool {
-			return r.Name == name
-		})
-		if i < 0 {
-			return nil, trace.BadParameter(
-				"--only %s is not a configured report; configured: %s",
-				name, configuredNames(c.reportConfig.Reports))
-		}
-		// Repeating --only must not deliver the same document twice.
-		if _, dup := seen[name]; dup {
-			continue
-		}
-		seen[name] = struct{}{}
-		out = append(out, c.reportConfig.Reports[i])
-	}
-
-	return out, nil
-}
-
 // buildReporters constructs the destinations the selected reports will use.
 //
 // It returns every reporter as a [reporter.Multi] for preflight and close, and
 // a per-name index so each report can be sent only to its own destinations.
-// When --reporter overrides the config there are no names to index, so the
-// index is nil and every report goes to the same set.
-//
-// Only the reporters the selected reports actually name are built, so a
-// configured destination that nothing in this run refers to cannot fail it.
-func (c *ReportCommand) buildReporters(
-	out io.Writer, selected []report.ReportConfig,
-) (reporter.Multi, map[string]reporter.Reporter, error) {
-	if len(c.reporters) > 0 {
-		var all reporter.Multi
-		for _, typ := range c.reporters {
-			r, err := reporter.New(typ, report.ReporterConfig{Type: typ}, out)
-			if err != nil {
-				return nil, nil, trace.Wrap(err, "--reporter %s", typ)
-			}
-			all = append(all, r)
-		}
-		return all, nil, nil
-	}
-
+func (c *ReportCommand) buildReporters() (reporter.Multi, map[string]reporter.Reporter, error) {
 	var names []string
-	for _, rc := range selected {
+	for _, rc := range c.reportConfig.Reports {
 		for _, name := range rc.Reporters {
 			if !slices.Contains(names, name) {
 				names = append(names, name)
@@ -332,7 +248,7 @@ func (c *ReportCommand) buildReporters(
 			return nil, nil, trace.BadParameter("undefined reporter %q", name)
 		}
 
-		r, err := reporter.New(name, cfg, out)
+		r, err := reporter.New(name, cfg, os.Stdout)
 		if err != nil {
 			return nil, nil, trace.Wrap(err)
 		}
@@ -357,31 +273,18 @@ func selectSinks(byName map[string]reporter.Reporter, names []string) (reporter.
 }
 
 // executor builds the Athena client, or its no-op stand-in under --dryrun.
-func (c *ReportCommand) executor(ctx context.Context) (athena.Executor, error) {
+func (c *ReportCommand) executor(ctx context.Context) (exe athena.Executor, err error) {
 	if c.dryRun {
-		q, err := athena.NewNoop(ctx, c.athenaConfig)
+		exe, err = athena.NewNoop(ctx, c.athenaConfig)
 		if err != nil {
 			return nil, trace.Wrap(err, "creating no-op client")
 		}
-		return q, nil
+	} else {
+		exe, err = athena.NewFromConfig(ctx, c.athenaConfig)
+		if err != nil {
+			return nil, trace.Wrap(err, "creating athena client")
+		}
 	}
 
-	q, err := athena.NewFromConfig(ctx, c.athenaConfig)
-	if err != nil {
-		return nil, trace.Wrap(err, "creating athena client")
-	}
-	return q, nil
-}
-
-// configuredNames renders the configured report names for an error message.
-func configuredNames(reports []report.ReportConfig) string {
-	if len(reports) == 0 {
-		return "(none)"
-	}
-
-	names := make([]string, 0, len(reports))
-	for _, r := range reports {
-		names = append(names, r.Name)
-	}
-	return strings.Join(names, ", ")
+	return
 }
