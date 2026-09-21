@@ -29,10 +29,10 @@ import (
 	"github.com/gravitational/trace"
 )
 
-// isCRDRegex matches Teleport operator CRD file paths.
+// isTeleportCRDRegex matches Teleport operator CRD file paths.
 // Those files receive a special treatment as they're automatically generated.
 var (
-	isCRDRegex               = regexp.MustCompile(`.*/resources\.teleport\.dev_[[:alnum:]]+\.yaml$`)
+	isTeleportCRDRegex       = regexp.MustCompile(`.*/resources\.teleport\.dev_[[:alnum:]]+\.yaml$`)
 	isTerraformSchemaRegexp  = regexp.MustCompile(`integrations/terraform/tfschema/.+_terraform.go$`)
 	isOperatorDeepCopyRegexp = regexp.MustCompile(`integrations/operator/apis/resources/.+/zz_generated.deepcopy.go$`)
 )
@@ -287,10 +287,11 @@ func skipFileForSizeCheck(name string) bool {
 		strings.HasSuffix(name, "derived.gen.go") ||
 		strings.Contains(name, "vendor/") ||
 		strings.Contains(name, "integrations/operator/crdgen/testdata/") ||
+		strings.Contains(name, "/testdata/crds/") ||
 		strings.HasPrefix(name, "docs/pages/reference/infrastructure-as-code/terraform-provider/") ||
 		strings.HasPrefix(name, "docs/pages/reference/infrastructure-as-code/operator-resources/") ||
 		strings.HasPrefix(name, "docs/pages/includes/helm-reference/") ||
-		isCRDRegex.MatchString(name) ||
+		isTeleportCRDRegex.MatchString(name) ||
 		isTerraformSchemaRegexp.MatchString(name) ||
 		isOperatorDeepCopyRegexp.MatchString(name)
 }
