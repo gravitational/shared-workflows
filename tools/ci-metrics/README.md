@@ -59,6 +59,12 @@ ci-metrics report --database example_db --config reports.yaml --days 7 --dryrun
 
 See [`docs/reports.example.yaml`](docs/reports.example.yaml) for the config format.
 
+#### The `flaky` report
+
+Ranks tests by a flake score, `4*p*(1-p)*execs/(execs+K)`, and emits two views
+of the same window: a rollup over the window's totals, followed by one table
+per day.
+
 
 ## Local Dev
 
