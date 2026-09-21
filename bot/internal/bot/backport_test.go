@@ -18,6 +18,7 @@ package bot
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -102,7 +103,7 @@ func TestBackport(t *testing.T) {
 
 | Branch | Result |
 |--------|--------|
-| branch/v7 | [Create PR](https://github.com/foo/bar/compare/branch/v7...bot/backport-42-branch/v7?body=Backport+%2342+to+branch%2Fv7&expand=1&labels=no-changelog&title=%5Bv7%5D+Best+PR) |
+| branch/v7 | [Create PR](https://github.com/foo/bar/compare/branch/v7...bot/backport-42-branch/v7?body=Backport+%2342+to+branch%2Fv7&expand=1&labels=no-changelog&labels=no-test-plan&title=%5Bv7%5D+Best+PR) |
 `, comments[0].Body)
 			},
 		},
@@ -115,6 +116,60 @@ func TestBackport(t *testing.T) {
 					Number:       42,
 					UnsafeTitle:  "Best PR",
 					UnsafeBody:   "This is PR body\n\nchangelog: important change",
+					UnsafeLabels: []string{"backport/branch/v7"},
+				},
+				jobs: []github.Job{{Name: "Job1", ID: 1}},
+			},
+			assertFunc: func(t require.TestingT, i interface{}, i2 ...interface{}) {
+				comments, ok := i.([]github.Comment)
+				require.True(t, ok)
+				require.Len(t, comments, 1)
+				require.Equal(t,
+					`
+@dev See the table below for backport results.
+
+| Branch | Result |
+|--------|--------|
+| branch/v7 | [Create PR](https://github.com/foo/bar/compare/branch/v7...bot/backport-42-branch/v7?body=Backport+%2342+to+branch%2Fv7%0A%0Achangelog%3A+important+change%0A&expand=1&labels=no-test-plan&title=%5Bv7%5D+Best+PR) |
+`, comments[0].Body)
+			},
+		},
+		{
+			desc: "pr with backport label, changelog and manual test plan",
+			github: &fakeGithub{
+				pull: github.PullRequest{
+					Author:       "dev",
+					Repository:   "Teleport",
+					Number:       42,
+					UnsafeTitle:  "Best PR",
+					UnsafeBody:   "This is PR body\n\nchangelog: important change\n\n## Manual Test Plan\n### Test Environment\nstaging\n### Test Cases\n- [x] login works",
+					UnsafeLabels: []string{"backport/branch/v7"},
+				},
+				jobs: []github.Job{{Name: "Job1", ID: 1}},
+			},
+			assertFunc: func(t require.TestingT, i interface{}, i2 ...interface{}) {
+				comments, ok := i.([]github.Comment)
+				require.True(t, ok)
+				require.Len(t, comments, 1)
+				require.Equal(t,
+					`
+@dev See the table below for backport results.
+
+| Branch | Result |
+|--------|--------|
+| branch/v7 | [Create PR](https://github.com/foo/bar/compare/branch/v7...bot/backport-42-branch/v7?body=Backport+%2342+to+branch%2Fv7%0A%0Achangelog%3A+important+change%0A%0A%23%23+Manual+Test+Plan%0A%23%23%23+Test+Environment%0Astaging%0A%23%23%23+Test+Cases%0A-+%5Bx%5D+login+works&expand=1&title=%5Bv7%5D+Best+PR) |
+`, comments[0].Body)
+			},
+		},
+		{
+			desc: "pr with backport label and a manual test plan too long for the link",
+			github: &fakeGithub{
+				pull: github.PullRequest{
+					Author:       "dev",
+					Repository:   "Teleport",
+					Number:       42,
+					UnsafeTitle:  "Best PR",
+					UnsafeBody:   "This is PR body\n\nchangelog: important change\n\n## Manual Test Plan\n### Test Environment\nstaging\n### Test Cases\n" + strings.Repeat("- [x] login works\n", 500),
 					UnsafeLabels: []string{"backport/branch/v7"},
 				},
 				jobs: []github.Job{{Name: "Job1", ID: 1}},
