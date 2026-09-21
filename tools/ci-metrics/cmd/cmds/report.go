@@ -34,7 +34,7 @@ import (
 const defaultWindowDays = 14
 
 // ReportCommand runs the flaky test report over the normalized test records
-// and writes it to stdout.
+// and writes it to stdout, and to Slack when a channel is given.
 //
 // The orchestration lives here rather than in the report package because this
 // is the composition root: reporter imports report for the document type, so
@@ -45,6 +45,7 @@ type ReportCommand struct {
 	athenaConfig athena.Config
 	tables       report.Tables
 	params       report.FlakyParams
+	slack        reporter.SlackConfig
 
 	dryRun bool
 
@@ -113,6 +114,19 @@ func NewReportCommand(app *kingpin.Application) *ReportCommand {
 		Default(report.DefaultTestcasesTable).
 		StringVar(&c.tables.Testcases)
 
+	c.cmd.Flag("slack-channel", "If specified also send report to Slack channel.").
+		Envar(reporter.SlackChannelEnv).
+		PlaceHolder("CHANNEL").
+		StringVar(&c.slack.Channel)
+
+	c.cmd.Flag("slack-username", "Display name for the Slack message; needs the chat:write.customize scope").
+		StringVar(&c.slack.Username)
+
+	c.cmd.Flag("slack-icon-emoji", "Avatar emoji for the Slack message,"+
+		"needs the chat:write.customize scope").
+		Default(":chart_with_upwards_trend:").
+		StringVar(&c.slack.IconEmoji)
+
 	registerAthenaConfigFlags(c.cmd, &c.athenaConfig)
 
 	return c
@@ -130,7 +144,10 @@ func (c *ReportCommand) Run(ctx context.Context) error {
 		return trace.Wrap(err)
 	}
 
-	sinks := reporter.Multi{reporter.NewStdout(reporter.TypeStdout, os.Stdout, 0)}
+	sinks, err := c.reporters()
+	if err != nil {
+		return trace.Wrap(err, "building reporters")
+	}
 	defer func() {
 		if err := sinks.Close(); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: closing reporters: %v\n", err)
@@ -148,9 +165,9 @@ func (c *ReportCommand) Run(ctx context.Context) error {
 		return trace.Wrap(err)
 	}
 
-	fmt.Printf("%s, %s, %s .. %s, branches: %s\n",
+	fmt.Printf("%s, %s, %s .. %s, branches: %s, reporters: %s\n",
 		report.FlakyName, c.athenaConfig.Database, report.Day(from), report.Day(to),
-		strings.Join(c.params.Branches, ","))
+		strings.Join(c.params.Branches, ","), sinks.Name())
 
 	scope := report.Scope{
 		Database: c.athenaConfig.Database,
@@ -170,6 +187,25 @@ func (c *ReportCommand) Run(ctx context.Context) error {
 	}
 
 	return trace.Wrap(sinks.Report(ctx, doc), "reporting %s", report.FlakyName)
+}
+
+// reporters builds the destinations: stdout always, Slack when a channel is
+// given.
+func (c *ReportCommand) reporters() (reporter.Multi, error) {
+	sinks := reporter.Multi{reporter.NewStdout(reporter.TypeStdout, os.Stdout, 0)}
+
+	if c.slack.Channel == "" {
+		return sinks, nil
+	}
+
+	cfg := c.slack
+	cfg.Token = os.Getenv(reporter.SlackTokenEnv)
+	slack, err := reporter.NewSlack(reporter.TypeSlack, cfg)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	return append(sinks, slack), nil
 }
 
 // window resolves the reporting period from flags.
