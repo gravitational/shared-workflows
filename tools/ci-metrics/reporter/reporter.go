@@ -40,7 +40,7 @@ type Preflighter interface {
 
 // Types returns every reporter type the config supports
 func Types() []string {
-	return []string{TypeStdout}
+	return []string{TypeStdout, TypeSlack}
 }
 
 // New builds the reporter described by [report.ReporterConfig].
@@ -48,6 +48,8 @@ func New(name string, cfg report.ReporterConfig, out io.Writer) (Reporter, error
 	switch cfg.Type {
 	case TypeStdout:
 		return NewStdout(name, out, cfg.MaxRows), nil
+	case TypeSlack:
+		return NewSlack(name, cfg)
 	default:
 		return nil, trace.BadParameter(
 			"reporter %s has unknown type %q, want one of %s",

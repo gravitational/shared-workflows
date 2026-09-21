@@ -59,10 +59,28 @@ type WindowConfig struct {
 
 // ReporterConfig describes one [reporter.Reporter].
 type ReporterConfig struct {
-	// Type names the kind of destination, such as "stdout".
+	// Type names the kind of destination, such as "stdout" or "slack".
 	Type string `yaml:"type"`
 	// MaxRows caps rows rendered per table.
 	MaxRows int `yaml:"max_rows"`
+	// Slack configures a reporter of type "slack"
+	Slack SlackConfig `yaml:"slack"`
+}
+
+// SlackConfig configures a reporter of type "slack".
+type SlackConfig struct {
+	// Channel is the channel to post to, as an ID such as C0123456789 or a name
+	// such as #ci-metrics
+	Channel string `yaml:"channel"`
+	// TokenEnv names the environment variable holding the bot token
+	// (xoxb-...). Defaults to SLACK_BOT_TOKEN.
+	TokenEnv string `yaml:"token_env"`
+	// Username overrides the bot's display name for these messages. Requires
+	// the chat:write.customize scope.
+	Username string `yaml:"username"`
+	// IconEmoji overrides the bot's avatar, such as ":chart_with_upwards_trend:".
+	// Requires the chat:write.customize scope.
+	IconEmoji string `yaml:"icon_emoji"`
 }
 
 // ReportConfig tunes one report and names its destinations.

@@ -75,17 +75,17 @@ func flakyRollupRender(scope Scope, params any, results map[string]*athena.Resul
 		return doc, nil
 	}
 
-	// Ordered by score, so the first row is the worst test.
-	worst := rows[0].TestName
+	// Ordered by score, so the first row is the flakiest test.
+	flakiest := rows[0].TestName
 	distinct := distinctFlakyTests(rows)
 
-	doc.Headline = Int(int64(distinct)) + " flaky test(s) over the window; worst " + worst
+	doc.Headline = Int(int64(distinct)) + " flaky test(s) over the window; flakiest " + flakiest
 
 	doc.Sections = append(doc.Sections, Section{
 		Heading: "Summary",
 		Metrics: []Metric{
 			{Name: "Flaky tests listed", Value: Int(int64(distinct))},
-			{Name: "Worst test", Value: worst},
+			{Name: "Flakiest test", Value: flakiest},
 		},
 		Notes: append(flakyScoreNotes(p, "over the window"),
 			"Scores are the window's totals, not a sum or average of the daily "+

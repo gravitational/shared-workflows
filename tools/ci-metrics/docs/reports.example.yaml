@@ -19,11 +19,20 @@ reporters:
     type: stdout
     max_rows: 25
 
+  slack:
+    type: slack
+    max_rows: 15
+    slack:
+      channel: <ID or channel name>
+      token_env: CI_METRICS_SLACK_TOKEN
+      username: ci-metrics
+      icon_emoji: ":chart_with_upwards_trend:"
+
 # Keyed by report name. Listing one enables it; the body only tunes it.
 reports:
   # Ranks tests over the window's totals.
   flaky_rollup:
-    reporters: [console]
+    reporters: [console,slack]
     params:
       # Minimum executions before a test is considered at all, so a test that
       # ran twice cannot top the table. Counted across the window here.
@@ -43,7 +52,7 @@ reports:
 
   # Ranks tests within each day, one table per day.
   flaky_daily:
-    reporters: [console]
+    reporters: [console,slack]
     params:
       # Counted within the day here, so this is the stricter of the two.
       min_execs: 10

@@ -84,6 +84,46 @@ reports:
 	assert.Equal(t, []string{"console"}, cfg.Reports[FlakyRollupName].Reporters)
 }
 
+func TestLoadConfigReadsSlackReporters(t *testing.T) {
+	t.Parallel()
+
+	path := writeConfig(t, `
+reporters:
+  ci-health:
+    type: slack
+    max_rows: 15
+    slack:
+      channel: FOOBAR
+      token_env: CI_METRICS_SLACK_TOKEN
+      username: ci-metrics
+      icon_emoji: ":chart_with_upwards_trend:"
+  quiet:
+    type: slack
+    slack:
+      channel: BARFOO
+reports:
+  flaky_rollup:
+    reporters: [ci-health]
+  flaky_daily:
+    reporters: [ci-health, quiet]
+`)
+
+	cfg, err := LoadConfig(path)
+	require.NoError(t, err)
+
+	require.Contains(t, cfg.Reporters, "ci-health")
+	loud := cfg.Reporters["ci-health"]
+	assert.Equal(t, "slack", loud.Type)
+	assert.Equal(t, 15, loud.MaxRows)
+	assert.Equal(t, "FOOBAR", loud.Slack.Channel)
+	assert.Equal(t, "CI_METRICS_SLACK_TOKEN", loud.Slack.TokenEnv)
+	assert.Equal(t, "ci-metrics", loud.Slack.Username)
+	assert.Equal(t, ":chart_with_upwards_trend:", loud.Slack.IconEmoji)
+	require.Contains(t, cfg.Reporters, "quiet")
+	assert.Equal(t, []string{"ci-health"}, cfg.Reports[FlakyRollupName].Reporters)
+	assert.Equal(t, []string{"ci-health", "quiet"}, cfg.Reports[FlakyDailyName].Reporters)
+}
+
 func TestDecodeParams(t *testing.T) {
 	t.Parallel()
 

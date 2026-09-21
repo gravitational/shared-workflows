@@ -59,6 +59,57 @@ ci-metrics report flaky_daily --database example_db --config reports.yaml --days
 
 See [`docs/reports.example.yaml`](docs/reports.example.yaml) for the config format.
 
+#### Reporters
+
+A report writes to every reporter it names under `reporters:`, or to all of
+them when it names none. Reporters are named instances to allow multiple instances of
+the same type.
+
+#### The `slack` reporter
+
+Posts the document as Block Kit blocks: one message carrying the report's
+title, and other section in a seperate thread reply to avoid huge messages.
+
+Tables go in a [markdown block][mdblock], which Slack lays out as a real table.
+
+```yaml
+reporters:
+  example:
+    type: slack
+    # Caps the rows posted per table. Reports can be much longer than a
+    # channel wants.
+    max_rows: 15
+    slack:
+      channel: <id or name>
+      token_env: CI_METRICS_SLACK_TOKEN
+      username: ci-metrics
+      icon_emoji: ":chart_with_upwards_trend:"
+
+reports:
+  flaky_rollup:
+    reporters: [example]
+```
+
+Example invocation:
+
+```sh
+export CI_METRICS_SLACK_TOKEN=xoxb-...
+ci-metrics report flaky_rollup --database example_db --config reports.yaml
+```
+
+Setting it up in Slack:
+
+1. Create an app at <https://api.slack.com/apps> and add the `chat:write` bot
+   token scope, plus `chat:write.customize` if you set `username` or
+   `icon_emoji`.
+2. Install the app to the workspace and copy the bot token (`xoxb-...`) into
+   the environment variable named by `token_env`.
+3. Invite the bot to the channel with `/invite @your-app`. Missing this is the
+   most common failure, and it surfaces as a `not_in_channel` error at report
+   time.
+
+[mdblock]: https://docs.slack.dev/reference/block-kit/blocks/markdown-block/
+
 
 ## Local Dev
 
