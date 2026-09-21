@@ -21,12 +21,14 @@ reports:
   - name: flaky
     reporters: [console]
     params:
-      # Minimum executions in a day before a test is considered at all, so a
-      # test that ran twice cannot top the table.
+      # Minimum executions before a test is considered at all, so a test that
+      # ran twice cannot top the table. Counted within the day for the daily
+      # tables and across the whole window for the rollup.
       min_execs: 10
       # The K in the score's execs/(execs+K)
       smoothing: 20
-      # How many tests to keep per day.
+      # How many tests to keep, applied to the window rollup and to each day
+      # separately.
       top: 20
       # Refs whose runs count, as full refs. A merge-queue run targeting one
       # of these counts towards it, so pull request noise stays out of the
