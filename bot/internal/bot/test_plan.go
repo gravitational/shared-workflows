@@ -57,19 +57,26 @@ func (b *Bot) ValidateManualTestPlan(ctx context.Context) error {
 	return nil
 }
 
-// validateTestPlanContents validates that the PR body contains a well-formed manual test plan section.
-func validateTestPlanContents(body string) error {
-	// Find the ## Manual Test Plan heading.
+// getManualTestPlan extracts the manual test plan, including its heading, up to
+// the next same-level or higher heading. It returns an empty string if absent.
+func getManualTestPlan(body string) string {
 	loc := testPlanHeadingRegex.FindStringIndex(body)
 	if loc == nil {
-		return trace.BadParameter(`The PR description must contain a "Manual Test Plan" section, please add one, or a "no-test-plan" label if a test plan does not apply to this change`)
+		return ""
 	}
 
-	// Extract section content from after the heading to the next same-level or higher heading.
-	sectionStart := loc[1]
-	section := body[sectionStart:]
-	if nextLoc := nextHeadingRegex.FindStringIndex(section); nextLoc != nil {
-		section = section[:nextLoc[0]]
+	sectionEnd := len(body)
+	if nextLoc := nextHeadingRegex.FindStringIndex(body[loc[1]:]); nextLoc != nil {
+		sectionEnd = loc[1] + nextLoc[0]
+	}
+	return strings.TrimSpace(body[loc[0]:sectionEnd])
+}
+
+// validateTestPlanContents validates that the PR body contains a well-formed manual test plan section.
+func validateTestPlanContents(body string) error {
+	section := getManualTestPlan(body)
+	if section == "" {
+		return trace.BadParameter(`The PR description must contain a "Manual Test Plan" section, please add one, or a "no-test-plan" label if a test plan does not apply to this change`)
 	}
 
 	// Find the ### Test Environment sub-heading and verify it has content.

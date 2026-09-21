@@ -118,6 +118,11 @@ func (b *Bot) Backport(ctx context.Context) error {
 				bodyText += fmt.Sprintf("%s%s\n", ChangelogPrefix, entry)
 			}
 		}
+		if testPlan := getManualTestPlan(pull.UnsafeBody); testPlan != "" {
+			// Changelog entries are handled separately, even when written below the test plan.
+			testPlan = strings.TrimSpace(regexp.MustCompile(ChangelogRegex).ReplaceAllString(testPlan, ""))
+			bodyText = strings.TrimRight(bodyText, "\n") + "\n\n" + testPlan
+		}
 
 		rows = append(rows, row{
 			Branch: base,

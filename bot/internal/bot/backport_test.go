@@ -18,6 +18,8 @@ package bot
 
 import (
 	"context"
+	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -144,6 +146,58 @@ func TestBackport(t *testing.T) {
 
 			comments, _ := b.c.GitHub.ListComments(nil, "", "", 0)
 			test.assertFunc(t, comments)
+		})
+	}
+
+	const testPlan = `## Manual Test Plan
+
+### Test Environment
+
+staging
+
+### Test Cases
+- [x] Verify login works
+- [ ] Verify reconnect works`
+	const backportBody = "Backport #42 to branch/v18\n\n"
+
+	for _, test := range []struct {
+		desc     string
+		body     string
+		wantBody string
+	}{
+		{
+			desc:     "with trailing changelog",
+			body:     "PR summary\n\n" + testPlan + "\n\nchangelog: important change\n\n## Other Section\nDo not copy this.",
+			wantBody: backportBody + "changelog: important change\n\n" + testPlan,
+		},
+		{
+			desc:     "without changelog",
+			body:     "PR summary\n\n" + testPlan + "\n",
+			wantBody: backportBody + testPlan,
+		},
+	} {
+		t.Run("manual test plan/"+test.desc, func(t *testing.T) {
+			gh := &fakeGithub{
+				pull: github.PullRequest{
+					UnsafeTitle:  "Best PR",
+					UnsafeBody:   test.body,
+					UnsafeLabels: []string{"backport/branch/v18"},
+				},
+				jobs: []github.Job{{Name: "Job1", ID: 1}},
+			}
+			b, ctx := buildTestBot(gh)
+			require.NoError(t, b.Backport(ctx))
+
+			comments, err := gh.ListComments(ctx, "", "", 0)
+			require.NoError(t, err)
+			require.Len(t, comments, 1)
+			_, link, found := strings.Cut(comments[0].Body, "[Create PR](")
+			require.True(t, found)
+			link, _, found = strings.Cut(link, ")")
+			require.True(t, found)
+			u, err := url.Parse(link)
+			require.NoError(t, err)
+			require.Equal(t, test.wantBody, u.Query().Get("body"))
 		})
 	}
 }
