@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	go_github "github.com/google/go-github/v37/github"
+	go_github "github.com/google/go-github/v89/github"
 	"github.com/stretchr/testify/require"
 )
 
@@ -129,9 +129,12 @@ func TestFindTreeBlobEntries(t *testing.T) {
 func testClient(t *testing.T, handler func(*http.Request) (*http.Response, error)) *Client {
 	t.Helper()
 
-	return &Client{client: go_github.NewClient(&http.Client{
-		Transport: fileListTransport(handler),
-	})}
+	newClient, err := go_github.NewClient(
+		go_github.WithHTTPClient(&http.Client{Transport: fileListTransport(handler)}),
+	)
+	require.NoError(t, err)
+
+	return &Client{client: newClient}
 }
 
 type fileListTransport func(*http.Request) (*http.Response, error)
