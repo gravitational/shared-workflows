@@ -142,7 +142,7 @@ func TestBackport(t *testing.T) {
 			err := b.Backport(ctx)
 			require.NoError(t, err)
 
-			comments, _ := b.c.GitHub.ListComments(nil, "", "", 0)
+			comments, _ := b.c.GitHub.ListComments(ctx, "", "", 0)
 			test.assertFunc(t, comments)
 		})
 	}

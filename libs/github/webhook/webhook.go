@@ -120,7 +120,9 @@ func NewHandler(eventHandler EventHandler, opts ...Opt) (*Handler, error) {
 		eventHandler: eventHandler,
 	}
 	for _, opt := range opts {
-		opt(&h)
+		if err := opt(&h); err != nil {
+			return nil, err
+		}
 	}
 
 	if !h.payloadValidationDisabled && len(h.secretToken) == 0 {

@@ -48,7 +48,7 @@ func (b *Bot) CheckDocsPathsForMissingRedirects(ctx context.Context, teleportClo
 	if err != nil {
 		return trace.BadParameter("unable to load Teleport documentation config at %v: %v", teleportClonePath, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	var c DocsConfig
 	if err := json.NewDecoder(f).Decode(&c); err != nil {

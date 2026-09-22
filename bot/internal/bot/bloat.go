@@ -164,16 +164,16 @@ func renderMarkdownTable(w io.Writer, data map[string]result) error {
 	// write the heading and title
 	buf := bytes.NewBufferString("# Bloat Check Results\n")
 	row := []any{"Binary", "Base Size", "Current Size", "Change"}
-	buf.WriteString(fmt.Sprintf(format, row...))
+	fmt.Fprintf(buf, format, row...)
 
 	// write the delimiter
 	row = []interface{}{"", "", "", ""}
-	buf.WriteString(strings.Replace(fmt.Sprintf(format, row...), " ", "-", -1))
+	buf.WriteString(strings.ReplaceAll(fmt.Sprintf(format, row...), " ", "-"))
 
 	// write the rows
 	for k, column := range data {
 		row := []interface{}{k, column.baseSize, column.currentSize, column.change}
-		buf.WriteString(fmt.Sprintf(format, row...))
+		fmt.Fprintf(buf, format, row...)
 	}
 
 	_, err := w.Write(buf.Bytes())

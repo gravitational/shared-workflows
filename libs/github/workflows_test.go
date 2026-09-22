@@ -58,7 +58,9 @@ func TestWorkflowDispatch(t *testing.T) {
 					w.WriteHeader(tt.mockStatus)
 					return
 				}
-				respondWithJSONTestdata(w, tt.mockResponse)
+				if err := respondWithJSONTestdata(w, tt.mockResponse); err != nil {
+					t.Errorf("responding with testdata %q: %v", tt.mockResponse, err)
+				}
 			})
 
 			client, closer := newFakeClient(mux)

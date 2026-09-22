@@ -70,7 +70,7 @@ func (c *Client) ReviewDeploymentProtectionRule(ctx context.Context, org, repo s
 
 	if err != nil {
 		errBody := errorFromBody(resp.Body)
-		switch resp.Response.StatusCode {
+		switch resp.StatusCode {
 		case http.StatusUnprocessableEntity:
 			// This case can occur if there are no pending deployments for the given run ID.
 			return errors.Join(ErrNoPendingDeployments, errBody)
