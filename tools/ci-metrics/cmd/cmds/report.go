@@ -18,7 +18,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"slices"
+	"strings"
 	"time"
 
 	kingpin "github.com/alecthomas/kingpin/v2"
@@ -29,8 +29,8 @@ import (
 	"github.com/gravitational/shared-workflows/tools/ci-metrics/reporter"
 )
 
-// ReportCommand runs statistical reports over the normalized test records and
-// writes them to the configured destinations.
+// ReportCommand runs one statistical report over the normalized test records
+// and writes it to the configured destinations.
 //
 // The orchestration lives here rather than in the report package because this
 // is the composition root: reporter imports report for the document type, so
@@ -42,6 +42,7 @@ type ReportCommand struct {
 	reportConfig *report.Config
 
 	configPath string
+	reportName string
 	dryRun     bool
 
 	from time.Time
@@ -60,7 +61,12 @@ func NewReportCommand(app *kingpin.Application) *ReportCommand {
 		to: time.Now().UTC(),
 	}
 
-	c.cmd = app.Command("report", "Run statistical reports over normalized CI test results")
+	c.cmd = app.Command("report", "Run a statistical report over normalized CI test results")
+
+	// One report per run, the name is required.
+	c.cmd.Arg("report", "Report to run, one of "+strings.Join(report.Names(), ", ")).
+		Required().
+		EnumVar(&c.reportName, report.Names()...)
 
 	// Deliberately not Required: [report.LoadConfig] also accepts the config
 	// body itself in EnvConfigBody, and only sees that fallback when the path
@@ -100,7 +106,7 @@ func (c *ReportCommand) FullCommand() string {
 	return c.cmd.FullCommand()
 }
 
-// Run loads the config and executes the selected reports.
+// Run loads the config and executes the selected report.
 func (c *ReportCommand) Run(ctx context.Context) error {
 	var err error
 	if c.reportConfig, err = report.LoadConfig(c.configPath); err != nil {
@@ -116,16 +122,22 @@ func (c *ReportCommand) run(ctx context.Context) error {
 		return trace.Wrap(err)
 	}
 
-	scope := report.Scope{
-		Database: c.athenaConfig.Database,
-		Tables:   c.reportConfig.Tables,
-		From:     from,
-		To:       to,
+	rc, ok := c.reportConfig.Reports[c.reportName]
+	if !ok {
+		return trace.BadParameter("report %q is not in the config", c.reportName)
 	}
 
-	sinks, byName, err := c.buildReporters()
+	// This cannot fail.
+	def, _ := report.Get(c.reportName)
+
+	params, err := rc.DecodeParams(c.reportName, def)
 	if err != nil {
 		return trace.Wrap(err)
+	}
+
+	sinks, err := c.buildReporters(rc)
+	if err != nil {
+		return trace.Wrap(err, "building reporters")
 	}
 	defer func() {
 		if err := sinks.Close(); err != nil {
@@ -144,51 +156,27 @@ func (c *ReportCommand) run(ctx context.Context) error {
 		return trace.Wrap(err)
 	}
 
-	fmt.Printf("%s, %s .. %s, reporters: %s\n",
-		c.athenaConfig.Database, report.Day(from), report.Day(to), sinks.Name())
+	fmt.Printf("%s, %s, %s .. %s, reporters: %s\n",
+		c.reportName, c.athenaConfig.Database, report.Day(from), report.Day(to), sinks.Name())
 
-	var errs []error
-	for _, rc := range c.reportConfig.Reports {
-		def, ok := report.Get(rc.Name)
-		if !ok {
-			errs = append(errs, trace.BadParameter("unknown report %q", rc.Name))
-			continue
-		}
-
-		params, err := rc.DecodeParams(def)
-		if err != nil {
-			errs = append(errs, trace.Wrap(err))
-			continue
-		}
-
-		doc, err := report.Execute(ctx, exec, scope, rc.Name, params)
-		if err != nil {
-			errs = append(errs, trace.Wrap(err, "running report %s", rc.Name))
-			continue
-		}
-
-		// Dry runs don't print empty reports, we may wish ot change this for manual testing.
-		if c.dryRun {
-			continue
-		}
-
-		target := sinks
-		// A nil index means --reporter replaced the configured destinations,
-		// so every report goes to the same overridden set.
-		if byName != nil {
-			target, err = selectSinks(byName, rc.Reporters)
-			if err != nil {
-				errs = append(errs, trace.Wrap(err, "report %s", rc.Name))
-				continue
-			}
-		}
-
-		if err := target.Report(ctx, doc); err != nil {
-			errs = append(errs, trace.Wrap(err, "reporting %s", rc.Name))
-		}
+	scope := report.Scope{
+		Database: c.athenaConfig.Database,
+		Tables:   c.reportConfig.Tables,
+		From:     from,
+		To:       to,
 	}
 
-	return trace.NewAggregate(errs...)
+	doc, err := report.Execute(ctx, exec, scope, c.reportName, params)
+	if err != nil {
+		return trace.Wrap(err, "running report %s", c.reportName)
+	}
+
+	// Dry runs don't print empty reports, we may wish to change this for manual testing.
+	if c.dryRun {
+		return nil
+	}
+
+	return trace.Wrap(sinks.Report(ctx, doc), "reporting %s", c.reportName)
 }
 
 // window resolves the reporting period from flags, falling back to the
@@ -223,52 +211,22 @@ func (c *ReportCommand) window() (from, to time.Time, err error) {
 	return from, to, nil
 }
 
-// buildReporters constructs the destinations the selected reports will use.
-//
-// It returns every reporter as a [reporter.Multi] for preflight and close, and
-// a per-name index so each report can be sent only to its own destinations.
-func (c *ReportCommand) buildReporters() (reporter.Multi, map[string]reporter.Reporter, error) {
-	var names []string
-	for _, rc := range c.reportConfig.Reports {
-		for _, name := range rc.Reporters {
-			if !slices.Contains(names, name) {
-				names = append(names, name)
-			}
-		}
-	}
-	// Sorted so the constructed order, and any error, is deterministic.
-	slices.Sort(names)
-
-	byName := make(map[string]reporter.Reporter, len(names))
-	var all reporter.Multi
-	for _, name := range names {
+// buildReporters constructs the destinations the report writes to.
+func (c *ReportCommand) buildReporters(rc report.ReportConfig) (reporter.Multi, error) {
+	sinks := make(reporter.Multi, 0, len(rc.Reporters))
+	for _, name := range rc.Reporters {
 		cfg, ok := c.reportConfig.Reporters[name]
 		if !ok {
-			return nil, nil, trace.BadParameter("undefined reporter %q", name)
+			return nil, trace.BadParameter("undefined reporter %q", name)
 		}
 
 		r, err := reporter.New(name, cfg, os.Stdout)
 		if err != nil {
-			return nil, nil, trace.Wrap(err)
+			return nil, trace.Wrap(err)
 		}
-		byName[name] = r
-		all = append(all, r)
+		sinks = append(sinks, r)
 	}
-
-	return all, byName, nil
-}
-
-// selectSinks picks the named reporters out of the index.
-func selectSinks(byName map[string]reporter.Reporter, names []string) (reporter.Multi, error) {
-	out := make(reporter.Multi, 0, len(names))
-	for _, name := range names {
-		r, ok := byName[name]
-		if !ok {
-			return nil, trace.BadParameter("undefined reporter %q", name)
-		}
-		out = append(out, r)
-	}
-	return out, nil
+	return sinks, nil
 }
 
 // executor builds the Athena client, or its no-op stand-in under --dryrun.

@@ -41,9 +41,10 @@ func TestLoadConfigFallsBackToDefault(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, cfg)
 
-	require.Len(t, cfg.Reports, 1)
-	assert.Equal(t, FlakyName, cfg.Reports[0].Name)
-	assert.Equal(t, []string{"stdout"}, cfg.Reports[0].Reporters)
+	assert.Equal(t, []string{FlakyDailyName, FlakyRollupName}, cfg.ReportNames())
+	for name, rc := range cfg.Reports {
+		assert.Equal(t, []string{"stdout"}, rc.Reporters, "report %q", name)
+	}
 	assert.Equal(t, defaultWindowDays, cfg.Window.Days)
 	assert.Equal(t, "meta_v2_parquet", cfg.Tables.Meta)
 	assert.Equal(t, "testcases_v2_parquet", cfg.Tables.Testcases)
@@ -63,7 +64,7 @@ reporters:
     type: stdout
     max_rows: 5
 reports:
-  - name: flaky
+  flaky_rollup:
     reporters: [console]
     params:
       min_execs: 25
@@ -79,8 +80,8 @@ reports:
 	require.Contains(t, cfg.Reporters, "console")
 	assert.Equal(t, 5, cfg.Reporters["console"].MaxRows)
 
-	require.Len(t, cfg.Reports, 1)
-	assert.Equal(t, []string{"console"}, cfg.Reports[0].Reporters)
+	assert.Equal(t, []string{FlakyRollupName}, cfg.ReportNames())
+	assert.Equal(t, []string{"console"}, cfg.Reports[FlakyRollupName].Reporters)
 }
 
 func TestDecodeParams(t *testing.T) {
@@ -91,7 +92,7 @@ reporters:
   stdout:
     type: stdout
 reports:
-  - name: flaky
+  flaky_rollup:
     params:
       min_execs: 25
       smoothing: 7.5
@@ -101,10 +102,10 @@ reports:
 	cfg, err := LoadConfig(path)
 	require.NoError(t, err)
 
-	def, ok := Get(FlakyName)
+	def, ok := Get(FlakyRollupName)
 	require.True(t, ok)
 
-	params, err := cfg.Reports[0].DecodeParams(def)
+	params, err := cfg.Reports[FlakyRollupName].DecodeParams(FlakyRollupName, def)
 	require.NoError(t, err)
 
 	flaky, ok := params.(*FlakyParams)
@@ -117,11 +118,10 @@ reports:
 func TestDecodeParamsAbsentGivesDefaults(t *testing.T) {
 	t.Parallel()
 
-	def, ok := Get(FlakyName)
+	def, ok := Get(FlakyRollupName)
 	require.True(t, ok)
 
-	rc := &ReportConfig{Name: FlakyName}
-	params, err := rc.DecodeParams(def)
+	params, err := ReportConfig{}.DecodeParams(FlakyRollupName, def)
 	require.NoError(t, err)
 
 	flaky, ok := params.(*FlakyParams)
@@ -137,7 +137,7 @@ reporters:
   stdout:
     type: stdout
 reports:
-  - name: flaky
+  flaky_rollup:
     params:
       min_exec: 25
 `)
@@ -145,9 +145,9 @@ reports:
 	cfg, err := LoadConfig(path)
 	require.NoError(t, err)
 
-	def, ok := Get(FlakyName)
+	def, ok := Get(FlakyRollupName)
 	require.True(t, ok)
-	_, err = cfg.Reports[0].DecodeParams(def)
+	_, err = cfg.Reports[FlakyRollupName].DecodeParams(FlakyRollupName, def)
 	assert.Error(t, err)
 }
 
@@ -159,7 +159,7 @@ reportres:
   stdout:
     type: stdout
 reports:
-  - name: flaky
+  flaky_rollup: {}
 `)
 
 	_, err := LoadConfig(path)
@@ -178,37 +178,37 @@ func TestLoadConfigValidation(t *testing.T) {
 			assertErr: require.Error,
 		},
 		"unknown report": {
-			body:      "reports:\n  - name: nonsense\n",
-			assertErr: require.Error,
-		},
-		"duplicate report": {
-			body:      "reports:\n  - name: flaky\n  - name: flaky\n",
+			body:      "reports:\n  nonsense: {}\n",
 			assertErr: require.Error,
 		},
 		"reporter without type": {
-			body:      "reporters:\n  a: {}\nreports:\n  - name: flaky\n",
+			body:      "reporters:\n  a: {}\nreports:\n  flaky_rollup: {}\n",
 			assertErr: require.Error,
 		},
 		"undefined reporter reference": {
 			body: "reporters:\n  a:\n    type: stdout\n" +
-				"reports:\n  - name: flaky\n    reporters: [b]\n",
+				"reports:\n  flaky_rollup:\n    reporters: [b]\n",
 			assertErr: require.Error,
 		},
 		"negative window": {
-			body:      "window:\n  days: -1\nreports:\n  - name: flaky\n",
+			body:      "window:\n  days: -1\nreports:\n  flaky_rollup: {}\n",
 			assertErr: require.Error,
 		},
 		"negative max_rows": {
 			body: "reporters:\n  a:\n    type: stdout\n    max_rows: -1\n" +
-				"reports:\n  - name: flaky\n",
+				"reports:\n  flaky_rollup: {}\n",
 			assertErr: require.Error,
 		},
 		"invalid table identifier": {
-			body:      "tables:\n  meta: \"m; DROP TABLE x\"\nreports:\n  - name: flaky\n",
+			body:      "tables:\n  meta: \"m; DROP TABLE x\"\nreports:\n  flaky_rollup: {}\n",
 			assertErr: require.Error,
 		},
 		"minimal valid": {
-			body:      "reports:\n  - name: flaky\n",
+			body:      "reports:\n  flaky_rollup: {}\n",
+			assertErr: require.NoError,
+		},
+		"both reports": {
+			body:      "reports:\n  flaky_rollup: {}\n  flaky_daily: {}\n",
 			assertErr: require.NoError,
 		},
 	}
@@ -233,16 +233,16 @@ reporters:
   a:
     type: stdout
 reports:
-  - name: flaky
+  flaky_rollup: {}
 `)
 
 	cfg, err := LoadConfig(path)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"a", "b"}, cfg.Reports[0].Reporters)
+	assert.Equal(t, []string{"a", "b"}, cfg.Reports[FlakyRollupName].Reporters)
 }
 
 func TestLoadConfigFromEnvBody(t *testing.T) {
-	t.Setenv(EnvConfigBody, "window:\n  days: 3\nreports:\n  - name: flaky\n")
+	t.Setenv(EnvConfigBody, "window:\n  days: 3\nreports:\n  flaky_rollup: {}\n")
 	cfg, err := LoadConfig("")
 	require.NoError(t, err)
 	assert.Equal(t, 3, cfg.Window.Days)
@@ -265,14 +265,19 @@ func TestExampleConfigParses(t *testing.T) {
 	cfg, err := LoadConfig(filepath.Join("..", "docs", "reports.example.yaml"))
 	require.NoError(t, err)
 
-	require.Len(t, cfg.Reports, 1)
-	def, ok := Get(cfg.Reports[0].Name)
-	require.True(t, ok)
+	// The example is expected to cover every registered report, so a new one
+	// that is never documented fails here.
+	assert.Equal(t, Names(), cfg.ReportNames())
 
-	params, err := cfg.Reports[0].DecodeParams(def)
-	require.NoError(t, err)
+	for name, rc := range cfg.Reports {
+		def, ok := Get(name)
+		require.True(t, ok, "report %q", name)
 
-	flaky, ok := params.(*FlakyParams)
-	require.True(t, ok)
-	require.NoError(t, flaky.checkAndSetDefaults())
+		params, err := rc.DecodeParams(name, def)
+		require.NoError(t, err)
+
+		flaky, ok := params.(*FlakyParams)
+		require.True(t, ok, "report %q got %T", name, params)
+		require.NoError(t, flaky.checkAndSetDefaults())
+	}
 }

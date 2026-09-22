@@ -1,6 +1,6 @@
 -- Rank the flakiest tests over the whole reporting window.
 --
--- Filtering, the score and the smoothing constant match flaky.sql; only the
+-- Filtering, the score and the smoothing constant match flaky_daily.sql; only the
 -- grouping differs, so the numbers here are the window's totals rather than a
 -- sum or an average of the daily rows.
 --
@@ -32,7 +32,7 @@ agg AS (
     GROUP BY 1, 2, 3
 ),
 scored AS (
-    -- Same score as flaky.sql, over the window's totals:
+    -- Same score as flaky_daily.sql, over the window's totals:
     -- score = 4 * p * (1 - p) * execs / (execs + K)
     -- p(1-p) is variance for a coin flip, 0 when we always pass or always fail
     -- we multiply by 4 to get to a peak value approaching 1.0

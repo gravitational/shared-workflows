@@ -47,8 +47,8 @@ type Config struct {
 	// [ReportConfig.Reporters] refers to. Naming instances rather than types
 	// is what lets two Slack channels, or two row limits, coexist.
 	Reporters map[string]ReporterConfig `yaml:"reporters"`
-	// Reports are the reports to run, in order.
-	Reports []ReportConfig `yaml:"reports"`
+	// Reports are the configurations for reports keyed by their name.
+	Reports map[string]ReportConfig `yaml:"reports"`
 }
 
 // WindowConfig defines the reporting window
@@ -65,26 +65,35 @@ type ReporterConfig struct {
 	MaxRows int `yaml:"max_rows"`
 }
 
-// ReportConfig selects one report and its destinations.
+// ReportConfig tunes one report and names its destinations.
 type ReportConfig struct {
-	// Name is a registered report name.
-	Name string `yaml:"name"`
 	// Reporters names entries in [Config.Reporters].
 	Reporters []string `yaml:"reporters"`
 	// Reporter specific params. Each can be different.
 	Params yaml.Node `yaml:"params"`
 }
 
-// DefaultConfig runs the flaky report to stdout.
+// DefaultConfig makes both flaky reports available, to stdout.
 func DefaultConfig() *Config {
 	return &Config{
 		Reporters: map[string]ReporterConfig{
 			"stdout": {Type: "stdout"},
 		},
-		Reports: []ReportConfig{
-			{Name: FlakyName},
+		Reports: map[string]ReportConfig{
+			FlakyRollupName: {},
+			FlakyDailyName:  {},
 		},
 	}
+}
+
+// ReportNames returns the configured report names, sorted.
+func (c *Config) ReportNames() []string {
+	out := make([]string, 0, len(c.Reports))
+	for name := range c.Reports {
+		out = append(out, name)
+	}
+	slices.Sort(out)
+	return out
 }
 
 // checkAndSetDefaults validates the config and fills in what it can.
@@ -116,37 +125,33 @@ func (c *Config) checkAndSetDefaults() error {
 	}
 
 	if len(c.Reports) == 0 {
-		return trace.BadParameter("no reports configured")
+		return trace.BadParameter("no reports configured, want one or more of: %s",
+			strings.Join(Names(), ", "))
 	}
 
-	seen := make(map[string]struct{}, len(c.Reports))
-	for i := range c.Reports {
-		r := &c.Reports[i]
-		if r.Name == "" {
-			return trace.BadParameter("report %d has no name", i)
+	for _, name := range c.ReportNames() {
+		if _, ok := Get(name); !ok {
+			return trace.BadParameter("unknown report %q, want one of: %s",
+				name, strings.Join(Names(), ", "))
 		}
-		if _, ok := Get(r.Name); !ok {
-			return trace.BadParameter("unknown report %q", r.Name)
-		}
-		if _, dup := seen[r.Name]; dup {
-			return trace.BadParameter("report %q is configured more than once", r.Name)
-		}
-		seen[r.Name] = struct{}{}
+
+		r := c.Reports[name]
 
 		// An empty list means every reporter, which is the sensible reading of
 		// "I configured one destination and did not repeat myself".
 		if len(r.Reporters) == 0 {
-			for name := range c.Reporters {
-				r.Reporters = append(r.Reporters, name)
+			for reporter := range c.Reporters {
+				r.Reporters = append(r.Reporters, reporter)
 			}
 			slices.Sort(r.Reporters)
+			c.Reports[name] = r
 			continue
 		}
 
-		for _, name := range r.Reporters {
-			if _, ok := c.Reporters[name]; !ok {
+		for _, reporter := range r.Reporters {
+			if _, ok := c.Reporters[reporter]; !ok {
 				return trace.BadParameter(
-					"report %s refers to undefined reporter %q", r.Name, name)
+					"report %s refers to undefined reporter %q", name, reporter)
 			}
 		}
 	}
@@ -155,7 +160,7 @@ func (c *Config) checkAndSetDefaults() error {
 }
 
 // DecodeParams decodes a report's params into its registered parameter type.
-func (r *ReportConfig) DecodeParams(def Definition) (any, error) {
+func (r ReportConfig) DecodeParams(name string, def Definition) (any, error) {
 	params := def.NewParams()
 	if r.Params.IsZero() {
 		return params, nil
@@ -163,13 +168,13 @@ func (r *ReportConfig) DecodeParams(def Definition) (any, error) {
 
 	raw, err := yaml.Marshal(&r.Params)
 	if err != nil {
-		return nil, trace.Wrap(err, "re-encoding %s params", r.Name)
+		return nil, trace.Wrap(err, "re-encoding %s params", name)
 	}
 
 	dec := yaml.NewDecoder(bytes.NewReader(raw))
 	dec.KnownFields(true)
 	if err := dec.Decode(params); err != nil && !errors.Is(err, io.EOF) {
-		return nil, trace.Wrap(err, "decoding %s params", r.Name)
+		return nil, trace.Wrap(err, "decoding %s params", name)
 	}
 
 	return params, nil
