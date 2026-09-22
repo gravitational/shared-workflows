@@ -1,6 +1,8 @@
 # Example ci-metrics report configuration.
 #
-#   ci-metrics report --database gh_test_metrics_v2 --config docs/reports.example.yaml
+#   ci-metrics report flaky_rollup \
+#     --database gh_test_metrics_v2 --config docs/reports.example.yaml
+#
 
 # Table configuration. These are the Parquet tables the migrate command
 # writes, which carry the collapsed ISO-8601 dt column the reports window on.
@@ -17,23 +19,37 @@ reporters:
     type: stdout
     max_rows: 25
 
+# Keyed by report name. Listing one enables it; the body only tunes it.
 reports:
-  - name: flaky
+  # Ranks tests over the window's totals.
+  flaky_rollup:
     reporters: [console]
     params:
       # Minimum executions before a test is considered at all, so a test that
-      # ran twice cannot top the table. Counted within the day for the daily
-      # tables and across the whole window for the rollup.
+      # ran twice cannot top the table. Counted across the window here.
       min_execs: 10
       # The K in the score's execs/(execs+K)
       smoothing: 20
-      # How many tests to keep, applied to the window rollup and to each day
-      # separately.
+      # How many tests to keep.
       top: 20
       # Refs whose runs count, as full refs. A merge-queue run targeting one
       # of these counts towards it, so pull request noise stays out of the
       # ranking. Counts are summed across every branch listed rather than
       # reported per branch.
+      branches:
+        - refs/heads/master
+        - refs/heads/branch/v18
+        - refs/heads/branch/v17
+
+  # Ranks tests within each day, one table per day.
+  flaky_daily:
+    reporters: [console]
+    params:
+      # Counted within the day here, so this is the stricter of the two.
+      min_execs: 10
+      smoothing: 20
+      # Applied to each day separately.
+      top: 20
       branches:
         - refs/heads/master
         - refs/heads/branch/v18
