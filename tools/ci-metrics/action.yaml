@@ -1,0 +1,68 @@
+---
+name: Migrate CI test results to Parquet
+description: >
+  Copies one table of normalized JSONL test records into its Parquet
+  counterpart. Intended to run on a nightly schedule, once per table. Re-running
+  any period is a no-op for days already migrated.
+
+inputs:
+  type:
+    description: "Record type: meta, suites or testcases"
+    required: true
+  source:
+    description: "JSONL table to read"
+    required: true
+  destination:
+    description: "Parquet table to write"
+    required: true
+  database:
+    description: "Database holding both tables"
+    required: true
+  workgroup:
+    description: "Athena workgroup"
+    required: false
+    default: "primary"
+  output-location:
+    description: >
+      S3 prefix for Athena query results, e.g. s3://my-bucket/athena-results/.
+      Required unless the workgroup already has a result location or managed
+      query results, in which case leave it unset and the workgroup's own
+      setting applies.
+    required: false
+    default: ""
+  days:
+    description: >
+      Trailing days to migrate, ending today. Defaults to 3.
+    required: false
+    default: "3"
+  timeout:
+    description: "Maximum runtime (e.g. 30m, 2h). 0 means no timeout."
+    required: false
+    default: "30m"
+  tool-version:
+    description: Version of the tool to use
+    required: false
+
+runs:
+  using: composite
+  steps:
+    - name: Install ci-metrics from GitHub Release
+      # Relative paths cannot be used here because the action is not guaranteed to be checked out in the same location as the repository using it.
+      uses: gravitational/shared-workflows/.github/actions/install-gh-release@41eefbdab5c67d8e0169730e999f73cd315a8cb5
+      with:
+        tool-name: ci-metrics
+        version: ${{ inputs.tool-version }}
+        tag-prefix: tools/ci-metrics/
+
+    - name: Migrate ${{ inputs.type }} to Parquet
+      id: migrate
+      shell: bash
+      run: |
+        ci-metrics migrate "${{ inputs.type }}" \
+          --database "${{ inputs.database }}" \
+          --workgroup "${{ inputs.workgroup }}" \
+          --source "${{ inputs.source }}" \
+          --destination "${{ inputs.destination }}" \
+          --days "${{ inputs.days }}" \
+          ${{ inputs.timeout && format('--timeout "{0}"', inputs.timeout) || '' }} \
+          ${{ inputs.output-location && format('--output-location "{0}"', inputs.output-location) || '' }}
