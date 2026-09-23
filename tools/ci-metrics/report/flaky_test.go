@@ -155,7 +155,7 @@ func TestFlakyRollupRender(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, FlakyRollupName, doc.ID)
-	assert.Contains(t, doc.Headline, "TestLogin")
+	assert.Contains(t, doc.Headline, "flakiest TestLogin")
 
 	// Summary, then the one ranked table.
 	require.Len(t, doc.Sections, 2)
@@ -185,7 +185,7 @@ func TestFlakyDailyRender(t *testing.T) {
 
 	assert.Equal(t, FlakyDailyName, doc.ID)
 	// Rows arrive ordered by day, not by score.
-	assert.Contains(t, doc.Headline, "TestLogin")
+	assert.Contains(t, doc.Headline, "flakiest TestLogin")
 	assert.Contains(t, doc.Headline, "2 flaky test(s) over 2 day(s)")
 
 	// Summary, then one section per day.

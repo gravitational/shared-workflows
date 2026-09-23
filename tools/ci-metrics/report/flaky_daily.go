@@ -86,24 +86,24 @@ func flakyDailyRender(scope Scope, params any, results map[string]*athena.Result
 		byDay[r.Day] = append(byDay[r.Day], r)
 	}
 
-	// Ordered by day rather than score, so the worst is found by scanning.
-	worstRow := rows[0]
+	// Ordered by day rather than score, so the flakiest is found by scanning.
+	flakiestRow := rows[0]
 	for _, r := range rows {
-		if r.FlakeScore > worstRow.FlakeScore {
-			worstRow = r
+		if r.FlakeScore > flakiestRow.FlakeScore {
+			flakiestRow = r
 		}
 	}
 	distinct := distinctFlakyTests(rows)
 
 	doc.Headline = Int(int64(distinct)) + " flaky test(s) over " +
-		Int(int64(len(days))) + " day(s); worst " + worstRow.TestName
+		Int(int64(len(days))) + " day(s); flakiest " + flakiestRow.TestName
 
 	doc.Sections = append(doc.Sections, Section{
 		Heading: "Summary",
 		Metrics: []Metric{
 			{Name: "Flaky tests listed", Value: Int(int64(distinct))},
 			{Name: "Days with flakes", Value: Int(int64(len(days)))},
-			{Name: "Worst test", Value: worstRow.TestName},
+			{Name: "Flakiest test", Value: flakiestRow.TestName},
 		},
 		Notes: append(flakyScoreNotes(p, "within a day"),
 			"Each test is scored within its own day, so a test that fails a "+

@@ -126,76 +126,19 @@ func writeMetrics(b *strings.Builder, metrics []report.Metric) {
 	}
 }
 
-// writeTable prints a table with per-column alignment.
+// writeTable prints a table with per-column alignment, indented to sit under
+// its heading.
 func (s *Stdout) writeTable(b *strings.Builder, table *report.Table) {
-	if table == nil || len(table.Columns) == 0 {
-		return
-	}
+	lines, shown, truncated := textTable(table, s.maxRows)
 
-	rows := table.Rows
-	truncated := false
-	if s.maxRows > 0 && len(rows) > s.maxRows {
-		rows = rows[:s.maxRows]
-		truncated = true
-	}
-
-	widths := make([]int, len(table.Columns))
-	for i, c := range table.Columns {
-		widths[i] = utf8.RuneCountInString(c.Name)
-	}
-	for _, row := range rows {
-		for i, cell := range row {
-			if i >= len(widths) {
-				break
-			}
-			widths[i] = max(widths[i], utf8.RuneCountInString(cell.Text))
-		}
-	}
-
-	writeCells := func(texts []string) {
+	for _, line := range lines {
 		b.WriteString("  ")
-		for i, text := range texts {
-			if i > 0 {
-				b.WriteString("  ")
-			}
-			pad := widths[i] - utf8.RuneCountInString(text)
-			if pad < 0 {
-				pad = 0
-			}
-			// The final column needs no trailing padding, which would only
-			// show up as trailing whitespace in a golden file.
-			switch {
-			case table.Columns[i].Align == report.AlignRight:
-				b.WriteString(strings.Repeat(" ", pad))
-				b.WriteString(text)
-			case i == len(texts)-1:
-				b.WriteString(text)
-			default:
-				b.WriteString(text)
-				b.WriteString(strings.Repeat(" ", pad))
-			}
-		}
+		b.WriteString(line)
 		b.WriteByte('\n')
 	}
 
-	headers := make([]string, len(table.Columns))
-	for i, c := range table.Columns {
-		headers[i] = c.Name
-	}
-	writeCells(headers)
-
-	for _, row := range rows {
-		texts := make([]string, len(table.Columns))
-		for i := range table.Columns {
-			if i < len(row) {
-				texts[i] = row[i].Text
-			}
-		}
-		writeCells(texts)
-	}
-
 	if truncated {
-		fmt.Fprintf(b, "  ... showing %d of %d\n", len(rows), table.TotalRows)
+		fmt.Fprintf(b, "  ... showing %d of %d\n", shown, table.TotalRows)
 	}
 }
 
