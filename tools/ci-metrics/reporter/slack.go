@@ -55,8 +55,8 @@ const (
 	slackMaxFields = 10
 	// slackMaxHeaderRunes is the length of a header block's text.
 	slackMaxHeaderRunes = 150
-	// slackMaxMarkdownRunes is the length of every markdown block in one
-	// message put together.
+	// slackMaxMarkdownRunes is the length of a message's markdown blocks put
+	// together, enforced here per table.
 	slackMaxMarkdownRunes = 12_000
 )
 
@@ -68,7 +68,9 @@ type slackAPI interface {
 
 var _ slackAPI = (*slack.Client)(nil)
 
-// Slack posts a document to a Slack channel as Block Kit blocks.
+// Slack posts a document to a Slack channel as Block Kit blocks. The message
+// carries the report's header and first table; further sections follow as
+// replies in its thread.
 type Slack struct {
 	name      string
 	api       slackAPI
@@ -129,25 +131,33 @@ func (s *Slack) Report(ctx context.Context, doc *report.Document) error {
 		return trace.BadParameter("document is required")
 	}
 
-	blocks := s.summaryBlocks(doc)
+	sections := tableSections(doc.Sections)
+
+	blocks := s.headerBlocks(doc)
+
+	// Reports order their sections most relevant first, so the first table
+	// leads and a one-table report needs no thread.
+	if len(sections) > 0 {
+		blocks = append(blocks, s.sectionBlocks(sections[0])...)
+		sections = sections[1:]
+	}
+
 	blocks = append(blocks, metaBlocks(doc)...)
 
-	// An empty ts means no summary was posted, which only happens for a
-	// document with nothing in its head at all. The sections then go to the
-	// channel rather than to a thread that does not exist.
+	// An empty ts means nothing was posted, so the rest go to the channel
+	// rather than to a thread that does not exist.
 	ts, err := s.post(ctx, "", capBlocks(blocks), doc)
 	if err != nil {
 		return trace.Wrap(err, "posting %s to %s", doc.ID, s.channel)
 	}
 
 	var errs []error
-	for _, section := range tableSections(doc.Sections) {
+	for _, section := range sections {
 		for chunk := range slices.Chunk(s.sectionBlocks(section), slackMaxBlocks) {
 			if _, err := s.post(ctx, ts, chunk, doc); err != nil {
 				errs = append(errs, trace.Wrap(err,
 					"posting section %q of %s", section.Heading, doc.ID))
-				// The rest of a section that already failed is unlikely to
-				// fare better, and would only spam the thread.
+				// The rest of a failed section would only spam the thread.
 				break
 			}
 		}
@@ -185,12 +195,8 @@ func (s *Slack) post(ctx context.Context, threadTS string, blocks []slack.Block,
 	return ts, trace.Wrap(err)
 }
 
-// tableSections picks out the sections carrying a table, which are the only
-// ones Slack renders.
-//
-// What the others hold is a summary of the tables that follow, and the
-// document's headline already names the flakiest test. The same report on
-// stdout still carries them.
+// tableSections picks out the sections carrying a table, the only ones Slack
+// renders. The rest summarise those tables, which stdout still shows.
 func tableSections(sections []report.Section) []report.Section {
 	out := make([]report.Section, 0, len(sections))
 	for _, section := range sections {
@@ -201,27 +207,23 @@ func tableSections(sections []report.Section) []report.Section {
 	return out
 }
 
-// summaryBlocks renders the document header: what the report is, what it ran
-// over, and its one-line finding.
-func (s *Slack) summaryBlocks(doc *report.Document) []slack.Block {
+// headerBlocks renders what the report is and what it ran over. The headline
+// is left to [notificationText], where it is the notification preview.
+func (s *Slack) headerBlocks(doc *report.Document) []slack.Block {
 	var blocks []slack.Block
 
 	if doc.Title != "" {
 		blocks = append(blocks,
 			slack.NewHeaderBlock(plainText(clip(doc.Title, slackMaxHeaderRunes))))
 	}
-
 	if doc.Subtitle != "" {
 		blocks = append(blocks, contextBlock(doc.Subtitle))
-	}
-	if doc.Headline != "" {
-		blocks = append(blocks, textBlock(escapeMrkdwn(doc.Headline)))
 	}
 
 	return blocks
 }
 
-// sectionBlocks renders one section of the document.
+// sectionBlocks renders one section. [report.Section.Notes] are dropped.
 func (s *Slack) sectionBlocks(section report.Section) []slack.Block {
 	var body []slack.Block
 
@@ -260,9 +262,8 @@ func metricBlocks(metrics []report.Metric) []slack.Block {
 	return blocks
 }
 
-// tableBlocks renders a table as a markdown block, which Slack lays out as a
-// real table. Cells are escaped for markdown rather than mrkdwn, so this is
-// the one place in the message that does not go through [escapeMrkdwn].
+// tableBlocks renders a table as a markdown block. Cells are escaped for
+// markdown, not mrkdwn, so this skips [escapeMrkdwn].
 func (s *Slack) tableBlocks(table *report.Table) []slack.Block {
 	md, shown, truncated := markdownTable(table, s.maxRows)
 	if md == "" {
@@ -281,7 +282,7 @@ func (s *Slack) tableBlocks(table *report.Table) []slack.Block {
 	return blocks
 }
 
-// metaBlocks renders the document's metadata
+// metaBlocks renders the document's metadata.
 func metaBlocks(doc *report.Document) []slack.Block {
 	var parts []string
 

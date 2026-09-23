@@ -161,8 +161,7 @@ func markdownTable(table *report.Table, maxRows int) (md string, shown int, trun
 		b.WriteString(" :--- |")
 	}
 
-	// A short row renders as empty cells rather than a ragged one, and a row
-	// longer than the header is cut to the declared columns.
+	// A short row gets empty cells; a long one is cut to the declared columns.
 	for _, row := range rows {
 		texts := make([]string, len(table.Columns))
 		for i := range table.Columns {

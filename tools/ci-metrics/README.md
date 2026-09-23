@@ -67,8 +67,9 @@ the same type.
 
 #### The `slack` reporter
 
-Posts the document as Block Kit blocks: one message carrying the report's
-title, and other section in a seperate thread reply to avoid huge messages.
+Posts the document as Block Kit blocks: one message carrying the report's title
+and first table, with any further sections as thread replies to avoid huge
+messages. 
 
 Tables go in a [markdown block][mdblock], which Slack lays out as a real table.
 

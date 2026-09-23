@@ -169,29 +169,64 @@ func postedBlocks(t *testing.T, form url.Values) []any {
 	return blocks
 }
 
-func TestSlackThreadsDetailUnderASummary(t *testing.T) {
+// twoTableDocument is a report whose detail runs past the first section.
+func twoTableDocument() *report.Document {
+	doc := testDocument()
+	doc.Sections = append(doc.Sections, report.Section{
+		Heading: "2026-09-01",
+		Table: &report.Table{
+			Columns:   []report.Column{{Name: "TEST", Align: report.AlignLeft}},
+			Rows:      []report.Row{{{Text: "TestFromTheDayBefore"}}},
+			TotalRows: 1,
+		},
+	})
+	return doc
+}
+
+func TestSlackPostsAOneTableReportAsOneMessage(t *testing.T) {
 	r, fake := newTestSlack(t, report.ReporterConfig{})
 
 	require.NoError(t, r.Report(t.Context(), testDocument()))
 
 	posts := fake.messages()
-	require.Len(t, posts, 2, "expected a summary message and one threaded section")
+	require.Len(t, posts, 1, "one table needs no thread")
 
-	summary, reply := posts[0], posts[1]
+	post := posts[0]
+	assert.Empty(t, post.Get("thread_ts"))
+	assert.Equal(t, "C0123456789", post.Get("channel"))
 
-	assert.Empty(t, summary.Get("thread_ts"), "the summary starts the thread")
-	assert.Equal(t, "C0123456789", summary.Get("channel"))
+	// Header, then the table that is the point of the report, then provenance.
+	text := postedText(t, post)
+	assert.Contains(t, text, "Top flaky tests")
+	assert.Contains(t, text, "*2026-09-02*", "the table's own heading, not the subtitle")
+	assert.Contains(t, text, "TestWithALongName")
+	assert.Contains(t, text, "| ---: |", "tables are rendered as markdown")
+	assert.Contains(t, text, "2.0 KiB scanned across 1 query/queries")
 
-	// The lead message is the header and the headline, nothing else: the
-	// Summary section's metrics and notes are dropped.
-	summaryText := postedText(t, summary)
-	assert.Contains(t, summaryText, "Top flaky tests")
-	assert.Contains(t, summaryText, "2 flaky test(s) over 1 day(s)")
-	assert.Contains(t, summaryText, "2.0 KiB scanned across 1 query/queries")
-	assert.NotContains(t, summaryText, "Worst", "the summary section's metrics go")
-	assert.NotContains(t, summaryText, "0.5000")
-	assert.NotContains(t, summaryText, "Excludes tests with fewer than 10 executions.")
-	assert.NotContains(t, summaryText, "TestA", "table rows belong in the thread")
+	// The summary section, the headline and every note are still dropped.
+	assert.NotContains(t, text, "2 flaky test(s) over 1 day(s)",
+		"the headline is the notification text, not a block")
+	assert.NotContains(t, text, "Worst")
+	assert.NotContains(t, text, "Excludes tests with fewer than 10 executions.")
+}
+
+func TestSlackThreadsSectionsPastTheFirst(t *testing.T) {
+	r, fake := newTestSlack(t, report.ReporterConfig{})
+
+	require.NoError(t, r.Report(t.Context(), twoTableDocument()))
+
+	posts := fake.messages()
+	require.Len(t, posts, 2, "the second table belongs in the thread")
+
+	lead, reply := posts[0], posts[1]
+
+	assert.Empty(t, lead.Get("thread_ts"), "the lead message starts the thread")
+
+	// The most relevant section is the one read without opening the thread.
+	leadText := postedText(t, lead)
+	assert.Contains(t, leadText, "*2026-09-02*", "the table's own heading, not the subtitle")
+	assert.Contains(t, leadText, "TestWithALongName")
+	assert.NotContains(t, leadText, "TestFromTheDayBefore")
 
 	// A reply carries the timestamp of the message it answers, which the fake
 	// numbered in order of receipt.
@@ -199,9 +234,8 @@ func TestSlackThreadsDetailUnderASummary(t *testing.T) {
 	assert.Equal(t, "C0123456789", reply.Get("channel"))
 
 	replyText := postedText(t, reply)
-	assert.Contains(t, replyText, "2026-09-02")
-	assert.Contains(t, replyText, "TestWithALongName")
-	assert.Contains(t, replyText, "| ---: |", "tables are rendered as markdown")
+	assert.Contains(t, replyText, "*2026-09-01*")
+	assert.Contains(t, replyText, "TestFromTheDayBefore")
 }
 
 func TestSlackSendsFallbackTextForNotifications(t *testing.T) {
@@ -239,12 +273,12 @@ func TestSlackNotesTruncatedTables(t *testing.T) {
 	require.NoError(t, r.Report(t.Context(), testDocument()))
 
 	posts := fake.messages()
-	require.Len(t, posts, 2)
+	require.Len(t, posts, 1)
 
-	replyText := postedText(t, posts[1])
-	assert.Contains(t, replyText, "TestA")
-	assert.NotContains(t, replyText, "TestWithALongName")
-	assert.Contains(t, replyText, "showing 1 of 2 rows")
+	text := postedText(t, posts[0])
+	assert.Contains(t, text, "TestA")
+	assert.NotContains(t, text, "TestWithALongName")
+	assert.Contains(t, text, "showing 1 of 2 rows")
 }
 
 func TestSlackReportsEveryFailedSection(t *testing.T) {
@@ -256,8 +290,8 @@ func TestSlackReportsEveryFailedSection(t *testing.T) {
 	assert.ErrorContains(t, err, "not_in_channel")
 	assert.ErrorContains(t, err, "flaky")
 
-	// The summary failing means there is no thread to reply to, so nothing
-	// further is attempted.
+	// The lead message failing means there is no thread to reply to, so
+	// nothing further is attempted.
 	assert.Len(t, fake.messages(), 1)
 }
 
@@ -266,9 +300,11 @@ func TestSlackHandlesASparseDocument(t *testing.T) {
 		r, fake := newTestSlack(t, report.ReporterConfig{})
 
 		// A text object may not be empty, so a header here would be a 400
-		// from Slack rather than a blank line.
+		// from Slack rather than a blank line. The subtitle is what keeps the
+		// message alive, since the headline is no longer a block.
 		require.NoError(t, r.Report(t.Context(), &report.Document{
 			ID:       "flaky",
+			Subtitle: "db.testcases_v2_parquet",
 			Headline: "nothing to report",
 		}))
 
@@ -414,21 +450,21 @@ func TestSlackPostsOnlyTablesAndTheHeader(t *testing.T) {
 	}))
 
 	posts := fake.messages()
-	require.Len(t, posts, 2)
+	require.Len(t, posts, 1)
 
-	// The summary section goes entirely: its metrics repeat the headline, and
-	// notes go whether they explain the score or qualify the table.
-	summary := postedText(t, posts[0])
-	assert.Contains(t, summary, "1 flaky test(s)")
-	assert.NotContains(t, summary, "Summary")
-	assert.NotContains(t, summary, "Flaky tests")
-	assert.NotContains(t, summary, "Score is")
+	text := postedText(t, posts[0])
 
-	// The table and its heading stay, minus the note under it.
-	reply := postedText(t, posts[1])
-	assert.Contains(t, reply, "Window rollup")
-	assert.Contains(t, reply, "TestA")
-	assert.NotContains(t, reply, "At the query's cap of 20")
+	// The summary section and the headline go; notes go whether they explain
+	// the score or qualify the table.
+	assert.NotContains(t, text, "1 flaky test(s)")
+	assert.NotContains(t, text, "Summary")
+	assert.NotContains(t, text, "Flaky tests")
+	assert.NotContains(t, text, "Score is")
+	assert.NotContains(t, text, "At the query's cap of 20")
+
+	// The table and its heading stay.
+	assert.Contains(t, text, "Window rollup")
+	assert.Contains(t, text, "TestA")
 }
 
 func TestSlackPostsNothingForAReportWithNoTables(t *testing.T) {
@@ -449,10 +485,17 @@ func TestSlackPostsNothingForAReportWithNoTables(t *testing.T) {
 	posts := fake.messages()
 	require.Len(t, posts, 1)
 
+	// Only the header survives in the blocks; the headline is the
+	// notification text, which is where an empty report still reads.
 	text := postedText(t, posts[0])
-	assert.Contains(t, text, "No flaky tests found in the window.")
+	assert.Contains(t, text, "Top flaky tests")
+	assert.NotContains(t, text, "No flaky tests found in the window.")
 	assert.NotContains(t, text, "Summary")
 	assert.NotContains(t, text, "No test both passed and failed.")
+
+	assert.Equal(t,
+		"Top flaky tests: No flaky tests found in the window.",
+		posts[0].Get("text"))
 }
 
 func TestMarkdownTable(t *testing.T) {
