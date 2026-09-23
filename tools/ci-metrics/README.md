@@ -35,12 +35,30 @@ ci-metrics migrate meta \
 
 Athena limits `INSERT INTO` writing more than 100 partitions at a time. 
 
-
-## Destination Table layout
+#### Destination Table layout
 
 The destination collapses `year`/`month`/`day` into one ISO-8601 `dt`, so a
 range query is `dt BETWEEN '2026-09-13' AND '2026-09-15'`.
 ISO-8601 sorts lexicographically in chronological order so pruning works all the same.
+
+
+### `report`
+
+Runs one statistical report over the records and writes it to one or more
+destinations. 
+
+```sh
+ci-metrics report flaky_rollup --database example_db --config reports.yaml
+
+# A specific window.
+ci-metrics report flaky_daily --database example_db --config reports.yaml --from 2026-08-29 --to 2026-09-11
+
+# Render the SQL without executing it, does not need AWS credentials.
+ci-metrics report flaky_daily --database example_db --config reports.yaml --days 7 --dryrun
+```
+
+See [`docs/reports.example.yaml`](docs/reports.example.yaml) for the config format.
+
 
 ## Local Dev
 
