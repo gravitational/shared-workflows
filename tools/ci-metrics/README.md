@@ -59,6 +59,23 @@ ci-metrics report flaky_daily --database example_db --config reports.yaml --days
 
 See [`docs/reports.example.yaml`](docs/reports.example.yaml) for the config format.
 
+#### Available reports
+
+| Report         | Description                                                 |
+|----------------|----------------------------------------------------------------|
+| `flaky_rollup` | One ranked table of the flakiest tests over the whole window. |
+| `flaky_daily`  | One ranked table per day, most recent day first. |
+
+##### `flaky_rollup`
+
+Highlights tests that are flaky over time, scored on the window's totals.
+A test that fails a little every day rises to the top here even if it never
+stands out on a single day. Can be used to track whether overall flakiness improves between windows.
+
+##### `flaky_daily`
+
+Highlights tests that are flaky on a given day, scored within each day.
+Can be used to spot a new flaky test or confirm a fix has been successful in the following days.
 
 ## Local Dev
 
