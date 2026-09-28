@@ -11,6 +11,7 @@ Flags:
   --[no-]help              Show context-sensitive help (also try --help-long and --help-man).
   --base-branch=BASEBRANCH  The base release branch to generate the changelog for. It will be of the form branch/v* ($BASE_BRANCH)
   --base-tag=BASETAG        The tag/version to generate the changelog from. It will be of the form vXX.Y.Z, e.g. v15.1.1 ($BASE_TAG)
+  --pr-links                Include markdown links to GitHub pull requests. ($PR_LINKS)
 ```
 
 It can optionally take two input variables: BASE_BRANCH: The base release
@@ -30,12 +31,10 @@ possible:
   root of the repo.
 
 
-Enterprise PR changelogs will be listed after the OSS changelogs. You need to
-determine if it is suitable to include them. If you do, remove the markdown
-link from each changelog when adding the changelog to CHANGELOG.md. These
-links won't work for the general public. Keep the links when adding the
-changelog to the release PR so that the enterprise PRs will link to the
-release PR.
+Enterprise PR changelogs will be listed after the OSS changelogs. PR links are
+omitted by default because private repo links are not useful to external users.
+Pass `--pr-links` when you want changelog entries to include markdown links to
+their source PRs.
 
 If you reword changelogs, it is best to go to the source PR and change it
 there and then regenerate the changelog.

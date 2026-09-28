@@ -37,11 +37,19 @@ type entry struct {
 }
 
 var (
-	// clPattern matches a "changelog: <summary>" line, capturing the summary.
-	clPattern = regexp.MustCompile(`[Cc]hangelog: +(.*)`)
+	// clPattern matches "changelog: <summary>" markers.
+	clPattern = regexp.MustCompile(`(?i)changelog:[ \t]*`)
 
-	// entPattern matches "changelog-enterprise: <summary>" lines, capturing the summary.
-	entPattern = regexp.MustCompile(`[Cc]hangelog-[Ee]nterprise: +(.*)`)
+	// entPattern matches "changelog-enterprise: <summary>" markers.
+	entPattern = regexp.MustCompile(`(?i)changelog-enterprise:[ \t]*`)
+
+	// anyChangelogPattern matches any changelog marker, so adjacent entries
+	// on the same line can be split cleanly.
+	anyChangelogPattern = regexp.MustCompile(`(?i)changelog(?:-enterprise)?:[ \t]*`)
+
+	// htmlCommentPattern matches markdown HTML comments, including multiline
+	// comments often used by PR templates.
+	htmlCommentPattern = regexp.MustCompile(`(?s)<!--.*?-->`)
 
 	// tmplLinks renders entries with a link to the PR; tmplNoLinks without.
 	tmplLinks = template.Must(template.New("cl").Parse(`
@@ -96,15 +104,48 @@ func (g *generator) entriesFromPR(pr github.PullRequest) []entry {
 	if g.parseEnterprise {
 		pattern = entPattern
 	}
+	body := htmlCommentPattern.ReplaceAllString(pr.Body, "")
 	var entries []entry
-	for _, m := range pattern.FindAllStringSubmatch(pr.Body, -1) {
+	for _, m := range changelogMatches(body, pattern) {
 		entries = append(entries, entry{
-			Summary: formatSummary(m[1]),
+			Summary: formatSummary(m),
 			Number:  pr.Number,
 			URL:     pr.URL,
 		})
 	}
 	return entries
+}
+
+func changelogMatches(body string, pattern *regexp.Regexp) []string {
+	allMarkers := anyChangelogPattern.FindAllStringIndex(body, -1)
+	if len(allMarkers) == 0 {
+		return nil
+	}
+
+	var matches []string
+	for i, marker := range allMarkers {
+		if !pattern.MatchString(body[marker[0]:marker[1]]) {
+			continue
+		}
+
+		end := len(body)
+		if nextLine := strings.IndexAny(body[marker[1]:], "\r\n"); nextLine >= 0 {
+			end = marker[1] + nextLine
+		}
+		if i+1 < len(allMarkers) && allMarkers[i+1][0] < end {
+			end = allMarkers[i+1][0]
+		}
+
+		summary := strings.TrimSpace(body[marker[1]:end])
+		summary = strings.TrimRight(summary, ",;")
+		summary = strings.TrimSpace(summary)
+		if summary == "" {
+			continue
+		}
+		matches = append(matches, summary)
+	}
+
+	return matches
 }
 
 func formatSummary(s string) string {

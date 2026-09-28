@@ -47,17 +47,18 @@ func (r *Repo) ObjectSHAAtPath(ref, path string) (string, error) {
 // prRegex matches the "(#N)" suffix GitHub squash merges append to commit subjects.
 var prRegex = regexp.MustCompile(`\(#(\d+)\)\s*$`)
 
-// PRsBetweenRefs returns the pull request numbers referenced by commits in
-// baseRef..headRef. A commit references a PR when its subject ends with
-// "(#N)", as produced by GitHub squash merges; commits without a PR
-// reference are skipped.
+// PRsBetweenRefs returns the unique pull request numbers referenced by
+// first-parent commits in baseRef..headRef. A commit references a PR when its
+// subject ends with "(#N)", as produced by GitHub squash merges; commits
+// without a PR reference are skipped.
 func (r *Repo) PRsBetweenRefs(baseRef, headRef string) ([]int, error) {
-	commits, err := r.RunCmd("log", "--format=%s", baseRef+".."+headRef)
+	commits, err := r.RunCmd("log", "--first-parent", "--format=%s", baseRef+".."+headRef)
 	if err != nil {
 		return nil, trace.Wrap(err, "can't get commits between refs %q and %q", baseRef, headRef)
 	}
 
 	var prNumbers []int
+	seen := make(map[int]struct{})
 	for _, commit := range strings.Split(commits, "\n") {
 		matches := prRegex.FindStringSubmatch(commit)
 		if matches == nil {
@@ -67,6 +68,10 @@ func (r *Repo) PRsBetweenRefs(baseRef, headRef string) ([]int, error) {
 		if err != nil {
 			continue // digits too long to be a PR number
 		}
+		if _, ok := seen[n]; ok {
+			continue
+		}
+		seen[n] = struct{}{}
 		prNumbers = append(prNumbers, n)
 	}
 

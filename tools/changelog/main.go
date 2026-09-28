@@ -51,16 +51,21 @@ func main() {
 			"Whether the e enterprise repo is a submodule of the core repo.",
 		).Envar("SUBMODULE").Default("false").Bool()
 
+		prLinks = kingpin.Flag(
+			"pr-links",
+			"Whether to include markdown links to GitHub pull requests in the generated changelog.",
+		).Envar("PR_LINKS").Default("false").Bool()
+
 		dir = kingpin.Arg("dir", "The directory of the teleport repo.").Required().String()
 	)
 	kingpin.Parse()
 
-	if err := run(context.Background(), *repoName, *dir, *baseBranch, *baseTag, *submodule); err != nil {
+	if err := run(context.Background(), *repoName, *dir, *baseBranch, *baseTag, *submodule, *prLinks); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func run(ctx context.Context, repoName, dir, baseBranch, baseTag string, submodule bool) error {
+func run(ctx context.Context, repoName, dir, baseBranch, baseTag string, submodule, prLinks bool) error {
 	ossRepo := git.NewRepo(dir)
 
 	ossPRs, err := ossRepo.PRsBetweenRefs(baseTag, baseBranch)
@@ -73,7 +78,11 @@ func run(ctx context.Context, repoName, dir, baseBranch, baseTag string, submodu
 		return trace.Wrap(err)
 	}
 
-	ossGen := &generator{gh: gh, repo: "core", tmpl: tmplLinks}
+	ossTmpl := tmplNoLinks
+	if prLinks {
+		ossTmpl = tmplLinks
+	}
+	ossGen := &generator{gh: gh, repo: repoName, tmpl: ossTmpl}
 
 	ossCL, err := ossGen.generate(ctx, ossPRs)
 	if err != nil {
@@ -87,7 +96,7 @@ func run(ctx context.Context, repoName, dir, baseBranch, baseTag string, submodu
 			return trace.Wrap(err)
 		}
 	} else {
-		entGen := &generator{gh: gh, repo: "core", tmpl: tmplNoLinks, parseEnterprise: true}
+		entGen := &generator{gh: gh, repo: repoName, tmpl: tmplNoLinks, parseEnterprise: true}
 		entCL, err = entGen.generate(ctx, ossPRs)
 		if err != nil {
 			return trace.Wrap(err)
