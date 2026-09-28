@@ -40,12 +40,9 @@ var (
 	// clPattern matches "changelog: <summary>" markers.
 	clPattern = regexp.MustCompile(`(?i)changelog:[ \t]*`)
 
-	// entPattern matches "changelog-enterprise: <summary>" markers.
-	entPattern = regexp.MustCompile(`(?i)changelog-enterprise:[ \t]*`)
-
 	// anyChangelogPattern matches any changelog marker, so adjacent entries
 	// on the same line can be split cleanly.
-	anyChangelogPattern = regexp.MustCompile(`(?i)changelog(?:-enterprise)?:[ \t]*`)
+	anyChangelogPattern = regexp.MustCompile(`(?i)changelog:[ \t]*`)
 
 	// htmlCommentPattern matches markdown HTML comments, including multiline
 	// comments often used by PR templates.
@@ -71,7 +68,6 @@ type generator struct {
 	repo            string
 	gh              *github.Client
 	tmpl            *template.Template
-	parseEnterprise bool
 }
 
 // generate fetches the given PRs and renders a changelog from them.
@@ -100,13 +96,9 @@ func (g *generator) render(prs []github.PullRequest) (string, error) {
 
 // entriesFromPR extracts changelog entries from a PR's body.
 func (g *generator) entriesFromPR(pr github.PullRequest) []entry {
-	pattern := clPattern
-	if g.parseEnterprise {
-		pattern = entPattern
-	}
 	body := htmlCommentPattern.ReplaceAllString(pr.Body, "")
 	var entries []entry
-	for _, m := range changelogMatches(body, pattern) {
+	for _, m := range changelogMatches(body, clPattern) {
 		entries = append(entries, entry{
 			Summary: formatSummary(m),
 			Number:  pr.Number,

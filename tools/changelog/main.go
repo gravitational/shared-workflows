@@ -95,12 +95,6 @@ func run(ctx context.Context, repoName, dir, baseBranch, baseTag string, submodu
 		if err != nil {
 			return trace.Wrap(err)
 		}
-	} else {
-		entGen := &generator{gh: gh, repo: repoName, tmpl: tmplNoLinks, parseEnterprise: true}
-		entCL, err = entGen.generate(ctx, ossPRs)
-		if err != nil {
-			return trace.Wrap(err)
-		}
 	}
 
 	fmt.Println(ossCL)
