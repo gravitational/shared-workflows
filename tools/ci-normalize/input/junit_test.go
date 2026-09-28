@@ -17,6 +17,7 @@ package input
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/gravitational/shared-workflows/tools/ci-normalize/record"
 	"github.com/stretchr/testify/assert"
@@ -356,4 +357,69 @@ func TestSanitize(t *testing.T) {
 			assert.Equal(t, tt.want, sanitize(tt.in))
 		})
 	}
+}
+
+func TestTruncatesHead(t *testing.T) {
+	t.Parallel()
+
+	got := truncateUTF8Head("foobar", 6)
+	assert.Len(t, got, 6)
+	assert.Equal(t, "foobar", got)
+
+	got = truncateUTF8Head("foobar", 3)
+	assert.Len(t, got, 3)
+	assert.True(t, strings.HasPrefix(got, "foo"))
+
+	// 測 ~= 'Test', is 3 bytes in UTF-8
+
+	// Size 4 would break this rune, so it should back off to 3 bytes and return a valid string
+	got = truncateUTF8Head("測測", 4)
+	assert.True(t, utf8.ValidString(got))
+	assert.LessOrEqual(t, len(got), 3)
+	assert.Equal(t, 1, utf8.RuneCountInString(got))
+
+	// Size 2 is too small to include the first rune, so it should return an empty string
+	got = truncateUTF8Head("測測", 2)
+	assert.True(t, utf8.ValidString(got))
+	assert.Empty(t, got)
+}
+
+func TestTruncatesTail(t *testing.T) {
+	t.Parallel()
+
+	got := truncateUTF8Tail("foobar", 6)
+	assert.Len(t, got, 6)
+	assert.Equal(t, "foobar", got)
+
+	got = truncateUTF8Tail("foobar", 3)
+	assert.Len(t, got, 3)
+	assert.True(t, strings.HasSuffix(got, "bar"))
+
+	// Size 4 would break the leading rune, so it should advance to 3 bytes and
+	// return a valid string
+	got = truncateUTF8Tail("測測", 4)
+	assert.True(t, utf8.ValidString(got))
+	assert.LessOrEqual(t, len(got), 3)
+	assert.Equal(t, 1, utf8.RuneCountInString(got))
+
+	// Size 2 is too small to include the last rune, so it should return an empty string
+	got = truncateUTF8Tail("測測", 2)
+	assert.True(t, utf8.ValidString(got))
+	assert.Empty(t, got)
+}
+
+func TestTruncateMessage(t *testing.T) {
+	t.Parallel()
+
+	const (
+		head = "START OF TEST OUTPUT\n"
+		tail = "panic: something went wrong"
+	)
+	in := head + strings.Repeat("foobar", 30) + "\n" + tail
+
+	got := truncateMessage(in, len(head), len(tail))
+
+	assert.True(t, strings.HasPrefix(got, head))
+	assert.True(t, strings.HasSuffix(got, tail))
+	assert.Contains(t, got, "[bytes truncated]")
 }
