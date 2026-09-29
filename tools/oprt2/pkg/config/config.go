@@ -16,9 +16,34 @@
 
 package config
 
-// Authenticator defines Attune authentication configuration.
-type Authenticator struct {
+// CertificateProvider defines the configuration for providing client certificates.
+type CertificateProvider struct {
 	// Not implemented
+}
+
+// MTLSAuthenticator defines the configuration for authenticating with Attune via mTLS.
+type MTLSAuthenticator struct {
+	// Endpoint is the Attune control plane endpoint to use.
+	Endpoint string
+	// CertificateSource is the certificate provider to use for client authentication.
+	CertificateSource CertificateProvider
+}
+
+// TokenAuthenticator defines the configuration for authenticating with Attune via tokens.
+type TokenAuthenticator struct {
+	// Endpoint is the Attune control plane endpoint to use.
+	Endpoint string
+	// Token is the token to provide the control plane.
+	Token string
+}
+
+// Authenticator defines Attune authentication configuration.
+// Only one field may be specified.
+type Authenticator struct {
+	// Token authenticates with Attune via a Token.
+	Token *TokenAuthenticator
+	// MTLS authenticates with Attune via mTLS.
+	MTLS *MTLSAuthenticator
 }
 
 // S3FileManager is a file manager that uses files stored in a remote S3 bucket.
