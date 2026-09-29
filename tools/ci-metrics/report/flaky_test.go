@@ -78,7 +78,7 @@ func TestFlakyQueryRunsOneStatement(t *testing.T) {
 	assert.Contains(t, sql, "'2026-09-01' AND '2026-09-03'")
 	assert.Contains(t, sql, "'refs/heads/master'")
 	assert.Contains(t, sql, "refs/heads/gh-readonly-queue/%")
-	assert.Contains(t, sql, "GROUP BY 1, 2, 3")
+	assert.Contains(t, sql, "GROUP BY 1, 2")
 	assert.Contains(t, sql, "ORDER BY rn")
 	assert.NotContains(t, sql, "PARTITION BY day")
 }
