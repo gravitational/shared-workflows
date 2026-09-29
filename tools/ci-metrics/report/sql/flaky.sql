@@ -28,14 +28,14 @@ WITH runs AS (
       AND {{.BranchPredicate}}
 ),
 agg AS (
-    SELECT r.branch, t.classname, t.test_name,
+    SELECT t.classname, t.test_name,
            count(*) AS execs,
            count_if(t.status IN ('failed', 'error')) AS fails
     FROM {{.Database}}.{{.TestcasesTable}} t
     JOIN runs r ON r.meta_id = t.meta_id
     WHERE t.dt BETWEEN '{{.From}}' AND '{{.To}}'
       AND t.status <> 'skipped'
-    GROUP BY 1, 2, 3
+    GROUP BY 1, 2
 ),
 scored AS (
     -- calculate a flake score over the window's totals
