@@ -30,20 +30,26 @@ import (
 // reaches a statement.
 var identifierPattern = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 
+// Default table names, the Parquet tables the migrate command writes.
+const (
+	DefaultMetaTable      = "meta_v2_parquet"
+	DefaultTestcasesTable = "testcases_v2_parquet"
+)
+
 // Tables names the tables a report reads.
 type Tables struct {
-	// Meta is the JSONL meta table, partitioned by (repository, year, month, day).
-	Meta string `yaml:"meta"`
-	// Testcases is the JSONL testcase table, partitioned the same way.
-	Testcases string `yaml:"testcases"`
+	// Meta is the Parquet meta table, partitioned by dt.
+	Meta string
+	// Testcases is the Parquet testcase table, partitioned the same way.
+	Testcases string
 }
 
 func (t *Tables) checkAndSetDefaults() error {
 	if t.Meta == "" {
-		t.Meta = "meta_v2_parquet"
+		t.Meta = DefaultMetaTable
 	}
 	if t.Testcases == "" {
-		t.Testcases = "testcases_v2_parquet"
+		t.Testcases = DefaultTestcasesTable
 	}
 	if !identifierPattern.MatchString(t.Meta) {
 		return trace.BadParameter("invalid meta table %q", t.Meta)
@@ -88,12 +94,12 @@ type Statement struct {
 // the statements can be asserted against a golden file with no AWS account,
 // and the document can be built from a fixture result set with no SQL.
 type Definition struct {
-	// Name identifies the report on the command line and in config.
+	// Name identifies the report.
 	Name string
 	// Summary is a one-line description of what the report shows.
 	Summary string
-	// NewParams returns a zero value of this report's parameter type, used as
-	// the decode target for a config `params:` block.
+	// NewParams returns a zero value of this report's parameter type, used
+	// when the caller supplies none.
 	NewParams func() any
 	// Queries renders the statements the report needs, keyed by a name the
 	// report chooses. The map allows a report to run more than one query, as a

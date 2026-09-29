@@ -16,7 +16,6 @@ package reporter
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/gravitational/trace"
@@ -194,17 +193,5 @@ func TestMulti(t *testing.T) {
 		assert.NoError(t, m.Preflight(ctx))
 		assert.NoError(t, m.Close())
 		assert.Equal(t, "", m.Name())
-	})
-	t.Run("bad configs are rejected", func(t *testing.T) {
-		_, err := New("foo", report.ReporterConfig{Type: "bar"}, nil)
-		require.True(t, trace.IsBadParameter(err))
-
-		_, err = New("foo", report.ReporterConfig{Type: ""}, nil)
-		require.True(t, trace.IsBadParameter(err))
-
-		var buf strings.Builder
-		r, err := New("console", report.ReporterConfig{Type: TypeStdout, MaxRows: 5}, &buf)
-		require.NoError(t, err)
-		assert.Equal(t, "console", r.Name())
 	})
 }

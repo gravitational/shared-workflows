@@ -44,38 +44,29 @@ ISO-8601 sorts lexicographically in chronological order so pruning works all the
 
 ### `report`
 
-Runs one statistical report over the records and writes it to one or more
-destinations. 
+Ranks the flakiest tests over a window and prints one table to stdout. Scores
+are the window's totals.
 
 ```sh
-ci-metrics report flaky_rollup --database example_db --config reports.yaml
+# Daily
+ci-metrics report --database gh_test_metrics_v2 \
+  --branches refs/heads/master,refs/heads/branch/v18,refs/heads/branch/v17 \
+  --from 2026-09-27 --to 2026-09-27
 
-# A specific window.
-ci-metrics report flaky_daily --database example_db --config reports.yaml --from 2026-08-29 --to 2026-09-11
+# Yesterday (UTC), same as --from and --to both set to yesterday's date
+ci-metrics report --database gh_test_metrics_v2 \
+  --branches refs/heads/master,refs/heads/branch/v18,refs/heads/branch/v17 \
+  --yesterday
+
+# Weekly
+ci-metrics report --database gh_test_metrics_v2 \
+  --branches refs/heads/master,refs/heads/branch/v18,refs/heads/branch/v17 \
+  --from 2026-09-21 --to 2026-09-28
 
 # Render the SQL without executing it, does not need AWS credentials.
-ci-metrics report flaky_daily --database example_db --config reports.yaml --days 7 --dryrun
+ci-metrics report --database gh_test_metrics_v2 --days 7 --dryrun
 ```
 
-See [`docs/reports.example.yaml`](docs/reports.example.yaml) for the config format.
-
-#### Available reports
-
-| Report         | Description                                                 |
-|----------------|----------------------------------------------------------------|
-| `flaky_rollup` | One ranked table of the flakiest tests over the whole window. |
-| `flaky_daily`  | One ranked table per day, most recent day first. |
-
-##### `flaky_rollup`
-
-Highlights tests that are flaky over time, scored on the window's totals.
-A test that fails a little every day rises to the top here even if it never
-stands out on a single day. Can be used to track whether overall flakiness improves between windows.
-
-##### `flaky_daily`
-
-Highlights tests that are flaky on a given day, scored within each day.
-Can be used to spot a new flaky test or confirm a fix has been successful in the following days.
 
 ## Local Dev
 

@@ -13,7 +13,6 @@ require (
 	github.com/dustin/go-humanize v1.0.1
 	github.com/gravitational/trace v1.5.4
 	github.com/stretchr/testify v1.12.1
-	go.yaml.in/yaml/v3 v3.0.5
 )
 
 require (
@@ -32,4 +31,5 @@ require (
 	github.com/aws/smithy-go v1.28.1 // indirect
 	github.com/stretchr/objx v0.5.3 // indirect
 	github.com/xhit/go-str2duration/v2 v2.1.0 // indirect
+	go.yaml.in/yaml/v3 v3.0.5 // indirect
 )

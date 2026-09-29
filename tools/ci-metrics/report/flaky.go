@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"math"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"text/template"
@@ -37,59 +38,76 @@ var templates = template.Must(
 		ParseFS(sqlFS, "sql/*.sql"),
 )
 
-// FlakyParams tunes both flaky reports. Only the grouping differs between
-// them, so the same block on each gives comparable numbers.
+// FlakyName is the registered name of the flaky test report.
+const FlakyName = "flaky"
+
+const flakyQuery = "flaky"
+
+// Defaults for [FlakyParams], exported so the CLI can show them in --help.
+const (
+	DefaultFlakyMinExecs  = 10
+	DefaultFlakySmoothing = 20.0
+	DefaultFlakyTop       = 20
+)
+
+// DefaultFlakyBranches are the refs counted when none are given.
+var DefaultFlakyBranches = []string{
+	"refs/heads/master",
+	"refs/heads/main",
+}
+
+func init() {
+	Register(Definition{
+		Name:      FlakyName,
+		Summary:   "Rank the flakiest tests over the window",
+		NewParams: func() any { return &FlakyParams{} },
+		Queries:   flakyQueries,
+		Render:    flakyRender,
+	})
+}
+
+// FlakyParams tunes the flaky report.
 type FlakyParams struct {
-	// MinExecs is the minimum executions a test needs before it is considered
-	// at all, so a test that ran twice cannot top the table. Counted within
-	// the day by flaky_daily and over the window by flaky_rollup.
-	MinExecs int `yaml:"min_execs"`
+	// MinExecs is the minimum executions a test needs over the window before
+	// it is considered at all, so a test that ran twice cannot top the table.
+	MinExecs int
 	// Smoothing is the K in the score's execs/(execs+K) term, which pulls
 	// small samples towards zero. Larger values demand more evidence.
-	Smoothing float64 `yaml:"smoothing"`
-	// Top is how many tests to keep: the top of the window for flaky_rollup,
-	// the top of each day for flaky_daily.
-	Top int `yaml:"top"`
+	Smoothing float64
+	// Top is how many tests to keep.
+	Top int
 	// Branches are the refs whose runs count, as full refs such as
 	// refs/heads/master. A merge-queue run targeting one of them counts too;
 	// everything else, pull requests included, is excluded. Counts are summed
 	// across all of them rather than reported per branch.
-	Branches []string `yaml:"branches"`
+	Branches []string
 }
 
 var branchRefPattern = regexp.MustCompile(`^refs/heads/[A-Za-z0-9._][A-Za-z0-9._/-]*$`)
 
 func (p *FlakyParams) checkAndSetDefaults() error {
-	const (
-		defaultFlakyMinExecs  = 10
-		defaultFlakySmoothing = 20.0
-		defaultFlakyTop       = 20
-	)
 	if p.MinExecs == 0 {
-		p.MinExecs = defaultFlakyMinExecs
+		p.MinExecs = DefaultFlakyMinExecs
 	}
 	if p.Smoothing == 0 {
-		p.Smoothing = defaultFlakySmoothing
+		p.Smoothing = DefaultFlakySmoothing
 	}
 	if p.Top == 0 {
-		p.Top = defaultFlakyTop
+		p.Top = DefaultFlakyTop
 	}
 	if len(p.Branches) == 0 {
-		p.Branches = []string{
-			"refs/heads/master",
-			"refs/heads/main",
-		}
+		p.Branches = slices.Clone(DefaultFlakyBranches)
 	}
 
 	if p.MinExecs < 2 {
 		// A test needs at least one pass and one failure to be a flake, so
 		// anything below two executions can never qualify.
-		return trace.BadParameter("min_execs must be at least 2, got %d", p.MinExecs)
+		return trace.BadParameter("min execs must be at least 2, got %d", p.MinExecs)
 	}
 
 	// Smoothing is the one parameter rendered into the statement as a
-	// floating-point literal, and YAML accepts .nan and .inf as floats, which
-	// would reach Athena as a bare identifier.
+	// floating-point literal, and NaN or Inf would reach Athena as a bare
+	// identifier.
 	if math.IsNaN(p.Smoothing) || math.IsInf(p.Smoothing, 0) {
 		return trace.BadParameter("smoothing must be a finite number, got %v", p.Smoothing)
 	}
@@ -152,8 +170,7 @@ func flakyParams(params any) (*FlakyParams, error) {
 	return p, nil
 }
 
-// flakyTemplateData is what both flaky statements are rendered from. They
-// differ only in how they group, so they take identical inputs.
+// flakyTemplateData is what the flaky statement is rendered from.
 type flakyTemplateData struct {
 	Database        string
 	MetaTable       string
@@ -166,8 +183,8 @@ type flakyTemplateData struct {
 	Top             int
 }
 
-// flakyStatement renders the single statement a flaky report runs.
-func flakyStatement(scope Scope, params any, queryKey, templateName string) (map[string]Statement, error) {
+// flakyQueries renders the single statement the flaky report runs.
+func flakyQueries(scope Scope, params any) (map[string]Statement, error) {
 	p, err := flakyParams(params)
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -202,15 +219,15 @@ func flakyStatement(scope Scope, params any, queryKey, templateName string) (map
 		Top:             p.Top,
 	}
 
-	sql, err := renderFlakyTemplate(templateName, data)
+	sql, err := renderFlakyTemplate("flaky.sql", data)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 
-	return map[string]Statement{queryKey: {SQL: sql}}, nil
+	return map[string]Statement{flakyQuery: {SQL: sql}}, nil
 }
 
-// renderFlakyTemplate renders one of the family's templates by file name.
+// renderFlakyTemplate renders a template by file name.
 func renderFlakyTemplate(name string, data flakyTemplateData) (string, error) {
 	var buf strings.Builder
 	if err := templates.ExecuteTemplate(&buf, name, data); err != nil {
@@ -219,19 +236,68 @@ func renderFlakyTemplate(name string, data flakyTemplateData) (string, error) {
 	return strings.TrimRight(buf.String(), "\n"), nil
 }
 
-// flakyResult pulls the one result a flaky report expects out of the map.
-func flakyResult(results map[string]*athena.Result, queryKey, reportName string) (*athena.Result, error) {
-	rs, ok := results[queryKey]
-	if !ok || rs == nil {
-		return nil, trace.BadParameter("%s report got no %q result", reportName, queryKey)
+// flakyRender builds a single ranked table for the window.
+func flakyRender(scope Scope, params any, results map[string]*athena.Result) (*Document, error) {
+	p, err := flakyParams(params)
+	if err != nil {
+		return nil, trace.Wrap(err)
 	}
-	return rs, nil
+
+	rs, ok := results[flakyQuery]
+	if !ok || rs == nil {
+		return nil, trace.BadParameter("%s report got no %q result", FlakyName, flakyQuery)
+	}
+
+	rows, err := decodeFlakyRows(rs)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	doc := &Document{
+		ID:       FlakyName,
+		Title:    "Top flaky tests",
+		Subtitle: scope.Database + "." + scope.Tables.Testcases + " | " + Window(scope.From, scope.To),
+	}
+
+	if len(rows) == 0 {
+		doc.Headline = "No flaky tests found in the window."
+		doc.Sections = []Section{{
+			Heading: "Summary",
+			Notes: append([]string{
+				"No test both passed and failed over the window with at least " +
+					Int(int64(p.MinExecs)) + " executions.",
+			}, flakyScoreNotes(p)...),
+		}}
+		return doc, nil
+	}
+
+	// Ordered by score, so the first row is the worst test.
+	worst := rows[0].TestName
+	distinct := distinctFlakyTests(rows)
+
+	doc.Headline = Int(int64(distinct)) + " flaky test(s) over the window; worst " + worst
+
+	doc.Sections = append(doc.Sections,
+		Section{
+			Heading: "Summary",
+			Metrics: []Metric{
+				{Name: "Flaky tests listed", Value: Int(int64(distinct))},
+				{Name: "Worst test", Value: worst},
+			},
+			Notes: flakyScoreNotes(p),
+		},
+		Section{
+			Heading: Window(scope.From, scope.To),
+			Table:   flakyTable(rows),
+			Notes:   flakyCapNote(rows, p.Top),
+		},
+	)
+
+	return doc, nil
 }
 
-// flakyRow is one scored test. Day is set only by flaky_daily, which buckets
-// by day; the rollup's single bucket is the window itself.
+// flakyRow is one scored test.
 type flakyRow struct {
-	Day        string
 	Rank       int64
 	Classname  string
 	TestName   string
@@ -242,17 +308,16 @@ type flakyRow struct {
 }
 
 // flakyScoreNotes explains the score and the exclusions.
-func flakyScoreNotes(p *FlakyParams, bucket string) []string {
+func flakyScoreNotes(p *FlakyParams) []string {
 	return []string{
 		"Score is 4*p*(1-p)*execs/(execs+" + strconv.FormatFloat(p.Smoothing, 'f', -1, 64) +
 			"), approaching 1.0 for a test that fails half the time with a large sample.",
-		"Tests with fewer than " + strconv.Itoa(p.MinExecs) + " executions " + bucket +
-			" are excluded, as are tests that always passed or always failed " + bucket + ".",
+		"Tests with fewer than " + strconv.Itoa(p.MinExecs) + " executions over the window" +
+			" are excluded, as are tests that always passed or always failed.",
 	}
 }
 
-// flakyTable builds the ranked table the two reports share. Neither renders
-// [flakyRow.Day]: the rollup has none and the daily sections group by it.
+// flakyTable builds the ranked table.
 func flakyTable(rows []flakyRow) *Table {
 	table := &Table{
 		Columns: []Column{
@@ -281,9 +346,9 @@ func flakyTable(rows []flakyRow) *Table {
 	return table
 }
 
-// flakyScanner is the part of the scan both reports share.
-func flakyScanner(rs *athena.Result) *athena.Scanner[flakyRow] {
-	return athena.NewScanner[flakyRow](rs).
+// decodeFlakyRows reads the result into typed rows.
+func decodeFlakyRows(rs *athena.Result) ([]flakyRow, error) {
+	scanner := athena.NewScanner[flakyRow](rs).
 		Int64("rn", func(r *flakyRow, v int64) { r.Rank = v }).
 		Str("classname", func(r *flakyRow, v string) { r.Classname = v }).
 		Str("test_name", func(r *flakyRow, v string) { r.TestName = v }).
@@ -291,10 +356,7 @@ func flakyScanner(rs *athena.Result) *athena.Scanner[flakyRow] {
 		Int64("fails", func(r *flakyRow, v int64) { r.Fails = v }).
 		Float64("fail_pct", func(r *flakyRow, v float64) { r.FailPct = v }).
 		Float64("flake_score", func(r *flakyRow, v float64) { r.FlakeScore = v })
-}
 
-// collectFlakyRows drains a configured scanner into a slice.
-func collectFlakyRows(scanner *athena.Scanner[flakyRow], rs *athena.Result) ([]flakyRow, error) {
 	out := make([]flakyRow, 0, len(rs.Rows))
 	for row, err := range scanner.Scan() {
 		if err != nil {
@@ -315,9 +377,9 @@ func distinctFlakyTests(rows []flakyRow) int {
 }
 
 // flakyCapNote warns that the ranking is truncated rather than exhausted.
-func flakyCapNote(rows []flakyRow, top int, per string) []string {
+func flakyCapNote(rows []flakyRow, top int) []string {
 	if len(rows) < top {
 		return nil
 	}
-	return []string{"At the query's " + per + "cap of " + strconv.Itoa(top) + "; there may be more."}
+	return []string{"At the query's cap of " + strconv.Itoa(top) + "; there may be more."}
 }

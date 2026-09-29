@@ -17,9 +17,6 @@ package reporter
 import (
 	"context"
 	"io"
-	"strings"
-
-	"github.com/gravitational/trace"
 
 	"github.com/gravitational/shared-workflows/tools/ci-metrics/report"
 )
@@ -36,21 +33,4 @@ type Reporter interface {
 type Preflighter interface {
 	// Preflight verifies the configured reporter.
 	Preflight(ctx context.Context) error
-}
-
-// Types returns every reporter type the config supports
-func Types() []string {
-	return []string{TypeStdout}
-}
-
-// New builds the reporter described by [report.ReporterConfig].
-func New(name string, cfg report.ReporterConfig, out io.Writer) (Reporter, error) {
-	switch cfg.Type {
-	case TypeStdout:
-		return NewStdout(name, out, cfg.MaxRows), nil
-	default:
-		return nil, trace.BadParameter(
-			"reporter %s has unknown type %q, want one of %s",
-			name, cfg.Type, strings.Join(Types(), ", "))
-	}
 }

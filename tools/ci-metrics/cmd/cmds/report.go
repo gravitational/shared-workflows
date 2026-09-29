@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -29,8 +30,11 @@ import (
 	"github.com/gravitational/shared-workflows/tools/ci-metrics/reporter"
 )
 
-// ReportCommand runs one statistical report over the normalized test records
-// and writes it to the configured destinations.
+// defaultWindowDays is the window used when neither --from nor --days is set.
+const defaultWindowDays = 14
+
+// ReportCommand runs the flaky test report over the normalized test records
+// and writes it to stdout.
 //
 // The orchestration lives here rather than in the report package because this
 // is the composition root: reporter imports report for the document type, so
@@ -39,19 +43,20 @@ type ReportCommand struct {
 	cmd *kingpin.CmdClause
 
 	athenaConfig athena.Config
-	reportConfig *report.Config
+	tables       report.Tables
+	params       report.FlakyParams
 
-	configPath string
-	reportName string
-	dryRun     bool
+	dryRun bool
 
-	from time.Time
-	to   time.Time
-	days int
+	from      time.Time
+	to        time.Time
+	days      int
+	yesterday bool
 
-	// fromSet and daysSet record whether the user passed the flag, since
-	// kingpin does not support mutually exclusive flag groups.
+	// fromSet, toSet and daysSet record whether the user passed the flag,
+	// since kingpin does not support mutually exclusive flag groups.
 	fromSet bool
+	toSet   bool
 	daysSet bool
 }
 
@@ -61,27 +66,13 @@ func NewReportCommand(app *kingpin.Application) *ReportCommand {
 		to: time.Now().UTC(),
 	}
 
-	c.cmd = app.Command("report", "Run a statistical report over normalized CI test results")
-
-	// One report per run, the name is required.
-	c.cmd.Arg("report", "Report to run, one of "+strings.Join(report.Names(), ", ")).
-		Required().
-		EnumVar(&c.reportName, report.Names()...)
-
-	// Deliberately not Required: [report.LoadConfig] also accepts the config
-	// body itself in EnvConfigBody, and only sees that fallback when the path
-	// is empty. With no source at all it falls back to [report.DefaultConfig].
-	c.cmd.Flag("config", "YAML configuration for reporters, or '-' to read stdin").
-		Short('c').
-		PlaceHolder("PATH").
-		Envar(report.EnvConfigPath).
-		StringVar(&c.configPath)
+	c.cmd = app.Command("report", "Rank the flakiest tests over a window of normalized CI test results")
 
 	c.cmd.Flag("dryrun", "Print the statements without executing them").
 		BoolVar(&c.dryRun)
 
 	// --from and --days are mutually exclusive; the condition is enforced in
-	// window, which is also where the config's own window is applied.
+	// window.
 	c.cmd.Flag("from", "First day to report on, inclusive (YYYY-MM-DD); mutually exclusive with --days").
 		PlaceHolder("YYYY-MM-DD").
 		IsSetByUser(&c.fromSet).
@@ -89,12 +80,38 @@ func NewReportCommand(app *kingpin.Application) *ReportCommand {
 
 	c.cmd.Flag("to", "Last day to report on, inclusive (YYYY-MM-DD); defaults to today").
 		PlaceHolder("YYYY-MM-DD").
+		IsSetByUser(&c.toSet).
 		SetValue(&dateValue{target: &c.to})
 
-	c.cmd.Flag("days", "Report on the last N days, inclusive of --to; mutually exclusive with --from").
+	c.cmd.Flag("days", "Report on the last N days, inclusive of --to; mutually exclusive with --from. "+
+		"Defaults to "+strconv.Itoa(defaultWindowDays)+" when --from is unset").
 		PlaceHolder("N").
 		IsSetByUser(&c.daysSet).
 		IntVar(&c.days)
+
+	c.cmd.Flag("yesterday", "Report on yesterday (UTC) only; mutually exclusive with --from, --to and --days").
+		BoolVar(&c.yesterday)
+
+	c.cmd.Flag("branches", "Comma-separated full refs whose runs count, merge-queue runs targeting them included").
+		Default(strings.Join(report.DefaultFlakyBranches, ",")).
+		PlaceHolder("REF,...").
+		SetValue(&csvValue{target: &c.params.Branches})
+
+	c.cmd.Flag("top", "Number of tests to list").
+		Default(strconv.Itoa(report.DefaultFlakyTop)).
+		IntVar(&c.params.Top)
+
+	c.cmd.Flag("min-execs", "Minimum executions over the window before a test is considered").
+		Default(strconv.Itoa(report.DefaultFlakyMinExecs)).
+		IntVar(&c.params.MinExecs)
+
+	c.cmd.Flag("meta-table", "Parquet meta table to read").
+		Default(report.DefaultMetaTable).
+		StringVar(&c.tables.Meta)
+
+	c.cmd.Flag("testcases-table", "Parquet testcases table to read").
+		Default(report.DefaultTestcasesTable).
+		StringVar(&c.tables.Testcases)
 
 	registerAthenaConfigFlags(c.cmd, &c.athenaConfig)
 
@@ -106,39 +123,14 @@ func (c *ReportCommand) FullCommand() string {
 	return c.cmd.FullCommand()
 }
 
-// Run loads the config and executes the selected report.
+// Run executes the report.
 func (c *ReportCommand) Run(ctx context.Context) error {
-	var err error
-	if c.reportConfig, err = report.LoadConfig(c.configPath); err != nil {
-		return trace.Wrap(err, "loading config")
-	}
-
-	return trace.Wrap(c.run(ctx))
-}
-
-func (c *ReportCommand) run(ctx context.Context) error {
 	from, to, err := c.window()
 	if err != nil {
 		return trace.Wrap(err)
 	}
 
-	rc, ok := c.reportConfig.Reports[c.reportName]
-	if !ok {
-		return trace.BadParameter("report %q is not in the config", c.reportName)
-	}
-
-	// This cannot fail.
-	def, _ := report.Get(c.reportName)
-
-	params, err := rc.DecodeParams(c.reportName, def)
-	if err != nil {
-		return trace.Wrap(err)
-	}
-
-	sinks, err := c.buildReporters(rc)
-	if err != nil {
-		return trace.Wrap(err, "building reporters")
-	}
+	sinks := reporter.Multi{reporter.NewStdout(reporter.TypeStdout, os.Stdout, 0)}
 	defer func() {
 		if err := sinks.Close(); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: closing reporters: %v\n", err)
@@ -156,19 +148,20 @@ func (c *ReportCommand) run(ctx context.Context) error {
 		return trace.Wrap(err)
 	}
 
-	fmt.Printf("%s, %s, %s .. %s, reporters: %s\n",
-		c.reportName, c.athenaConfig.Database, report.Day(from), report.Day(to), sinks.Name())
+	fmt.Printf("%s, %s, %s .. %s, branches: %s\n",
+		report.FlakyName, c.athenaConfig.Database, report.Day(from), report.Day(to),
+		strings.Join(c.params.Branches, ","))
 
 	scope := report.Scope{
 		Database: c.athenaConfig.Database,
-		Tables:   c.reportConfig.Tables,
+		Tables:   c.tables,
 		From:     from,
 		To:       to,
 	}
 
-	doc, err := report.Execute(ctx, exec, scope, c.reportName, params)
+	doc, err := report.Execute(ctx, exec, scope, report.FlakyName, &c.params)
 	if err != nil {
-		return trace.Wrap(err, "running report %s", c.reportName)
+		return trace.Wrap(err, "running report %s", report.FlakyName)
 	}
 
 	// Dry runs don't print empty reports, we may wish to change this for manual testing.
@@ -176,19 +169,29 @@ func (c *ReportCommand) run(ctx context.Context) error {
 		return nil
 	}
 
-	return trace.Wrap(sinks.Report(ctx, doc), "reporting %s", c.reportName)
+	return trace.Wrap(sinks.Report(ctx, doc), "reporting %s", report.FlakyName)
 }
 
-// window resolves the reporting period from flags, falling back to the
-// configured number of days.
+// window resolves the reporting period from flags.
+//
+// Only the date part is used downstream, via [report.Day].
 func (c *ReportCommand) window() (from, to time.Time, err error) {
+	if c.yesterday {
+		if c.fromSet || c.toSet || c.daysSet {
+			return from, to, trace.BadParameter("--yesterday is mutually exclusive with --from, --to and --days")
+		}
+		// c.to defaults to now, so one day back is yesterday.
+		day := c.to.UTC().AddDate(0, 0, -1)
+		return day, day, nil
+	}
+
 	to = c.to.UTC()
 
 	if c.fromSet && c.daysSet {
 		return from, to, trace.BadParameter("--from and --days are mutually exclusive")
 	}
 
-	days := c.reportConfig.Window.Days
+	days := defaultWindowDays
 	if c.daysSet {
 		days = c.days
 	}
@@ -211,24 +214,6 @@ func (c *ReportCommand) window() (from, to time.Time, err error) {
 	return from, to, nil
 }
 
-// buildReporters constructs the destinations the report writes to.
-func (c *ReportCommand) buildReporters(rc report.ReportConfig) (reporter.Multi, error) {
-	sinks := make(reporter.Multi, 0, len(rc.Reporters))
-	for _, name := range rc.Reporters {
-		cfg, ok := c.reportConfig.Reporters[name]
-		if !ok {
-			return nil, trace.BadParameter("undefined reporter %q", name)
-		}
-
-		r, err := reporter.New(name, cfg, os.Stdout)
-		if err != nil {
-			return nil, trace.Wrap(err)
-		}
-		sinks = append(sinks, r)
-	}
-	return sinks, nil
-}
-
 // executor builds the Athena client, or its no-op stand-in under --dryrun.
 func (c *ReportCommand) executor(ctx context.Context) (exe athena.Executor, err error) {
 	if c.dryRun {
@@ -244,4 +229,32 @@ func (c *ReportCommand) executor(ctx context.Context) (exe athena.Executor, err 
 	}
 
 	return
+}
+
+// csvValue parses a comma-separated command line value into a string slice.
+// Each Set replaces the previous value, so an explicit flag overrides the
+// default rather than appending to it.
+type csvValue struct {
+	target *[]string
+}
+
+func (v *csvValue) Set(value string) error {
+	var out []string
+	for part := range strings.SplitSeq(value, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			out = append(out, part)
+		}
+	}
+	if len(out) == 0 {
+		return trace.BadParameter("expected at least one value")
+	}
+	*v.target = out
+	return nil
+}
+
+func (v *csvValue) String() string {
+	if v.target == nil {
+		return ""
+	}
+	return strings.Join(*v.target, ",")
 }
