@@ -13,16 +13,17 @@ import (
 )
 
 func TestCheckDocsPathsForMissingRedirects(t *testing.T) {
+	const teleportClonePath = "teleport"
 	cases := []struct {
-		description       string
-		teleportClonePath string
-		docsConfig        string
-		errorSubstring    string
-		number            int
+		description      string
+		docsConfig       string
+		errorSubstring   string
+		number           int
+		filePathsInClone []string
+		pullRequestFiles github.PullRequestFiles
 	}{
 		{
-			description:       "valid clone path with no error",
-			teleportClonePath: "/teleport",
+			description: "valid clone path with no error",
 			docsConfig: `{
   "navigation": [],
   "variables": {},
@@ -36,44 +37,126 @@ func TestCheckDocsPathsForMissingRedirects(t *testing.T) {
 }`,
 			number:         1,
 			errorSubstring: "",
+			pullRequestFiles: []github.PullRequestFile{
+				{
+					Name:         "docs/pages/enroll-resources/database-access/get-started.mdx",
+					Status:       github.StatusRenamed,
+					PreviousName: "docs/pages/database-access/get-started.mdx",
+				},
+			},
 		},
 		{
-			description:       "valid clone path with missing redirect",
-			teleportClonePath: "/teleport",
+			description: "valid clone path with missing redirect",
 			docsConfig: `{
   "navigation": [],
   "variables": {},
   "redirects": []
 }`,
-			number:         1,
+			number: 1,
+			pullRequestFiles: []github.PullRequestFile{
+				{
+					Name:         "docs/pages/enroll-resources/database-access/get-started.mdx",
+					Status:       github.StatusRenamed,
+					PreviousName: "docs/pages/database-access/get-started.mdx",
+				},
+			},
 			errorSubstring: "missing redirects for the following renamed or deleted pages: /database-access/get-started/",
 		},
 		{
-			description:       "invalid config file",
-			teleportClonePath: "/teleport",
-			docsConfig:        `This file is not JSON.`,
-			number:            1,
-			errorSubstring:    "docs/config.json: invalid character 'T' looking for beginning of value",
+			description:    "invalid config file",
+			docsConfig:     `This file is not JSON.`,
+			number:         1,
+			errorSubstring: "docs/config.json: invalid character 'T' looking for beginning of value",
 		},
 		{
-			description:       "invalid config file with PR 0",
-			teleportClonePath: "/teleport",
-			docsConfig:        `This file is not JSON.`,
-			number:            0,
-			errorSubstring:    "",
+			description:    "invalid config file with PR 0",
+			docsConfig:     `This file is not JSON.`,
+			number:         0,
+			errorSubstring: "",
+		},
+		{
+			description: "deleted standalone page duplicates category page path",
+			docsConfig: `{
+  "navigation": [],
+  "variables": {},
+  "redirects": []
+}`,
+			number: 1,
+			filePathsInClone: []string{
+				"docs/pages/agentic-identity-framework/agentic-identity-framework.mdx",
+			},
+			pullRequestFiles: []github.PullRequestFile{
+				{
+					Name:   "docs/pages/agentic-identity-framework.mdx",
+					Status: github.StatusRemoved,
+				},
+			},
+		},
+		{
+			description: "deleted category page duplicates standalone page path",
+			docsConfig: `{
+  "navigation": [],
+  "variables": {},
+  "redirects": []
+}`,
+			number: 1,
+			filePathsInClone: []string{
+				"docs/pages/agentic-identity-framework.mdx",
+			},
+			pullRequestFiles: []github.PullRequestFile{
+				{
+					Name:   "docs/pages/agentic-identity-framework/agentic-identity-framework.mdx",
+					Status: github.StatusRemoved,
+				},
+			},
+		},
+		{
+			description: "duplicate page deleted while a redirect is needed",
+			docsConfig: `{
+  "navigation": [],
+  "variables": {},
+  "redirects": []
+}`,
+			number: 1,
+			filePathsInClone: []string{
+				"docs/pages/agentic-identity-framework.mdx",
+			},
+			pullRequestFiles: []github.PullRequestFile{
+				{
+					Name:   "docs/pages/agentic-identity-framework/agentic-identity-framework.mdx",
+					Status: github.StatusRemoved,
+				},
+				{
+					Name:   "docs/pages/agentic-identity-framework/guide.mdx",
+					Status: github.StatusRemoved,
+				},
+			},
+			errorSubstring: "missing redirects for the following renamed or deleted pages: /agentic-identity-framework/guide/",
 		},
 	}
 
 	for _, c := range cases {
 		t.Run(c.description, func(t *testing.T) {
 			tmpdir := t.TempDir()
-			err := os.MkdirAll(filepath.Join(tmpdir, "teleport", "docs"), 0777)
+			err := os.MkdirAll(filepath.Join(tmpdir, teleportClonePath, "docs"), 0777)
 			require.NoError(t, err)
 
-			f, err := os.Create(filepath.Join(tmpdir, "teleport", "docs", "config.json"))
-			require.NoError(t, err)
+			for _, p := range c.filePathsInClone {
+				err := os.MkdirAll(filepath.Join(tmpdir, teleportClonePath, filepath.Dir(p)), 0777)
+				require.NoError(t, err)
+				err = os.WriteFile(
+					filepath.Join(tmpdir, teleportClonePath, p),
+					[]byte{},
+					0666,
+				)
+				require.NoError(t, err)
+			}
 
-			_, err = f.WriteString(c.docsConfig)
+			err = os.WriteFile(
+				filepath.Join(tmpdir, teleportClonePath, "docs", "config.json"),
+				[]byte(c.docsConfig),
+				0666,
+			)
 			require.NoError(t, err)
 
 			b := &Bot{
@@ -82,18 +165,12 @@ func TestCheckDocsPathsForMissingRedirects(t *testing.T) {
 						Number: c.number,
 					},
 					GitHub: &fakeGithub{
-						files: []github.PullRequestFile{
-							{
-								Name:         "docs/pages/enroll-resources/database-access/get-started.mdx",
-								Status:       github.StatusRenamed,
-								PreviousName: "docs/pages/database-access/get-started.mdx",
-							},
-						},
+						files: c.pullRequestFiles,
 					},
 				},
 			}
 
-			err = b.CheckDocsPathsForMissingRedirects(context.Background(), filepath.Join(tmpdir, c.teleportClonePath))
+			err = b.CheckDocsPathsForMissingRedirects(context.Background(), filepath.Join(tmpdir, teleportClonePath))
 			if c.errorSubstring == "" {
 				assert.NoError(t, err)
 				return
@@ -386,6 +463,37 @@ func Test_toURLPath(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.description, func(t *testing.T) {
 			assert.Equal(t, c.expected, toURLPath(c.input))
+		})
+	}
+}
+
+func Test_toDocsPaths(t *testing.T) {
+	cases := []struct {
+		description string
+		input       string
+		expected    possibleDocsPaths
+	}{
+		{
+			description: "single path segment",
+			input:       "/databases/",
+			expected: possibleDocsPaths{
+				standalone: "docs/pages/databases.mdx",
+				category:   "docs/pages/databases/databases.mdx",
+			},
+		},
+		{
+			description: "multiple path segments",
+			input:       "/enroll-resources/databases/",
+			expected: possibleDocsPaths{
+				standalone: "docs/pages/enroll-resources/databases.mdx",
+				category:   "docs/pages/enroll-resources/databases/databases.mdx",
+			},
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.description, func(t *testing.T) {
+			assert.Equal(t, c.expected, toDocsPaths(c.input))
 		})
 	}
 }
