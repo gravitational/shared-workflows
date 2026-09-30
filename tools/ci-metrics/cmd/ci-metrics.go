@@ -49,6 +49,7 @@ func run(ctx context.Context, args []string) error {
 
 	migrateCmd := cmds.NewMigrateCommand(app)
 	reportCmd := cmds.NewReportCommand(app)
+	portalCmd := cmds.NewPortalCommand(app)
 
 	command, err := app.Parse(args)
 	if err != nil {
@@ -66,6 +67,8 @@ func run(ctx context.Context, args []string) error {
 		return trace.Wrap(migrateCmd.Run(ctx))
 	case reportCmd.FullCommand():
 		return trace.Wrap(reportCmd.Run(ctx))
+	case portalCmd.FullCommand():
+		return trace.Wrap(portalCmd.Run(ctx))
 	default:
 		return trace.NotImplemented("unimplemented command %q", command)
 	}

@@ -323,7 +323,7 @@ func flakyTable(rows []flakyRow) *Table {
 		Columns: []Column{
 			{Name: "#", Align: AlignRight},
 			{Name: "TEST", Align: AlignLeft},
-			{Name: "CLASS", Align: AlignLeft},
+			{Name: "PACKAGE", Align: AlignLeft},
 			{Name: "EXECS", Align: AlignRight},
 			{Name: "FAILS", Align: AlignRight},
 			{Name: "FAIL%", Align: AlignRight},

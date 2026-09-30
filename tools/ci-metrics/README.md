@@ -67,6 +67,19 @@ ci-metrics report --database gh_test_metrics_v2 \
 ci-metrics report --database gh_test_metrics_v2 --days 7 --dryrun
 ```
 
+### `portal`
+
+Serves a single page web UI backed by Athena queries. The landing page
+loads the top 20 flaky tests for the default date range and lets users change
+the range or search for GitHub Actions runs where a test failed. Query results
+are cached in memory; tune the cache with `--cache-ttl`.
+
+```sh
+ci-metrics portal --database gh_test_metrics_v2 \
+  --branches refs/heads/master,refs/heads/branch/v18,refs/heads/branch/v17 \
+  --listen :8080 --cache-ttl 15m
+```
+
 
 ## Local Dev
 
