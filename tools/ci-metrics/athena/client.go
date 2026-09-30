@@ -135,8 +135,6 @@ func (c *Client) start(ctx context.Context, statement string) (*Result, error) {
 // wait polls a running query until it reaches a terminal state.
 func (c *Client) wait(ctx context.Context, result *Result) error {
 	const defaultPollInterval = 2 * time.Second
-	ticker := time.NewTicker(defaultPollInterval)
-	defer ticker.Stop()
 
 	for {
 		out, err := c.clt.GetQueryExecution(ctx, &athenasdk.GetQueryExecutionInput{
@@ -168,7 +166,7 @@ func (c *Client) wait(ctx context.Context, result *Result) error {
 		select {
 		case <-ctx.Done():
 			return trace.Wrap(ctx.Err(), "waiting on query %s", result.QueryExecutionID)
-		case <-ticker.C:
+		case <-time.After(defaultPollInterval):
 		}
 	}
 }
