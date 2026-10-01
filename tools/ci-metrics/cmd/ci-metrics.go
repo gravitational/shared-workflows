@@ -48,6 +48,7 @@ func run(ctx context.Context, args []string) error {
 	).Default("0").Duration()
 
 	migrateCmd := cmds.NewMigrateCommand(app)
+	reportCmd := cmds.NewReportCommand(app)
 
 	command, err := app.Parse(args)
 	if err != nil {
@@ -63,6 +64,8 @@ func run(ctx context.Context, args []string) error {
 	switch command {
 	case migrateCmd.FullCommand():
 		return trace.Wrap(migrateCmd.Run(ctx))
+	case reportCmd.FullCommand():
+		return trace.Wrap(reportCmd.Run(ctx))
 	default:
 		return trace.NotImplemented("unimplemented command %q", command)
 	}
