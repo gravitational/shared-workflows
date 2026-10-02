@@ -52,14 +52,14 @@ var prRegex = regexp.MustCompile(`\(#(\d+)\)\s*$`)
 // subject ends with "(#N)", as produced by GitHub squash merges; commits
 // without a PR reference are skipped.
 func (r *Repo) PRsBetweenRefs(baseRef, headRef string) ([]int, error) {
-	commits, err := r.RunCmd("log", "--first-parent", "--format=%s", baseRef+".."+headRef)
+	commits, err := r.CommitLinesBetweenRefs(baseRef, headRef)
 	if err != nil {
-		return nil, trace.Wrap(err, "can't get commits between refs %q and %q", baseRef, headRef)
+		return nil, trace.Wrap(err)
 	}
 
 	var prNumbers []int
 	seen := make(map[int]struct{})
-	for _, commit := range strings.Split(commits, "\n") {
+	for _, commit := range commits {
 		matches := prRegex.FindStringSubmatch(commit)
 		if matches == nil {
 			continue
@@ -76,4 +76,17 @@ func (r *Repo) PRsBetweenRefs(baseRef, headRef string) ([]int, error) {
 	}
 
 	return prNumbers, nil
+}
+
+// CommitLinesBetweenRefs returns abbreviated hashes and subjects for first-parent
+// commits in baseRef..headRef.
+func (r *Repo) CommitLinesBetweenRefs(baseRef, headRef string) ([]string, error) {
+	commits, err := r.RunCmd("log", "--first-parent", "--format=%h %s", baseRef+".."+headRef)
+	if err != nil {
+		return nil, trace.Wrap(err, "can't get commits between refs %q and %q", baseRef, headRef)
+	}
+	if commits == "" {
+		return nil, nil
+	}
+	return strings.Split(commits, "\n"), nil
 }

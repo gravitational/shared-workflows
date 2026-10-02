@@ -56,21 +56,40 @@ func main() {
 			"Whether to include markdown links to GitHub pull requests in the generated changelog.",
 		).Envar("PR_LINKS").Default("false").Bool()
 
+		debug = kingpin.Flag(
+			"debug",
+			"Print commit ranges, commits, and PR numbers used to generate the changelog.",
+		).Envar("DEBUG").Default("false").Bool()
+
 		dir = kingpin.Arg("dir", "The directory of the teleport repo.").Required().String()
 	)
 	kingpin.Parse()
 
-	if err := run(context.Background(), *repoName, *dir, *baseBranch, *baseTag, *submodule, *prLinks); err != nil {
+	if err := run(context.Background(), *repoName, *dir, *baseBranch, *baseTag, *submodule, *prLinks, *debug); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func run(ctx context.Context, repoName, dir, baseBranch, baseTag string, submodule, prLinks bool) error {
+func run(ctx context.Context, repoName, dir, baseBranch, baseTag string, submodule, prLinks, debug bool) error {
 	ossRepo := git.NewRepo(dir)
+
+	if debug {
+		log.Printf("OSS commit range: %s..%s", baseTag, baseBranch)
+		commits, err := ossRepo.CommitLinesBetweenRefs(baseTag, baseBranch)
+		if err != nil {
+			return trace.Wrap(err)
+		}
+		for _, commit := range commits {
+			log.Printf("OSS commit: %s", commit)
+		}
+	}
 
 	ossPRs, err := ossRepo.PRsBetweenRefs(baseTag, baseBranch)
 	if err != nil {
 		return trace.Wrap(err)
+	}
+	if debug {
+		log.Printf("OSS PRs: %v", ossPRs)
 	}
 
 	gh, err := github.NewClientFromGHAuth(ctx)
@@ -91,7 +110,7 @@ func run(ctx context.Context, repoName, dir, baseBranch, baseTag string, submodu
 
 	var entCL string
 	if submodule {
-		entCL, err = entCLFromSubmodule(ctx, gh, ossRepo, dir, baseBranch, baseTag)
+		entCL, err = entCLFromSubmodule(ctx, gh, ossRepo, dir, baseBranch, baseTag, debug)
 		if err != nil {
 			return trace.Wrap(err)
 		}
@@ -106,7 +125,7 @@ func run(ctx context.Context, repoName, dir, baseBranch, baseTag string, submodu
 	return nil
 }
 
-func entCLFromSubmodule(ctx context.Context, gh *github.Client, ossRepo *git.Repo, dir, baseBranch, baseTag string) (string, error) {
+func entCLFromSubmodule(ctx context.Context, gh *github.Client, ossRepo *git.Repo, dir, baseBranch, baseTag string, debug bool) (string, error) {
 	entRepo := git.NewRepo(filepath.Join(dir, "e"))
 
 	// The enterprise repo is a submodule of the OSS repo, so resolve the
@@ -122,6 +141,17 @@ func entCLFromSubmodule(ctx context.Context, gh *github.Client, ossRepo *git.Rep
 	entPRs, err := entRepo.PRsBetweenRefs(eTagSHA, eBranchSHA)
 	if err != nil {
 		return "", trace.Wrap(err)
+	}
+	if debug {
+		log.Printf("Enterprise commit range: %s..%s", eTagSHA, eBranchSHA)
+		commits, err := entRepo.CommitLinesBetweenRefs(eTagSHA, eBranchSHA)
+		if err != nil {
+			return "", trace.Wrap(err)
+		}
+		for _, commit := range commits {
+			log.Printf("Enterprise commit: %s", commit)
+		}
+		log.Printf("Enterprise PRs: %v", entPRs)
 	}
 	entGen := &generator{gh: gh, repo: "teleport.e", tmpl: tmplNoLinks}
 

@@ -42,7 +42,7 @@ var (
 
 	// anyChangelogPattern matches any changelog marker, so adjacent entries
 	// on the same line can be split cleanly.
-	anyChangelogPattern = regexp.MustCompile(`(?i)changelog:[ \t]*`)
+	anyChangelogPattern = regexp.MustCompile(`(?i)changelog(?:-enterprise)?:[ \t]*`)
 
 	// htmlCommentPattern matches markdown HTML comments, including multiline
 	// comments often used by PR templates.

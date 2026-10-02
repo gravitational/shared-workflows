@@ -12,6 +12,7 @@ Flags:
   --base-branch=BASEBRANCH  The base release branch to generate the changelog for. It will be of the form branch/v* ($BASE_BRANCH)
   --base-tag=BASETAG        The tag/version to generate the changelog from. It will be of the form vXX.Y.Z, e.g. v15.1.1 ($BASE_TAG)
   --pr-links                Include markdown links to GitHub pull requests. ($PR_LINKS)
+  --debug                   Print commit ranges, commits, and PR numbers used to generate the changelog. ($DEBUG)
 ```
 
 It can optionally take two input variables: BASE_BRANCH: The base release
