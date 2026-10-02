@@ -87,7 +87,7 @@ type Client interface {
 	// DeleteWorkflowRun is used to delete a workflow run.
 	DeleteWorkflowRun(ctx context.Context, organization string, repository string, runID int64) error
 
-	// IsOrgMember checks whether [user] is a member of GitHub orgainzation [org].
+	// IsOrgMember checks whether [user] is a member of GitHub organization [org].
 	IsOrgMember(ctx context.Context, user string, org string) (bool, error)
 
 	// GetRef returns a Reference representing the provided ref name.

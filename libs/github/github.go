@@ -178,7 +178,7 @@ func (j *jwtAuthTransport) RoundTrip(orig *http.Request) (*http.Response, error)
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
 	ss, err := token.SignedString(j.privateKey)
 	if err != nil {
-		return nil, fmt.Errorf("signing jwt: %s", err)
+		return nil, fmt.Errorf("signing jwt: %w", err)
 	}
 
 	req.Header.Set("Authorization", "Bearer "+ss)

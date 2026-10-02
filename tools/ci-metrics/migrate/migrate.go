@@ -159,13 +159,13 @@ func Run(ctx context.Context, exec athena.Executor, opts Options) error {
 		bytesScanned += result.DataScannedBytes
 		fmt.Printf("  %s  %9s scanned  %6s  %s\n",
 			day.Format(time.DateOnly),
-			humanize.IBytes(uint64(result.DataScannedBytes)),
+			humanize.IBytes(uint64(result.DataScannedBytes)), //nolint:gosec // byte counts reported by Athena are never negative
 			result.EngineTime.Round(100*time.Millisecond),
 			result.QueryExecutionID,
 		)
 	}
 
 	fmt.Printf("%d statement(s), %s scanned, %s elapsed\n",
-		statements, humanize.IBytes(uint64(bytesScanned)), time.Since(started).Round(time.Second))
+		statements, humanize.IBytes(uint64(bytesScanned)), time.Since(started).Round(time.Second)) //nolint:gosec // byte counts reported by Athena are never negative
 	return nil
 }

@@ -33,7 +33,7 @@ type bucket struct {
 }
 
 // bucketsFromRange splits an inclusive day range into per cursor buckets suitable for Athena partitions.
-// It is the responsiblity of the caller to ensure the locale has been set correctly.
+// It is the responsibility of the caller to ensure the locale has been set correctly.
 func bucketsFromRange(from, to time.Time) []bucket {
 	var out []bucket
 

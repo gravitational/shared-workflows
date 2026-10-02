@@ -137,7 +137,8 @@ type Config struct {
 // CheckAndSetDefaults checks and sets defaults.
 func (c *Config) CheckAndSetDefaults() error {
 	if c.Rand == nil {
-		c.Rand = rand.New(rand.NewSource(time.Now().UnixNano()))
+		// Reviewer selection only needs to be spread out, not unpredictable.
+		c.Rand = rand.New(rand.NewSource(time.Now().UnixNano())) //nolint:gosec // not used for anything security sensitive
 	}
 
 	if c.CoreReviewers == nil {

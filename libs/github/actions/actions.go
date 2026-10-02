@@ -90,7 +90,7 @@ func writeKVFile(filePath string, kv map[string]string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(filePath, []byte(output), 0644); err != nil {
+	if err := os.WriteFile(filePath, []byte(output), 0o600); err != nil {
 		return fmt.Errorf("error writing to file %s: %w", filePath, err)
 	}
 	return nil

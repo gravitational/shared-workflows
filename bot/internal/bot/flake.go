@@ -29,7 +29,7 @@ func (b *Bot) ExcludeFlakes(ctx context.Context) error {
 
 	output := "FLAKE_SKIP=" + strings.Join(skip, " ")
 	outfile := os.Getenv(github.OutputEnv)
-	err = os.WriteFile(outfile, []byte(output), 0644)
+	err = os.WriteFile(outfile, []byte(output), 0o600)
 
 	log.Printf("wrote %q to %v", output, outfile)
 

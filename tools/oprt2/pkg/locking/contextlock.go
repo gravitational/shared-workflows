@@ -43,8 +43,8 @@ func NewContextLock() *ContextLock {
 	return cl
 }
 
-// Attempts to aquire the lock until the context expires. If the context expires prior
-// to aquiring the lock, the context cancellation error is returned.
+// Attempts to acquire the lock until the context expires. If the context expires prior
+// to acquiring the lock, the context cancellation error is returned.
 func (cl *ContextLock) Lock(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
@@ -69,7 +69,7 @@ func (cl *ContextLock) Unlock() {
 }
 
 func (cl *ContextLock) Close(ctx context.Context) error {
-	// Aquire the lock to make sure nothing else breaks
+	// Acquire the lock to make sure nothing else breaks
 	if err := cl.Lock(ctx); err != nil {
 		return err
 	}

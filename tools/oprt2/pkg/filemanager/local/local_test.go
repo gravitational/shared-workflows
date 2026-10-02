@@ -54,8 +54,8 @@ func TestNewFileManager(t *testing.T) {
 			errFunc: assert.Error,
 		},
 		{
-			name:          "non-existant path",
-			baseDirectory: "non-existant path",
+			name:          "non-existent path",
+			baseDirectory: "non-existent path",
 			errFunc:       assert.Error,
 		},
 		{
@@ -170,8 +170,8 @@ func TestGetLocalFilePath(t *testing.T) {
 			errFunc: assert.Error,
 		},
 		{
-			name:    "non-existant file",
-			item:    "non-existant file",
+			name:    "non-existent file",
+			item:    "non-existent file",
 			errFunc: assert.Error,
 		},
 	}
