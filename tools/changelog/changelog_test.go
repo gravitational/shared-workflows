@@ -70,3 +70,74 @@ func TestRender(t *testing.T) {
 		})
 	}
 }
+
+func TestEntriesFromPRIgnoresChangelogTextInHTMLComments(t *testing.T) {
+	pr := github.PullRequest{
+		Body: `<!-- The changelog check requires at least one non-empty Changelog: line, or a no-changelog label. -->
+
+Changelog: actual user-facing change`,
+		Number: 1099,
+		URL:    "https://github.com/gravitational/core/pull/1099",
+	}
+
+	gen := &generator{}
+	got := gen.entriesFromPR(pr)
+	require.Len(t, got, 1)
+	assert.Equal(t, "Actual user-facing change.", got[0].Summary)
+}
+
+func TestEntriesFromPRIgnoresMultilineHTMLComments(t *testing.T) {
+	pr := github.PullRequest{
+		Body: `<!--
+Changelog: hidden template hint
+-->
+
+changelog: visible change`,
+		Number: 1100,
+	}
+
+	gen := &generator{}
+	got := gen.entriesFromPR(pr)
+	require.Len(t, got, 1)
+	assert.Equal(t, "Visible change.", got[0].Summary)
+}
+
+func TestEntriesFromPRSupportsChangelogOutsideLineStart(t *testing.T) {
+	pr := github.PullRequest{
+		Body:   `Backport detail: changelog: visible change`,
+		Number: 1101,
+	}
+
+	gen := &generator{}
+	got := gen.entriesFromPR(pr)
+	require.Len(t, got, 1)
+	assert.Equal(t, "Visible change.", got[0].Summary)
+}
+
+func TestEntriesFromPRSupportsMultipleChangelogEntriesOnOneLine(t *testing.T) {
+	pr := github.PullRequest{
+		Body:   `changelog: first visible change, changelog: second visible change; changelog: third visible change`,
+		Number: 1102,
+	}
+
+	gen := &generator{}
+	got := gen.entriesFromPR(pr)
+	require.Len(t, got, 3)
+	assert.Equal(t, "First visible change.", got[0].Summary)
+	assert.Equal(t, "Second visible change.", got[1].Summary)
+	assert.Equal(t, "Third visible change.", got[2].Summary)
+}
+
+func TestEntriesFromPRSupportsMarkdownListItems(t *testing.T) {
+	pr := github.PullRequest{
+		Body: `* changelog: first listed change
+* changelog: second listed change`,
+		Number: 1103,
+	}
+
+	gen := &generator{}
+	got := gen.entriesFromPR(pr)
+	require.Len(t, got, 2)
+	assert.Equal(t, "First listed change.", got[0].Summary)
+	assert.Equal(t, "Second listed change.", got[1].Summary)
+}
