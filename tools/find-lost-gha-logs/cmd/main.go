@@ -80,7 +80,7 @@ func getFlags() (org, repo, githubToken string, opts githubOpts, err error) {
 
 	flag.Parse()
 
-	if githubToken == "${GITHUB_TOKEN}" {
+	if githubToken == "${GITHUB_TOKEN}" { //nolint:gosec // flag placeholder, not a credential
 		// Don't use this as the flag default value to prevent logging it to stdout when `--help` is provided
 		githubToken = os.Getenv("GITHUB_TOKEN")
 	}
@@ -309,7 +309,7 @@ func runRetriever(ctx context.Context, client *github.Client, org, repo string, 
 	}
 
 	// This must check _all_ completed workflows, not just failed ones. If workflows fail multiple times and are retried,
-	// and the last one suceed, then all runs are marked as succeeded. Because of this, all must be retrieved and filitered
+	// and the last one succeeds, then all runs are marked as succeeded. Because of this, all must be retrieved and filitered
 	// locally by the caller.
 	startDate := time.Now().AddDate(0, 0, -daysToCheck)
 	opts := &github.ListWorkflowRunsOptions{

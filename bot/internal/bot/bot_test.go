@@ -305,7 +305,7 @@ func TestDoNotMerge(t *testing.T) {
 			GitHub: gh,
 			Environment: &env.Environment{
 				Organization: "gravitational",
-				Repository:   "teleport",
+				Repository:   "core",
 				Number:       42,
 			},
 		},

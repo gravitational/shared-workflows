@@ -118,7 +118,7 @@ func TestJUnitProducer_produceFromReader(t *testing.T) {
 `,
 			errFn: require.NoError,
 			wantSuites: []*record.Suite{
-				&record.Suite{
+				{
 					Name:                "full-junit-suite",
 					SuiteID:             "549392e38c4adbc8e60669e312da9537840d211080bc2a4d3e3d8388e30605e1",
 					RecordSchemaVersion: "v2",
@@ -136,7 +136,7 @@ func TestJUnitProducer_produceFromReader(t *testing.T) {
 				},
 			},
 			wantCases: []*record.Testcase{
-				&record.Testcase{
+				{
 					Name:                "test-pass",
 					RecordSchemaVersion: "v2",
 					SuiteName:           "full-junit-suite",
@@ -146,7 +146,7 @@ func TestJUnitProducer_produceFromReader(t *testing.T) {
 					TestcaseID:          "84403ef011d1c3b91392eb6a441db21411141f589781d7022a81b03ec699fb54",
 					SuiteID:             "549392e38c4adbc8e60669e312da9537840d211080bc2a4d3e3d8388e30605e1",
 				},
-				&record.Testcase{
+				{
 					Name:                "test-failure",
 					RecordSchemaVersion: "v2",
 					SuiteName:           "full-junit-suite",
@@ -157,7 +157,7 @@ func TestJUnitProducer_produceFromReader(t *testing.T) {
 					TestcaseID:          "21f3cfedd152a103d28c6eab72917424c286a70ae0e6cc796be04d3cda0dc6b6",
 					SuiteID:             "549392e38c4adbc8e60669e312da9537840d211080bc2a4d3e3d8388e30605e1",
 				},
-				&record.Testcase{
+				{
 					RecordSchemaVersion: "v2",
 					Name:                "test-error",
 					SuiteName:           "full-junit-suite",
@@ -169,7 +169,7 @@ func TestJUnitProducer_produceFromReader(t *testing.T) {
 					TestcaseID:          "9b1cc03efadc63ef3e2912222b839a2de84078bec9fb49b26313a8bd88bae1b6",
 					SuiteID:             "549392e38c4adbc8e60669e312da9537840d211080bc2a4d3e3d8388e30605e1",
 				},
-				&record.Testcase{
+				{
 					Name:                "test-skipped",
 					RecordSchemaVersion: "v2",
 					SuiteName:           "full-junit-suite",
@@ -203,7 +203,7 @@ func TestJUnitProducer_produceFromReader(t *testing.T) {
 			},
 			errFn: require.NoError,
 			wantSuites: []*record.Suite{
-				&record.Suite{
+				{
 					Name:                "full-junit-suite",
 					RecordSchemaVersion: "v2",
 					Timestamp:           "2024-01-02T15:04:05Z",
@@ -217,7 +217,7 @@ func TestJUnitProducer_produceFromReader(t *testing.T) {
 				},
 			},
 			wantCases: []*record.Testcase{
-				&record.Testcase{
+				{
 					Name:                "tc1",
 					SuiteName:           "full-junit-suite",
 					Classname:           "example.PassTest",

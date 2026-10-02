@@ -136,6 +136,9 @@ func (s *Server) Setup(ctx context.Context) error {
 func (s *Server) Run(ctx context.Context) error {
 	srv := &http.Server{
 		Handler: s.mux,
+		// Bound how long a client can take to send its headers so that idle
+		// connections cannot be used to exhaust the server.
+		ReadHeaderTimeout: 30 * time.Second,
 		BaseContext: func(net.Listener) context.Context {
 			return ctx
 		},

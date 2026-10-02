@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-
 func TestAddSummary(t *testing.T) {
 	resetSummaryState()
 

@@ -136,12 +136,6 @@ func (e *WorkflowRunNotFoundError) Error() string {
 	return e.Message
 }
 
-func newWorkflowRunNotFoundError(message string) *WorkflowRunNotFoundError {
-	return &WorkflowRunNotFoundError{
-		Message: message,
-	}
-}
-
 // workflowRunInfoFromObj converts a [go_github.WorkflowRun] object to a [WorkflowRunInfo].
 func workflowRunInfoFromObj(githubObj *go_github.WorkflowRun) WorkflowRunInfo {
 	return WorkflowRunInfo{

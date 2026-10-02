@@ -110,7 +110,7 @@ func run(configFilePath string) (err error) {
 	// Run all publishing tasks
 	publishingQueue, queueContext := errgroup.WithContext(ctx)
 	if c.ParallelLimit > 0 {
-		publishingQueue.SetLimit(int(c.ParallelLimit))
+		publishingQueue.SetLimit(int(c.ParallelLimit)) //nolint:gosec // a parallelism limit large enough to overflow an int is not reachable
 	}
 
 	for _, task := range packagePublishingTasks {

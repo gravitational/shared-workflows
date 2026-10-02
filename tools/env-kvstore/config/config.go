@@ -124,7 +124,7 @@ func (c *Config) Validate() error {
 	}
 
 	if err := c.Values.ParseValues(); err != nil {
-		return fmt.Errorf("cannot parse values: %v", err)
+		return fmt.Errorf("cannot parse values: %w", err)
 	}
 
 	return nil

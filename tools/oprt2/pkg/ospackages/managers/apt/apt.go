@@ -133,7 +133,7 @@ func (apt *Manager) getRepoFiles(ctx context.Context) (map[string]map[string]map
 						apt.logger.DebugContext(ctx, "found matching file", "repo", repoName, "distribution", distributionName, "component", componentName, "file", candidateItem)
 						localCandidateFilePath, err := apt.fileManager.GetLocalFilePath(ctx, candidateItem)
 						if err != nil {
-							return nil, 0, fmt.Errorf("failed to get local file path to %q via file manager %q: %q", candidateItem, apt.fileManager.Name(), err)
+							return nil, 0, fmt.Errorf("failed to get local file path to %q via file manager %q: %w", candidateItem, apt.fileManager.Name(), err)
 						}
 
 						matchingFiles = append(matchingFiles, localCandidateFilePath)

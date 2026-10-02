@@ -9,6 +9,13 @@ build:
 	go build .
 
 #
+# lint runs the linter over the bot's source.
+#
+.PHONY: lint
+lint:
+	golangci-lint run ./...
+
+#
 # test executes the bot's full test suite.
 #
 .PHONY: test

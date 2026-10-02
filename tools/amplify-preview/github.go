@@ -44,7 +44,7 @@ func postPreviewURL(ctx context.Context, commentBody string) error {
 
 	prID, err := strconv.Atoi(strings.TrimSuffix(refName, "/merge"))
 	if err != nil {
-		return fmt.Errorf("failed to extract PR ID from GITHUB_REF_NAME=%s: %s", refName, err)
+		return fmt.Errorf("failed to extract PR ID from GITHUB_REF_NAME=%s: %w", refName, err)
 	}
 
 	targetComment := github.CommentTraits{
