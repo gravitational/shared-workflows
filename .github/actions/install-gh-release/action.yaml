@@ -97,7 +97,7 @@ runs:
 
         # Helper to run sudo if available
         maybe_sudo() {
-          if command -v sudo >/dev/null; then
+          if command -v sudo >/dev/null && sudo -n true 2>/dev/null; then
             sudo "$@"
           else
             "$@"
