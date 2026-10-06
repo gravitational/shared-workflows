@@ -26,6 +26,8 @@ func MaskSecretValues(secrets []string) {
 		}
 		// GHA treats a newline as the end of an ::add-mask:: command, so each line must be masked.
 		for line := range strings.Lines(v) {
+			// strings.Lines yields lines with their terminating newline, which Printf adds back below.
+			line = strings.TrimRight(line, "\r\n")
 			if line == "" {
 				continue
 			}
@@ -88,7 +90,7 @@ func writeKVFile(filePath string, kv map[string]string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(filePath, []byte(output), 0644); err != nil {
+	if err := os.WriteFile(filePath, []byte(output), 0o600); err != nil {
 		return fmt.Errorf("error writing to file %s: %w", filePath, err)
 	}
 	return nil

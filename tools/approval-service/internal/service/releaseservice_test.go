@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"testing"
 	"time"
 
@@ -217,7 +218,12 @@ func TestReleaseService(t *testing.T) {
 				// It is handled asynchronously, so we need to wait for it to complete
 				waitFunc := func() bool {
 					approved, err := ghClient.isRunApproved("test-org", "test-repo", tc.workflowID)
-					require.NoError(t, err, "Expected to check if workflow run is approved without error")
+					if err != nil {
+						// The run has not been reviewed yet, so keep waiting. This
+						// must not use require, which would fail the test from the
+						// polling goroutine on a state that is only transient.
+						return false
+					}
 					return approved == (tc.initialAccessRequestState == types.RequestState_APPROVED)
 				}
 				assert.Eventually(t, waitFunc, 200*time.Millisecond, 20*time.Millisecond)
@@ -258,6 +264,9 @@ func (f *fakeTeleportClient) CreateAccessRequestV2(ctx context.Context, req type
 }
 
 type fakeGitHubClient struct {
+	// mu guards approvedState, which is written by the service's goroutines and
+	// read by tests while the service is still running.
+	mu            sync.Mutex
 	approvedState map[string]bool // to track if a workflow run is approved
 	workflowIDs   []int64
 }
@@ -274,12 +283,16 @@ func (f *fakeGitHubClient) GetWorkflowRunInfo(ctx context.Context, org, repo str
 	return github.WorkflowRunInfo{}, nil
 }
 func (f *fakeGitHubClient) ReviewDeploymentProtectionRule(ctx context.Context, org, repo string, info github.ReviewDeploymentProtectionRuleInfo) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.approvedState[fmt.Sprintf("%s/%s/%d", org, repo, info.RunID)] = info.State == github.PendingDeploymentApprovalStateApproved
 	return nil
 }
 
 // helpful for testing purposes to check if a workflow run is approved or not
 func (f *fakeGitHubClient) isRunApproved(org, repo string, runID int64) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	val, ok := f.approvedState[fmt.Sprintf("%s/%s/%d", org, repo, runID)]
 	if !ok {
 		return false, fmt.Errorf("workflow run %d not found for org %s and repo %s", runID, org, repo)

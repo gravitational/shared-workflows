@@ -1,0 +1,44 @@
+version: "2"
+linters:
+  default: none
+  enable:
+    - bodyclose
+    - copyloopvar
+    - errcheck
+    - errorlint
+    - gosec
+    - govet
+    - ineffassign
+    - misspell
+    - staticcheck
+    - unused
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      # Test fixtures intentionally use permissive file modes, loopback
+      # listeners, and dummy credentials, none of which ship to users.
+      - linters:
+          - gosec
+        path: _test\.go
+      # These two rules are taint analysis based. Every tool here is a CI
+      # utility that, by design, reads paths out of its environment and logs
+      # data it fetched from GitHub, so both fire almost entirely on false
+      # positives.
+      - linters:
+          - gosec
+        text: "G70(3|6):"
+      # trace's formatting helpers take the format string as an argument, so it
+      # is never constant at the call site.
+      - linters:
+          - govet
+        text: non-constant format string in call to github.com/gravitational/trace.
+formatters:
+  enable:
+    - gofmt
+  exclusions:
+    generated: lax

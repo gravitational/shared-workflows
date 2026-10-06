@@ -40,7 +40,7 @@ import (
 // Example command to generate this:
 // tar --exclude='.#*' --exclude="*~" --exclude="S.*" -czf - ~/.gnupg/ | base64
 //
-// If the key ID is not explicitly set, the provider attemps to pick a key from
+// If the key ID is not explicitly set, the provider attempts to pick a key from
 // the archive, if possible.
 //
 // File ownership, access time, modified time, permission bits, and other

@@ -32,7 +32,7 @@ import (
 
 const (
 	// OutputEnv is the name of the environment variable for
-	// output paramters in GitHubActions.
+	// output parameters in GitHubActions.
 	OutputEnv = "GITHUB_OUTPUT"
 
 	// ClientTimeout specifies a time limit for requests made by

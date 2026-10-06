@@ -304,7 +304,7 @@ func (err aggregatedError) Error() error {
 
 	var msg strings.Builder
 	for k, v := range err.perAppErr {
-		msg.WriteString(fmt.Sprintf("%s: %s\n", k, v))
+		fmt.Fprintf(&msg, "%s: %s\n", k, v)
 	}
 
 	return fmt.Errorf("%s for apps:\n\t%s", err.message, msg.String())
@@ -352,9 +352,9 @@ func amplifyJobsToMarkdown(branch *types.Branch, jobs ...*types.JobSummary) stri
 		commentBody.WriteString(" | ")
 		commentBody.WriteString(*job.JobId)
 		commentBody.WriteString(" | ")
-		commentBody.WriteString(fmt.Sprintf("%c%s", jobStatusToEmoji[job.Status], job.Status))
+		fmt.Fprintf(&commentBody, "%c%s", jobStatusToEmoji[job.Status], job.Status)
 		commentBody.WriteString(" | ")
-		commentBody.WriteString(fmt.Sprintf("[%[1]s](https://%[1]s.%s.%s)", *branch.DisplayName, appID, amplifyDefaultDomain))
+		fmt.Fprintf(&commentBody, "[%[1]s](https://%[1]s.%s.%s)", *branch.DisplayName, appID, amplifyDefaultDomain)
 		commentBody.WriteString(" | ")
 		commentBody.WriteString(updateTime.Format(time.DateTime))
 		commentBody.WriteByte('\n')

@@ -19,7 +19,7 @@ const (
 	GitHubEnv         = "GITHUB_ENV"
 )
 
-// SummaryReportable is an interface that can be implemented to define how a summary entry 
+// SummaryReportable is an interface that can be implemented to define how a summary entry
 // should be displayed in the GitHub Actions summary report. The header and footer will be
 // taken from the first entry for each step, and the row will be printed for each entry.
 type SummaryReportable interface {
@@ -57,11 +57,11 @@ func (r SummaryRowWithCounts) Header() string {
 	return "<table><tr><th>Result</th><th>Message</th><th>✅</th><th>⚠️</th><th>❌</th></tr>\n"
 }
 
-func (r SummaryRowWithCounts) Row() string {	
+func (r SummaryRowWithCounts) Row() string {
 	return fmt.Sprintf("<tr><td>%s</td><td>%s</td><td>%d</td><td>%d</td><td>%d</td></tr>\n", emojiForResult(r.Result), r.Msg, r.SuccessCount, r.WarningCount, r.FailureCount)
 }
 
-func (r SummaryRowWithCounts) Footer() string{	
+func (r SummaryRowWithCounts) Footer() string {
 	return "</table>\n"
 }
 
@@ -120,14 +120,14 @@ func PrintSummaryReport(title string) {
 // GITHUB_STEP_SUMMARY environment variable, which will be displayed in the GitHub Actions UI.
 func (r *summaryReporter) reportSummary(title string) {
 	output := strings.Builder{}
-	output.WriteString(fmt.Sprintf("<details>\n<summary><h2>%s</h2></summary>\n", title))
+	fmt.Fprintf(&output, "<details>\n<summary><h2>%s</h2></summary>\n", title)
 
 	for _, step := range r.steps {
 		statuses := r.stepStatuses[step]
 		if len(statuses) == 0 {
 			continue
 		}
-		output.WriteString(fmt.Sprintf("<p><h3>%s</h3></p>\n", step))
+		fmt.Fprintf(&output, "<p><h3>%s</h3></p>\n", step)
 		if len(statuses) == 0 {
 			continue
 		}
@@ -146,7 +146,7 @@ func (r *summaryReporter) reportSummary(title string) {
 		return
 	}
 
-	if err := os.WriteFile(summaryFile, []byte(output.String()), 0644); err != nil {
+	if err := os.WriteFile(summaryFile, []byte(output.String()), 0o600); err != nil {
 		slog.Error("Error writing GitHub summary file", "error", err, "file", summaryFile)
 	}
 }

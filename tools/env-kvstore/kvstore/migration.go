@@ -18,7 +18,7 @@ const (
 	// ghaVarsContextEnv is the environment variable where the existing GitHub Actions variables context is stored for migration.
 	ghaVarsContextEnv = "GHA_VARS_CONTEXT"
 	// ghaSecretsContextEnv is the environment variable where the existing GitHub Actions secrets context is stored for migration.
-	ghaSecretsContextEnv = "GHA_SECRETS_CONTEXT"
+	ghaSecretsContextEnv = "GHA_SECRETS_CONTEXT" //nolint:gosec // environment variable name, not a credential
 )
 
 type MigrationConfig struct {

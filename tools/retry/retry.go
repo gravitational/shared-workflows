@@ -87,7 +87,7 @@ func backoff(initial time.Duration, attempt int) time.Duration {
 	}
 
 	base := initial * (1 << (attempt - 1))
-	jitter := rand.Int63n(int64(base))
+	jitter := rand.Int63n(int64(base)) //nolint:gosec // retry jitter does not need to be unpredictable
 
 	return base + time.Duration(jitter)
 }
