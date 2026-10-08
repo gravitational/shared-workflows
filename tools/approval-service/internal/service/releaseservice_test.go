@@ -217,7 +217,9 @@ func TestReleaseService(t *testing.T) {
 				// It is handled asynchronously, so we need to wait for it to complete
 				waitFunc := func() bool {
 					approved, err := ghClient.isRunApproved("test-org", "test-repo", tc.workflowID)
-					require.NoError(t, err, "Expected to check if workflow run is approved without error")
+					if err != nil {
+						return false // avoid race condition: retry on "not found" error
+					}
 					return approved == (tc.initialAccessRequestState == types.RequestState_APPROVED)
 				}
 				assert.Eventually(t, waitFunc, 200*time.Millisecond, 20*time.Millisecond)
