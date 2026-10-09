@@ -153,6 +153,9 @@ func classifyChanges(c *Config, files []github.PullRequestFile) env.Changes {
 			files,
 		),
 	}
+	if !ch.Large && !ch.Release && review.NoApprovalRequired(c.Environment, files) {
+		ch.ApproverCount = 0
+	}
 	switch c.Environment.Repository {
 	case env.CoreRepo:
 		for _, file := range files {

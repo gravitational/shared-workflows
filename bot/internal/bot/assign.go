@@ -46,6 +46,11 @@ func (b *Bot) Assign(ctx context.Context) error {
 		return trace.Wrap(err)
 	}
 
+	if len(reviewers) == 0 {
+		log.Println("Assign: No reviewers required.")
+		return nil
+	}
+
 	log.Printf("Assign: Requesting reviews from: %v.", reviewers)
 
 	// Request GitHub assign reviewers to this PR.
