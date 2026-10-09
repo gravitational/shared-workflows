@@ -63,6 +63,12 @@ ci-metrics report --database gh_test_metrics_v2 \
   --branches refs/heads/master,refs/heads/branch/v18,refs/heads/branch/v17 \
   --from 2026-09-21 --to 2026-09-28
 
+# Also post to Slack; the bot token is read from SLACK_BOT_TOKEN.
+# The channel can also be specified via the `SLACK_BOT_CHANNEL` env var.
+SLACK_BOT_TOKEN=xoxb-... ci-metrics report --database gh_test_metrics_v2 \
+  --region us-west-2 --results s3://foo/athena/ \
+  --yesterday --slack-channel '#example-slack'
+
 # Render the SQL without executing it, does not need AWS credentials.
 ci-metrics report --database gh_test_metrics_v2 --days 7 --dryrun
 ```
