@@ -1,4 +1,4 @@
 TOOL_NAME = changelog
-VERSION = v1.1.0
+VERSION = v1.2.0
 
 include ../repo-release-tooling/tooling.mk
