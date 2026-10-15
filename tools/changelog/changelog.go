@@ -37,9 +37,12 @@ type entry struct {
 }
 
 var (
-	// changelogPattern matches both changelog marker forms, so adjacent entries
-	// on the same line can be split cleanly and collected together.
-	changelogPattern = regexp.MustCompile(`(?i)changelog(?:-enterprise)?:[ \t]*`)
+	// clPattern matches "changelog: <summary>" markers.
+	clPattern = regexp.MustCompile(`(?i)changelog:[ \t]*`)
+
+	// anyChangelogPattern matches any changelog marker, so adjacent entries
+	// on the same line can be split cleanly.
+	anyChangelogPattern = regexp.MustCompile(`(?i)changelog(?:-enterprise)?:[ \t]*`)
 
 	// htmlCommentPattern matches markdown HTML comments, including multiline
 	// comments often used by PR templates.
@@ -95,7 +98,7 @@ func (g *generator) render(prs []github.PullRequest) (string, error) {
 func (g *generator) entriesFromPR(pr github.PullRequest) []entry {
 	body := htmlCommentPattern.ReplaceAllString(pr.Body, "")
 	var entries []entry
-	for _, m := range changelogMatches(body) {
+	for _, m := range changelogMatches(body, clPattern) {
 		entries = append(entries, entry{
 			Summary: formatSummary(m),
 			Number:  pr.Number,
@@ -105,14 +108,18 @@ func (g *generator) entriesFromPR(pr github.PullRequest) []entry {
 	return entries
 }
 
-func changelogMatches(body string) []string {
-	allMarkers := changelogPattern.FindAllStringIndex(body, -1)
+func changelogMatches(body string, pattern *regexp.Regexp) []string {
+	allMarkers := anyChangelogPattern.FindAllStringIndex(body, -1)
 	if len(allMarkers) == 0 {
 		return nil
 	}
 
 	var matches []string
 	for i, marker := range allMarkers {
+		if !pattern.MatchString(body[marker[0]:marker[1]]) {
+			continue
+		}
+
 		end := len(body)
 		if nextLine := strings.IndexAny(body[marker[1]:], "\r\n"); nextLine >= 0 {
 			end = marker[1] + nextLine
