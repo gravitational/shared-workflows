@@ -73,6 +73,11 @@ func TestPRsBetweenRefs(t *testing.T) {
 			want:     []int{103, 101},
 		},
 		{
+			name:     "duplicate PRs are returned once",
+			subjects: []string{"fix something (#101)", "follow-up fix (#102)", "backport note (#101)"},
+			want:     []int{101, 102},
+		},
+		{
 			name:     "empty range",
 			subjects: nil,
 			want:     nil,
@@ -94,6 +99,27 @@ func TestPRsBetweenRefs(t *testing.T) {
 			assert.Equal(t, tt.want, prs)
 		})
 	}
+}
+
+func TestPRsBetweenRefs_FirstParentOnly(t *testing.T) {
+	repo := newTestRepo(t)
+	addCommit(t, repo, "initial commit (#99)")
+	_, err := repo.RunCmd("tag", "v1.0.0")
+	require.NoError(t, err)
+
+	addCommit(t, repo, "mainline fix (#101)")
+	_, err = repo.RunCmd("checkout", "-b", "topic")
+	require.NoError(t, err)
+	addCommit(t, repo, "topic-only change (#999)")
+	_, err = repo.RunCmd("checkout", "main")
+	require.NoError(t, err)
+	addCommit(t, repo, "mainline feature (#102)")
+	_, err = repo.RunCmd("merge", "--no-ff", "topic", "-m", "Merge topic")
+	require.NoError(t, err)
+
+	prs, err := repo.PRsBetweenRefs("v1.0.0", "HEAD")
+	require.NoError(t, err)
+	assert.Equal(t, []int{102, 101}, prs)
 }
 
 func TestObjectSHAAtPath(t *testing.T) {
