@@ -281,13 +281,14 @@ func flakyRender(scope Scope, params any, results map[string]*athena.Result) (*D
 
 // flakyRow is one scored test.
 type flakyRow struct {
-	Rank       int64
-	Classname  string
-	TestName   string
-	Execs      int64
-	Fails      int64
-	FailPct    float64
-	FlakeScore float64
+	Rank           int64
+	Classname      string
+	TestName       string
+	Execs          int64
+	Fails          int64
+	FailPct        float64
+	FlakeScore     float64
+	FailedRunLinks string
 }
 
 // flakyTable builds the ranked table.
@@ -300,6 +301,7 @@ func flakyTable(rows []flakyRow) *Table {
 			{Name: "EXECS", Align: AlignRight},
 			{Name: "FAILS", Align: AlignRight},
 			{Name: "FAIL%", Align: AlignRight},
+			{Name: "FAILED RUNS", Align: AlignLeft},
 		},
 		Rows:      make([]Row, 0, len(rows)),
 		TotalRows: len(rows),
@@ -313,6 +315,7 @@ func flakyTable(rows []flakyRow) *Table {
 			{Text: Int(r.Execs)},
 			{Text: Int(r.Fails)},
 			{Text: Pct(r.FailPct)},
+			{Text: r.FailedRunLinks},
 		})
 	}
 
@@ -328,7 +331,8 @@ func decodeFlakyRows(rs *athena.Result) ([]flakyRow, error) {
 		Int64("execs", func(r *flakyRow, v int64) { r.Execs = v }).
 		Int64("fails", func(r *flakyRow, v int64) { r.Fails = v }).
 		Float64("fail_pct", func(r *flakyRow, v float64) { r.FailPct = v }).
-		Float64("flake_score", func(r *flakyRow, v float64) { r.FlakeScore = v })
+		Float64("flake_score", func(r *flakyRow, v float64) { r.FlakeScore = v }).
+		Str("failed_run_links", func(r *flakyRow, v string) { r.FailedRunLinks = v })
 
 	out := make([]flakyRow, 0, len(rs.Rows))
 	for row, err := range scanner.Scan() {

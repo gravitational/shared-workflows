@@ -22,7 +22,10 @@ WITH runs AS (
     SELECT m.meta_id,
            regexp_replace(m.git_ref,
              '^refs/heads/gh-readonly-queue/(.*)/pr-[0-9]+.*$',
-             'refs/heads/$1') AS branch
+             'refs/heads/$1') AS branch,
+           concat('https://', m.provider, '/', m.repository_name,
+                  '/actions/runs/', m.run_id, '/attempts/',
+                  cast(m.run_attempt AS varchar)) AS run_url
     FROM {{.Database}}.{{.MetaTable}} m
     WHERE m.dt BETWEEN '{{.From}}' AND '{{.To}}'
       AND {{.BranchPredicate}}
@@ -30,7 +33,12 @@ WITH runs AS (
 agg AS (
     SELECT t.classname, t.test_name,
            count(*) AS execs,
-           count_if(t.status IN ('failed', 'error')) AS fails
+           count_if(t.status IN ('failed', 'error')) AS fails,
+           array_join(
+             array_sort(array_agg(DISTINCT r.run_url)
+               FILTER (WHERE t.status IN ('failed', 'error'))),
+             ' '
+           ) AS failed_run_links
     FROM {{.Database}}.{{.TestcasesTable}} t
     JOIN runs r ON r.meta_id = t.meta_id
     WHERE t.dt BETWEEN '{{.From}}' AND '{{.To}}'
@@ -45,7 +53,7 @@ scored AS (
     -- execs/(execs+K) uses a magic constant of K={{.Smoothing}} to push low sample tests
     -- towards 0. Without it both 5/10 and 100/200 score perfect 1.0 despite the
     -- latter being much bigger pain for developers.
-    SELECT classname, test_name, execs, fails,
+    SELECT classname, test_name, execs, fails, failed_run_links,
            round(100.0 * fails / execs, 2) AS fail_pct,
            round(4.0 * (CAST(fails AS double) / execs)
                      * (1 - CAST(fails AS double) / execs)
@@ -53,7 +61,7 @@ scored AS (
     FROM agg
     WHERE execs >= {{.MinExecs}} AND fails > 0 AND fails < execs
 )
-SELECT rn, classname, test_name, execs, fails, fail_pct, flake_score
+SELECT rn, classname, test_name, execs, fails, fail_pct, flake_score, failed_run_links
 FROM (
     SELECT *, row_number() OVER (
                ORDER BY flake_score DESC, fails DESC) AS rn
