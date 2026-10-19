@@ -1,20 +1,11 @@
 ---
 name: Migrate CI test results to Parquet
 description: >
-  Copies one table of normalized JSONL test records into its Parquet
-  counterpart. Intended to run on a nightly schedule, once per table. Re-running
-  any period is a no-op for days already migrated.
+  Copies all normalized JSONL test record tables into their Parquet
+  counterparts. Intended to run on a nightly schedule. Re-running any period
+  is a no-op for days already migrated.
 
 inputs:
-  type:
-    description: "Record type: meta, suites or testcases"
-    required: true
-  source:
-    description: "JSONL table to read"
-    required: true
-  destination:
-    description: "Parquet table to write"
-    required: true
   database:
     description: "Database holding both tables"
     required: true
@@ -54,15 +45,13 @@ runs:
         version: ${{ inputs.tool-version }}
         tag-prefix: tools/ci-metrics/
 
-    - name: Migrate ${{ inputs.type }} to Parquet
+    - name: Migrate CI metrics to Parquet
       id: migrate
       shell: bash
       run: |
-        ci-metrics migrate "${{ inputs.type }}" \
+        ci-metrics migrate \
           --database "${{ inputs.database }}" \
           --workgroup "${{ inputs.workgroup }}" \
-          --source "${{ inputs.source }}" \
-          --destination "${{ inputs.destination }}" \
           --days "${{ inputs.days }}" \
           ${{ inputs.timeout && format('--timeout "{0}"', inputs.timeout) || '' }} \
           ${{ inputs.output-location && format('--output-location "{0}"', inputs.output-location) || '' }}

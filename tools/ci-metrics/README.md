@@ -7,27 +7,23 @@ Compaction and reporting over the normalized CI test results that
 
 ### `migrate`
 
-Copies one table of JSONL records into its Parquet counterpart, one statement
-per day.
+Copies all three JSONL record tables into their Parquet counterparts, one
+statement per table per day. The fixed mappings are:
+
+- `meta_v2` to `meta_v2_parquet`
+- `suites_v2` to `suites_v2_parquet`
+- `testcases_v2` to `testcases_v2_parquet`
 
 ```sh
 # Last 3 days.
-ci-metrics migrate testcases \
-  --database example_db \
-  --source testcases_jsonl \
-  --destination testcases_parquet \
-  --days 3
+ci-metrics migrate --database example_db --days 3
 
 # Backfill a period.
-ci-metrics migrate suites \
-  --database example_db \
-  --source suites_jsonl --destination suites_parquet \
+ci-metrics migrate --database example_db \
   --from 2026-08-01 --to 2026-09-15
 
-# Render the SQL without executing it, does not need AWS credentials.
-ci-metrics migrate meta \
-  --database example_db \
-  --source meta_jsonl --destination meta_parquet \
+# Render all SQL without executing it; does not need AWS credentials.
+ci-metrics migrate --database example_db \
   --from 2026-09-14 --dryrun
 ```
 
