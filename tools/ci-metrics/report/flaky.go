@@ -265,37 +265,16 @@ func flakyRender(scope Scope, params any, results map[string]*athena.Result) (*D
 
 	if len(rows) == 0 {
 		doc.Headline = "No flaky tests found in the window."
-		doc.Sections = []Section{{
-			Heading: "Summary",
-			Notes: append([]string{
-				"No test both passed and failed over the window with at least " +
-					Int(int64(p.MinExecs)) + " executions.",
-			}, flakyScoreNotes(p)...),
-		}}
-		return doc, nil
+	} else {
+		// Ordered by score, so the first row is the worst test.
+		doc.Headline = Int(int64(distinctFlakyTests(rows))) +
+			" flaky test(s) over the window; worst " + rows[0].TestName
 	}
 
-	// Ordered by score, so the first row is the worst test.
-	worst := rows[0].TestName
-	distinct := distinctFlakyTests(rows)
-
-	doc.Headline = Int(int64(distinct)) + " flaky test(s) over the window; worst " + worst
-
-	doc.Sections = append(doc.Sections,
-		Section{
-			Heading: "Summary",
-			Metrics: []Metric{
-				{Name: "Flaky tests listed", Value: Int(int64(distinct))},
-				{Name: "Worst test", Value: worst},
-			},
-			Notes: flakyScoreNotes(p),
-		},
-		Section{
-			Heading: Window(scope.From, scope.To),
-			Table:   flakyTable(rows),
-			Notes:   flakyCapNote(rows, p.Top),
-		},
-	)
+	doc.Sections = []Section{{
+		Table: flakyTable(rows),
+		Notes: flakyCapNote(rows, p.Top),
+	}}
 
 	return doc, nil
 }
@@ -309,16 +288,6 @@ type flakyRow struct {
 	Fails      int64
 	FailPct    float64
 	FlakeScore float64
-}
-
-// flakyScoreNotes explains the score and the exclusions.
-func flakyScoreNotes(p *FlakyParams) []string {
-	return []string{
-		"Score is 4*p*(1-p)*execs/(execs+" + strconv.FormatFloat(p.Smoothing, 'f', -1, 64) +
-			"), approaching 1.0 for a test that fails half the time with a large sample.",
-		"Tests with fewer than " + strconv.Itoa(p.MinExecs) + " executions over the window" +
-			" are excluded, as are tests that always passed or always failed.",
-	}
 }
 
 // flakyTable builds the ranked table.

@@ -157,9 +157,11 @@ func TestFlakyRender(t *testing.T) {
 	assert.Equal(t, FlakyName, doc.ID)
 	assert.Contains(t, doc.Headline, "TestLogin")
 
-	// Summary, then the one ranked table.
-	require.Len(t, doc.Sections, 2)
-	table := doc.Sections[1].Table
+	// The report body is only the ranked table.
+	require.Len(t, doc.Sections, 1)
+	assert.Empty(t, doc.Sections[0].Heading)
+	assert.Empty(t, doc.Sections[0].Metrics)
+	table := doc.Sections[0].Table
 	require.NotNil(t, table)
 	assert.Equal(t, 2, table.TotalRows)
 	assert.Equal(t, "TestLogin", table.Rows[0][1].Text)
@@ -176,8 +178,9 @@ func TestFlakyRenderEmptyResult(t *testing.T) {
 
 	assert.Contains(t, doc.Headline, "No flaky tests")
 	require.Len(t, doc.Sections, 1)
-	assert.Nil(t, doc.Sections[0].Table)
-	assert.NotEmpty(t, doc.Sections[0].Notes)
+	require.NotNil(t, doc.Sections[0].Table)
+	assert.Empty(t, doc.Sections[0].Table.Rows)
+	assert.Empty(t, doc.Sections[0].Notes)
 }
 
 func TestFlakyCapNote(t *testing.T) {

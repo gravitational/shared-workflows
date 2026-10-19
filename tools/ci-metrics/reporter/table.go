@@ -16,25 +16,18 @@ package reporter
 
 import (
 	"strings"
-	"unicode/utf8"
 
 	"github.com/gravitational/shared-workflows/tools/ci-metrics/report"
 )
 
-// textTable renders a table as fixed-width lines, the header first and one
-// line per row, with every column padded to its widest cell so that digits
-// line up by place value. The lines carry no leading indent and no trailing
-// newline; the caller decides how to frame them.
+// tsvTable renders a table as tab-separated lines to permit preserving formatting
+// when copying into a spreadsheet. Tabs and line breaks inside a cell are
+// replaced with spaces so they do not change the table shape.
 //
 // Rows past maxRows are dropped, and maxRows <= 0 keeps every row. shown is
 // how many rows survived, which is what a caller wants when telling the reader
 // that a table was cut short.
-//
-// This is the plain text reporter's rendering. Slack has a markdown block that
-// renders a real table, so it uses [markdownTable] instead.
-func textTable(table *report.Table, maxRows int) (lines []string, shown int, truncated bool) {
-	const columnGutter = "  "
-
+func tsvTable(table *report.Table, maxRows int) (lines []string, shown int, truncated bool) {
 	if table == nil || len(table.Columns) == 0 {
 		return nil, 0, false
 	}
@@ -45,50 +38,14 @@ func textTable(table *report.Table, maxRows int) (lines []string, shown int, tru
 		truncated = true
 	}
 
-	// Widths come from the rows actually rendered, so dropping rows never
-	// leaves a column padded for a value the reader cannot see.
-	widths := make([]int, len(table.Columns))
-	for i, c := range table.Columns {
-		widths[i] = utf8.RuneCountInString(c.Name)
-	}
-	for _, row := range rows {
-		for i, cell := range row {
-			if i >= len(widths) {
-				break
-			}
-			widths[i] = max(widths[i], utf8.RuneCountInString(cell.Text))
-		}
-	}
-
-	format := func(texts []string) string {
-		var b strings.Builder
-		for i, text := range texts {
-			if i > 0 {
-				b.WriteString(columnGutter)
-			}
-			pad := max(widths[i]-utf8.RuneCountInString(text), 0)
-			switch {
-			case table.Columns[i].Align == report.AlignRight:
-				b.WriteString(strings.Repeat(" ", pad))
-				b.WriteString(text)
-			case i == len(texts)-1:
-				// The final column needs no trailing padding
-				b.WriteString(text)
-			default:
-				b.WriteString(text)
-				b.WriteString(strings.Repeat(" ", pad))
-			}
-		}
-		return b.String()
-	}
-
+	clean := strings.NewReplacer("\t", " ", "\n", " ", "\r", " ").Replace
 	lines = make([]string, 0, len(rows)+1)
 
 	headers := make([]string, len(table.Columns))
-	for i, c := range table.Columns {
-		headers[i] = c.Name
+	for i, column := range table.Columns {
+		headers[i] = clean(column.Name)
 	}
-	lines = append(lines, format(headers))
+	lines = append(lines, strings.Join(headers, "\t"))
 
 	// A short row renders as empty cells rather than a ragged line, and a row
 	// longer than the header is cut to the declared columns.
@@ -96,10 +53,10 @@ func textTable(table *report.Table, maxRows int) (lines []string, shown int, tru
 		texts := make([]string, len(table.Columns))
 		for i := range table.Columns {
 			if i < len(row) {
-				texts[i] = row[i].Text
+				texts[i] = clean(row[i].Text)
 			}
 		}
-		lines = append(lines, format(texts))
+		lines = append(lines, strings.Join(texts, "\t"))
 	}
 
 	return lines, len(rows), truncated

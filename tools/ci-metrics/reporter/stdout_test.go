@@ -77,75 +77,49 @@ func renderDoc(t *testing.T, doc *report.Document, maxRows int) string {
 	return buf.String()
 }
 
-func TestStdoutRendersEveryField(t *testing.T) {
+func TestStdoutRendersOnlyTables(t *testing.T) {
 	t.Parallel()
 
 	out := renderDoc(t, testDocument(), 0)
 
-	for _, want := range []string{
+	for _, want := range []string{"#", "TEST", "SCORE", "TestA", "TestWithALongName", "0.5000"} {
+		assert.Contains(t, out, want)
+	}
+	for _, unwanted := range []string{
 		"Top flaky tests",
-		"db.testcases_v2_parquet 2026-09-01 .. 2026-09-02",
-		"2 flaky test(s) over 1 day(s)",
+		"db.testcases_v2_parquet",
+		"2 flaky test(s)",
 		"Summary",
 		"Flaky tests",
 		"Worst",
-		"Excludes tests with fewer than 10 executions.",
+		"Excludes tests",
 		"2026-09-02",
-		"TestA",
-		"TestWithALongName",
-		"0.5000",
-		"2.0 KiB scanned",
+		"scanned",
 	} {
-		assert.Contains(t, out, want)
+		assert.NotContains(t, out, unwanted)
 	}
 }
 
-func TestStdoutRendersDetailSections(t *testing.T) {
-	t.Parallel()
-
-	// The text reporter is the verbose one: unlike a chat reporter it must not
-	// drop [report.Detail] sections.
-	out := renderDoc(t, testDocument(), 0)
-	assert.Contains(t, out, "2026-09-02")
-	assert.Contains(t, out, "TestWithALongName")
-}
-
-// columnEnd returns the offset one past the last rune of the trimmed line,
-// which is where a right-aligned final column ends.
-func columnEnd(line string) int {
-	return len([]rune(strings.TrimRight(line, " ")))
-}
-
-func TestStdoutAlignsColumns(t *testing.T) {
+func TestStdoutUsesTabsBetweenColumns(t *testing.T) {
 	t.Parallel()
 
 	out := renderDoc(t, testDocument(), 0)
+	assert.Equal(t,
+		"#\tTEST\tSCORE\n"+
+			"1\tTestA\t0.5000\n"+
+			"2\tTestWithALongName\t0.1000\n",
+		out)
+}
 
-	// Assert the invariant rather than exact spacing: every line of the table
-	// must end at the same offset, because the final column is right-aligned.
-	// Checking the property instead of a literal keeps the test meaningful if
-	// the fixture's widths change.
-	var tableLines []string
-	for _, line := range strings.Split(out, "\n") {
-		if strings.Contains(line, "SCORE") ||
-			strings.Contains(line, "TestA") ||
-			strings.Contains(line, "TestWithALongName") {
-			tableLines = append(tableLines, line)
-		}
-	}
-	require.Len(t, tableLines, 3, "header plus two rows")
+func TestStdoutSanitizesTabsAndNewlinesInCells(t *testing.T) {
+	t.Parallel()
 
-	want := columnEnd(tableLines[0])
-	for i, line := range tableLines {
-		assert.Equal(t, want, columnEnd(line),
-			"line %d should end where the right-aligned column ends: %q", i, line)
-	}
+	doc := &report.Document{Sections: []report.Section{{Table: &report.Table{
+		Columns: []report.Column{{Name: "VALUE"}},
+		Rows:    []report.Row{{{Text: "one\ttwo\nthree"}}},
+	}}}}
 
-	// The left-aligned column must start at the same offset on every row, so
-	// the widest value determines the column and nothing is clipped.
-	first := strings.Index(tableLines[1], "TestA")
-	second := strings.Index(tableLines[2], "TestWithALongName")
-	assert.Equal(t, first, second, "left-aligned column should start at a fixed offset")
+	assert.Equal(t, "VALUE\none two three\n", renderDoc(t, doc, 0))
 }
 
 func TestStdoutHasNoTrailingWhitespace(t *testing.T) {
@@ -169,30 +143,24 @@ func TestStdoutTruncatesRows(t *testing.T) {
 	assert.Contains(t, out, "showing 1 of 2", "truncation must be stated, not silent")
 }
 
-func TestStdoutRendersMetricDeltas(t *testing.T) {
+func TestStdoutSeparatesTables(t *testing.T) {
 	t.Parallel()
 
-	doc := &report.Document{
-		Title: "Trends",
-		Sections: []report.Section{{
-			Heading: "Summary",
-			Metrics: []report.Metric{
-				{Name: "Failure rate", Value: "4.20%", Delta: &report.Delta{Text: "1.10pp", Up: true}},
-				{Name: "Retry rate", Value: "2.00%", Delta: &report.Delta{Text: "0.30pp", Up: false}},
-			},
-		}},
-	}
+	doc := testDocument()
+	doc.Sections = append(doc.Sections, report.Section{Table: &report.Table{
+		Columns: []report.Column{{Name: "OTHER"}},
+		Rows:    []report.Row{{{Text: "value"}}},
+	}})
 
 	out := renderDoc(t, doc, 0)
-	assert.Contains(t, out, "+1.10pp")
-	assert.Contains(t, out, "-0.30pp")
+	assert.Contains(t, out, "0.1000\n\nOTHER")
 }
 
 func TestStdoutEmptyDocument(t *testing.T) {
 	t.Parallel()
 
 	out := renderDoc(t, &report.Document{Title: "Nothing"}, 0)
-	assert.Equal(t, "Nothing\n", out)
+	assert.Empty(t, out)
 }
 
 func TestStdoutRejectsNilDocument(t *testing.T) {
