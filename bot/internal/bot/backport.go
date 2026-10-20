@@ -109,33 +109,56 @@ func (b *Bot) Backport(ctx context.Context) error {
 			continue
 		}
 
-		labels := []string{NoChangelogLabel}
+		// Exempt the backport from the changelog and test plan checks when
+		// the original PR has nothing to carry over for them.
+		var labels []string
 		bodyText := fmt.Sprintf("Backport #%v to %v", b.c.Environment.Number, base)
 		if entries := b.getChangelogEntries(pull.UnsafeBody); len(entries) > 0 && !slices.Contains(pull.UnsafeLabels, NoChangelogLabel) {
 			bodyText += "\n\n"
-			labels = labels[:0]
 			for _, entry := range entries {
 				bodyText += fmt.Sprintf("%s%s\n", ChangelogPrefix, entry)
+			}
+		} else {
+			labels = append(labels, NoChangelogLabel)
+		}
+		testPlan := getManualTestPlan(pull.UnsafeBody)
+		if testPlan == "" {
+			labels = append(labels, noTestPlanLabel)
+		}
+
+		link := url.URL{
+			Scheme: "https",
+			Host:   "github.com",
+			// Both base and head are safe to put into the URL: base has
+			// had the "branchPattern" regexp run against it and head is
+			// formed from base so an attacker can not control the path.
+			Path: path.Join(b.c.Environment.Organization, b.c.Environment.Repository, "compare", fmt.Sprintf("%v...%v", base, head)),
+		}
+		query := url.Values{
+			"expand": []string{"1"},
+			"title":  []string{fmt.Sprintf("[%v] %v", strings.Trim(base, "branch/"), pull.UnsafeTitle)},
+			"body":   []string{bodyText},
+			"labels": labels,
+		}
+		link.RawQuery = query.Encode()
+
+		// Carry the manual test plan over to the backport, unless that makes
+		// the link longer than GitHub accepts. The author then adds it by hand.
+		if testPlan != "" {
+			withPlan := link
+			query.Set("body", strings.TrimRight(bodyText, "\n")+"\n\n"+testPlan)
+			withPlan.RawQuery = query.Encode()
+			if len(withPlan.String()) <= maxLinkLength {
+				link = withPlan
+			} else {
+				log.Printf("Not including the manual test plan for %v: link would be %d bytes", base, len(withPlan.String()))
 			}
 		}
 
 		rows = append(rows, row{
 			Branch: base,
 			Failed: false,
-			Link: url.URL{
-				Scheme: "https",
-				Host:   "github.com",
-				// Both base and head are safe to put into the URL: base has
-				// had the "branchPattern" regexp run against it and head is
-				// formed from base so an attacker can not control the path.
-				Path: path.Join(b.c.Environment.Organization, b.c.Environment.Repository, "compare", fmt.Sprintf("%v...%v", base, head)),
-				RawQuery: url.Values{
-					"expand": []string{"1"},
-					"title":  []string{fmt.Sprintf("[%v] %v", strings.Trim(base, "branch/"), pull.UnsafeTitle)},
-					"body":   []string{bodyText},
-					"labels": labels,
-				}.Encode(),
-			},
+			Link:   link,
 		})
 	}
 
@@ -179,6 +202,11 @@ func (b *Bot) BackportLocal(ctx context.Context, branch string) error {
 }
 
 const botBackportBranchPrefix = "bot/backport"
+
+// maxLinkLength caps the "Create PR" link. GitHub rejects URLs over 8 KiB
+// outright and its compare page started failing at around 6.5 KiB in testing,
+// so stay well below both.
+const maxLinkLength = 4096
 
 func (b *Bot) backportBranchName(base string) string {
 	return fmt.Sprintf("%s-%v-%v", botBackportBranchPrefix, b.c.Environment.Number, base)
