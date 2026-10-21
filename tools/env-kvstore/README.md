@@ -33,6 +33,8 @@ Example workflow job step:
           private-key: ${{ env.RENOVATE_PRIVATE_KEY }}
 ```
 
+If the workflow job step is included in a `parallel` block, the version of the action to be installed is lost. Mitigate by moving the step outside of the `parallel` block or supply a value in the `version` key of the `with` block.
+
 ## Storage and Retrieval of Secrets and Variables
 
 Secrets and variables are stored in AWS Secrets Manager. In order for Secrets Manager secrets to be accessible by this action, a specific naming convention must be followed and a role must be configured with appropriate attribute-based permissions. Mechanism for managing and storing values is outside the scope of this action.
