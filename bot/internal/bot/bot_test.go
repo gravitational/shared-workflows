@@ -313,6 +313,151 @@ func TestDoNotMerge(t *testing.T) {
 	require.Error(t, bot.checkDoNotMerge(context.Background()))
 }
 
+func TestBeamDependencyApprovals(t *testing.T) {
+	const requirements = "tenantoperator/beamservice/beam/requirements.txt"
+	const dockerfile = "tenantoperator/beamservice/beam/Dockerfile"
+	assignments, err := review.FromString(review.EmptyReviewers)
+	require.NoError(t, err)
+
+	for _, test := range []struct {
+		name       string
+		repository string
+		author     string
+		files      []github.PullRequestFile
+		approvals  int
+	}{
+		{
+			name:       "dependabot requirements",
+			repository: "cloud",
+			author:     review.Dependabot,
+			files:      []github.PullRequestFile{{Name: requirements}},
+			approvals:  0,
+		},
+		{
+			name:       "private renovate Dockerfile",
+			repository: "cloud",
+			author:     review.RenovateBotPrivate,
+			files:      []github.PullRequestFile{{Name: dockerfile}},
+			approvals:  0,
+		},
+		{
+			name:       "public renovate both files",
+			repository: "cloud",
+			author:     review.RenovateBotPublic,
+			files:      []github.PullRequestFile{{Name: requirements}, {Name: dockerfile}},
+			approvals:  0,
+		},
+		{
+			name:       "additional file",
+			repository: "cloud",
+			author:     review.Dependabot,
+			files:      []github.PullRequestFile{{Name: requirements}, {Name: "other.go"}},
+			approvals:  1,
+		},
+		{
+			name:       "path suffix",
+			repository: "cloud",
+			author:     review.Dependabot,
+			files:      []github.PullRequestFile{{Name: dockerfile + ".other"}},
+			approvals:  1,
+		},
+		{
+			name:       "rename from outside allowlist",
+			repository: "cloud",
+			author:     review.Dependabot,
+			files:      []github.PullRequestFile{{Name: requirements, PreviousName: "other.txt", Status: github.StatusRenamed}},
+			approvals:  1,
+		},
+		{
+			name:       "rename outside allowlist",
+			repository: "cloud",
+			author:     review.Dependabot,
+			files:      []github.PullRequestFile{{Name: "other.txt", PreviousName: requirements, Status: github.StatusRenamed}},
+			approvals:  1,
+		},
+		{
+			name:       "human author",
+			repository: "cloud",
+			author:     "employee",
+			files:      []github.PullRequestFile{{Name: requirements}},
+			approvals:  env.DefaultApproverCount,
+		},
+		{
+			name:       "unknown bot",
+			repository: "cloud",
+			author:     "renovate[bot]",
+			files:      []github.PullRequestFile{{Name: requirements}},
+			approvals:  env.DefaultApproverCount,
+		},
+		{
+			name:       "post release bot",
+			repository: "cloud",
+			author:     review.PostReleaseBot,
+			files:      []github.PullRequestFile{{Name: requirements}},
+			approvals:  env.DefaultApproverCount,
+		},
+		{
+			name:       "other repository",
+			repository: "teleport",
+			author:     review.Dependabot,
+			files:      []github.PullRequestFile{{Name: requirements}},
+			approvals:  env.DefaultApproverCount,
+		},
+		{
+			name:       "empty changes",
+			repository: "cloud",
+			author:     review.Dependabot,
+			files:      nil,
+			approvals:  env.DefaultApproverCount,
+		},
+		{
+			name:       "large changes",
+			repository: "cloud",
+			author:     review.Dependabot,
+			files:      []github.PullRequestFile{{Name: requirements, Additions: 100000}},
+			approvals:  1,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			e := &env.Environment{Repository: test.repository, Author: test.author}
+			c := &Config{Environment: e, Review: assignments, GitHub: &beamDependencyGithub{
+				fakeGithub: &fakeGithub{files: test.files}, t: t,
+			}}
+			changes := classifyChanges(c, test.files)
+			require.Equal(t, test.approvals, changes.ApproverCount)
+			err := assignments.CheckInternal(e, nil, changes, test.files)
+			if test.approvals == 0 {
+				require.NoError(t, err)
+				require.Empty(t, assignments.Get(e, changes, test.files))
+				b, err := New(c)
+				require.NoError(t, err)
+				require.NoError(t, b.Check(context.Background()))
+				require.NoError(t, b.Assign(context.Background()))
+				changes.Release = true
+				require.Error(t, assignments.CheckInternal(e, nil, changes, test.files))
+				c.GitHub.(*beamDependencyGithub).pull.UnsafeLabels = []string{doNotMergeLabel}
+				require.ErrorContains(t, b.Check(context.Background()), doNotMergeLabel)
+			} else {
+				require.Error(t, err)
+			}
+		})
+	}
+}
+
+type beamDependencyGithub struct {
+	*fakeGithub
+	t *testing.T
+}
+
+func (f *beamDependencyGithub) ListWorkflows(context.Context, string, string) ([]github.Workflow, error) {
+	return []github.Workflow{{Path: ".github/workflows/check.yaml"}}, nil
+}
+
+func (f *beamDependencyGithub) RequestReviewers(context.Context, string, string, int, []string) error {
+	require.FailNow(f.t, "exempt PR should not request reviews")
+	return nil
+}
+
 func TestApproverCount(t *testing.T) {
 	cases := []struct {
 		desc    string
