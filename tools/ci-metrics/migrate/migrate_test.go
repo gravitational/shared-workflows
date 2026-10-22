@@ -118,41 +118,38 @@ func TestOptionsValidation(t *testing.T) {
 	t.Parallel()
 
 	for name, opts := range map[string]Options{
-		"bad database name (numerical prefix)": {
-			Database:       "1db",
-			TableMigration: TableMigration{Type: "a", Source: "b", Destination: "c"},
-		},
-		"bad database name (dashes)": {
-			Database:       "db-1",
-			TableMigration: TableMigration{Type: "a", Source: "b", Destination: "c"},
-		},
-		"bad database name (injection)": {
-			Database:       "db; DROP TABLE x",
-			TableMigration: TableMigration{Type: "a", Source: "b", Destination: "c"},
-		},
-		"unknown type": {
-			Database:       "ok",
-			TableMigration: TableMigration{Type: "nonesuch", Source: "a", Destination: "b"},
-		},
-		"empty type": {
-			Database:       "ok",
-			TableMigration: TableMigration{Source: "a", Destination: "b"}},
-		"bad source": {
-			Database:       "ok",
-			TableMigration: TableMigration{Type: "meta", Source: "a-table", Destination: "b"}},
-		"injected source": {
-			Database:       "ok",
-			TableMigration: TableMigration{Type: "meta", Source: "a; DROP TABLE x", Destination: "b"}},
-		"bad destination": {
-			Database:       "ok",
-			TableMigration: TableMigration{Type: "meta", Source: "a", Destination: ""}},
-		"reads what it write": {
-			Database:       "ok",
-			TableMigration: TableMigration{Type: "meta", Source: "same", Destination: "same"}},
+		"bad database name (numerical prefix)": {Database: "1db"},
+		"bad database name (dashes)":           {Database: "db-1"},
+		"bad database name (injection)":        {Database: "db; DROP TABLE x"},
 	} {
 		assert.Error(t, opts.checkAndSetDefaults(), "%s should be rejected", name)
 	}
+}
 
+func TestTableMigrationValidation(t *testing.T) {
+	t.Parallel()
+
+	for name, migration := range map[string]TableMigration{
+		"unknown type":     {Type: "nonesuch", Source: "a", Destination: "b"},
+		"empty type":       {Source: "a", Destination: "b"},
+		"bad source":       {Type: "meta", Source: "a-table", Destination: "b"},
+		"injected source":  {Type: "meta", Source: "a; DROP TABLE x", Destination: "b"},
+		"bad destination":  {Type: "meta", Source: "a", Destination: ""},
+		"same source/dest": {Type: "meta", Source: "same", Destination: "same"},
+	} {
+		assert.Error(t, migration.checkAndSetDefaults(), "%s should be rejected", name)
+	}
+}
+
+func TestDefaultTableMigrations(t *testing.T) {
+	t.Parallel()
+
+	require.Len(t, tableMigrations, 3)
+	assert.Equal(t, []TableMigration{
+		{Type: "meta", Source: "meta_v2", Destination: "meta_v2_parquet"},
+		{Type: "suites", Source: "suites_v2", Destination: "suites_v2_parquet"},
+		{Type: "testcases", Source: "testcases_v2", Destination: "testcases_v2_parquet"},
+	}, tableMigrations)
 }
 
 func TestRunOneStatementPerDay(t *testing.T) {
@@ -162,17 +159,19 @@ func TestRunOneStatementPerDay(t *testing.T) {
 	exec.On("Execute", mock.Anything, mock.Anything).Return(testResult(), nil)
 
 	err := Run(context.Background(), exec, Options{
-		Database:       "db",
-		TableMigration: testTable(),
-		From:           date(2026, time.September, 13),
-		To:             date(2026, time.September, 15),
+		Database: "db",
+		From:     date(2026, time.September, 13),
+		To:       date(2026, time.September, 15),
 	})
 	require.NoError(t, err)
 
-	exec.AssertNumberOfCalls(t, "Execute", 3)
+	exec.AssertNumberOfCalls(t, "Execute", 9)
 
+	assert.Contains(t, exec.statement(t, 0), "FROM db.meta_v2")
 	assert.Contains(t, exec.statement(t, 0), "'2026-09-13'")
 	assert.Contains(t, exec.statement(t, 2), "'2026-09-15'")
+	assert.Contains(t, exec.statement(t, 3), "FROM db.suites_v2")
+	assert.Contains(t, exec.statement(t, 6), "FROM db.testcases_v2")
 }
 
 func TestRunSingleDay(t *testing.T) {
@@ -182,13 +181,12 @@ func TestRunSingleDay(t *testing.T) {
 	exec.On("Execute", mock.Anything, mock.Anything).Return(testResult(), nil)
 
 	err := Run(context.Background(), exec, Options{
-		Database:       "db",
-		TableMigration: testTable(),
-		From:           date(2026, time.September, 1),
-		To:             date(2026, time.September, 1),
+		Database: "db",
+		From:     date(2026, time.September, 1),
+		To:       date(2026, time.September, 1),
 	})
 	require.NoError(t, err)
-	exec.AssertNumberOfCalls(t, "Execute", 1)
+	exec.AssertNumberOfCalls(t, "Execute", 3)
 }
 
 func TestRunStopsAtFirstFailure(t *testing.T) {
@@ -204,10 +202,9 @@ func TestRunStopsAtFirstFailure(t *testing.T) {
 	exec.On("Execute", mock.Anything, mock.Anything).Return(testResult(), nil)
 
 	err := Run(context.Background(), exec, Options{
-		Database:       "db",
-		TableMigration: testTable(),
-		From:           date(2026, time.September, 1),
-		To:             date(2026, time.September, 5),
+		Database: "db",
+		From:     date(2026, time.September, 1),
+		To:       date(2026, time.September, 5),
 	})
 	assert.Error(t, err)
 
@@ -224,10 +221,9 @@ func TestRunRejectsReversedPeriod(t *testing.T) {
 	exec := &mockExecutor{}
 
 	err := Run(context.Background(), exec, Options{
-		Database:       "db",
-		TableMigration: testTable(),
-		From:           date(2026, time.September, 5),
-		To:             date(2026, time.September, 1),
+		Database: "db",
+		From:     date(2026, time.September, 5),
+		To:       date(2026, time.September, 1),
 	})
 	assert.Error(t, err)
 

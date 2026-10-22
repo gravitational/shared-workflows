@@ -165,10 +165,6 @@ func (c *ReportCommand) Run(ctx context.Context) error {
 		return trace.Wrap(err)
 	}
 
-	fmt.Printf("%s, %s, %s .. %s, branches: %s, reporters: %s\n",
-		report.FlakyName, c.athenaConfig.Database, report.Day(from), report.Day(to),
-		strings.Join(c.params.Branches, ","), sinks.Name())
-
 	scope := report.Scope{
 		Database: c.athenaConfig.Database,
 		Tables:   c.tables,

@@ -17,7 +17,6 @@ package cmds
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	kingpin "github.com/alecthomas/kingpin/v2"
@@ -51,17 +50,16 @@ func (d *dateValue) String() string {
 	return d.target.Format(time.DateOnly)
 }
 
-// MigrateCommand copies one table of JSONL test records into its Parquet
-// counterpart over one period.
+// MigrateCommand copies all JSONL test record tables into their Parquet
+// counterparts over one period.
 type MigrateCommand struct {
 	cmd *kingpin.CmdClause
 
 	athenaConfig athena.Config
 
-	table migrate.TableMigration
-	from  time.Time
-	to    time.Time
-	days  int
+	from time.Time
+	to   time.Time
+	days int
 
 	// fromSet and daysSet record whether the user passed the flag, since
 	// kingpin does not support mutually exclusive flag groups.
@@ -77,19 +75,7 @@ func NewMigrateCommand(app *kingpin.Application) *MigrateCommand {
 		to: time.Now().UTC(),
 	}
 
-	c.cmd = app.Command("migrate", "Copy one table of JSONL test records into Parquet, one day at a time")
-
-	c.cmd.Arg("type", "Record type, one of "+strings.Join(migrate.Types(), ", ")).
-		Required().
-		EnumVar(&c.table.Type, migrate.Types()...)
-
-	c.cmd.Flag("source", "JSONL table to read").
-		Required().
-		StringVar(&c.table.Source)
-
-	c.cmd.Flag("destination", "Parquet table to write").
-		Required().
-		StringVar(&c.table.Destination)
+	c.cmd = app.Command("migrate", "Copy all JSONL test record tables into Parquet, one day at a time")
 
 	// --from and --days are mutually exclusive, and exactly one is required.
 	// Both conditions are enforced in Run.
@@ -128,7 +114,11 @@ func (c *MigrateCommand) Run(ctx context.Context) error {
 	case c.fromSet && c.daysSet:
 		return trace.BadParameter("--from and --days are mutually exclusive")
 	case c.daysSet:
-		from = to.AddDate(0, 0, -c.days)
+		if c.days < 1 {
+			return trace.BadParameter("days must be at least 1, got %d", c.days)
+		}
+		// Inclusive of --to, so --days 1 migrates a single day.
+		from = to.AddDate(0, 0, -(c.days - 1))
 	case c.fromSet:
 		from = c.from.UTC()
 	default:
@@ -141,8 +131,7 @@ func (c *MigrateCommand) Run(ctx context.Context) error {
 			from.Format(time.DateOnly), to.Format(time.DateOnly))
 	}
 
-	fmt.Printf("%s.%s -> %s.%s, %s .. %s\n",
-		c.athenaConfig.Database, c.table.Source, c.athenaConfig.Database, c.table.Destination,
+	fmt.Printf("migrating %s .. %s\n",
 		from.Format(time.DateOnly), to.Format(time.DateOnly))
 
 	var exec athena.Executor
@@ -159,9 +148,8 @@ func (c *MigrateCommand) Run(ctx context.Context) error {
 	}
 
 	return trace.Wrap(migrate.Run(ctx, exec, migrate.Options{
-		Database:       c.athenaConfig.Database,
-		TableMigration: c.table,
-		From:           from,
-		To:             to,
+		Database: c.athenaConfig.Database,
+		From:     from,
+		To:       to,
 	}), "running migration")
 }

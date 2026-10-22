@@ -55,7 +55,7 @@ func Types() []string {
 	return out
 }
 
-// TableMigration is one migration
+// TableMigration is one migration.
 type TableMigration struct {
 	// Type is one of [Types].
 	Type string
@@ -63,6 +63,14 @@ type TableMigration struct {
 	Source string
 	// Destination is the Parquet table, partitioned by (repository, dt).
 	Destination string
+}
+
+// tableMigrations is the fixed mapping from normalized JSONL tables to their
+// Parquet counterparts.
+var tableMigrations = []TableMigration{
+	{Type: "meta", Source: "meta_v2", Destination: "meta_v2_parquet"},
+	{Type: "suites", Source: "suites_v2", Destination: "suites_v2_parquet"},
+	{Type: "testcases", Source: "testcases_v2", Destination: "testcases_v2_parquet"},
 }
 
 func (t TableMigration) checkAndSetDefaults() error {
@@ -84,17 +92,18 @@ func (t TableMigration) checkAndSetDefaults() error {
 
 // Options configures a migration run.
 type Options struct {
-	Database       string
-	TableMigration TableMigration
-	From, To       time.Time
+	Database string
+	From, To time.Time
 }
 
 func (o *Options) checkAndSetDefaults() error {
 	if !identifierPattern.MatchString(o.Database) {
 		return trace.BadParameter("invalid database name %q", o.Database)
 	}
-	if err := o.TableMigration.checkAndSetDefaults(); err != nil {
-		return trace.Wrap(err)
+	for _, migration := range tableMigrations {
+		if err := migration.checkAndSetDefaults(); err != nil {
+			return trace.Wrap(err)
+		}
 	}
 
 	if o.From.After(o.To) {
@@ -134,7 +143,7 @@ func render(database string, t TableMigration, day time.Time) (string, error) {
 	return strings.TrimRight(buf.String(), "\n"), nil
 }
 
-// Run migrates each day in the period
+// Run migrates every CI metrics table for each day in the period.
 func Run(ctx context.Context, exec athena.Executor, opts Options) error {
 	if err := opts.checkAndSetDefaults(); err != nil {
 		return trace.Wrap(err)
@@ -144,25 +153,30 @@ func Run(ctx context.Context, exec athena.Executor, opts Options) error {
 	var statements int
 	var bytesScanned int64
 
-	for day := opts.From; !day.After(opts.To); day = day.AddDate(0, 0, 1) {
-		statement, err := render(opts.Database, opts.TableMigration, day)
-		if err != nil {
-			return trace.Wrap(err, "rendering statement")
-		}
+	for _, migration := range tableMigrations {
+		fmt.Printf("%s.%s -> %s.%s\n",
+			opts.Database, migration.Source, opts.Database, migration.Destination)
 
-		result, err := exec.Execute(ctx, statement)
-		if err != nil {
-			return trace.Wrap(err, "migrating %s", day.Format(time.DateOnly))
-		}
+		for day := opts.From; !day.After(opts.To); day = day.AddDate(0, 0, 1) {
+			statement, err := render(opts.Database, migration, day)
+			if err != nil {
+				return trace.Wrap(err, "rendering %s statement", migration.Type)
+			}
 
-		statements++
-		bytesScanned += result.DataScannedBytes
-		fmt.Printf("  %s  %9s scanned  %6s  %s\n",
-			day.Format(time.DateOnly),
-			humanize.IBytes(uint64(result.DataScannedBytes)),
-			result.EngineTime.Round(100*time.Millisecond),
-			result.QueryExecutionID,
-		)
+			result, err := exec.Execute(ctx, statement)
+			if err != nil {
+				return trace.Wrap(err, "migrating %s for %s", migration.Type, day.Format(time.DateOnly))
+			}
+
+			statements++
+			bytesScanned += result.DataScannedBytes
+			fmt.Printf("  %s  %9s scanned  %6s  %s\n",
+				day.Format(time.DateOnly),
+				humanize.IBytes(uint64(result.DataScannedBytes)),
+				result.EngineTime.Round(100*time.Millisecond),
+				result.QueryExecutionID,
+			)
+		}
 	}
 
 	fmt.Printf("%d statement(s), %s scanned, %s elapsed\n",

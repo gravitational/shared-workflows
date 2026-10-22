@@ -80,6 +80,10 @@ func TestFlakyQueryRunsOneStatement(t *testing.T) {
 	assert.Contains(t, sql, "starts_with(m.git_ref, 'refs/heads/gh-readonly-queue/master/pr-')")
 	assert.NotContains(t, sql, "gh-readonly-queue/%", "the queue must be filtered per branch")
 	assert.Contains(t, sql, "GROUP BY 1, 2")
+	assert.Contains(t, sql, "'/actions/runs/', m.run_id, '/attempts/'")
+	assert.Contains(t, sql, "array_agg(DISTINCT r.run_url)")
+	assert.Contains(t, sql, "FILTER (WHERE t.status IN ('failed', 'error'))")
+	assert.Contains(t, sql, "failed_run_links")
 	assert.Contains(t, sql, "ORDER BY rn")
 	assert.NotContains(t, sql, "PARTITION BY day")
 }
@@ -141,11 +145,15 @@ func TestFlakyQueryRejectsBadParams(t *testing.T) {
 func TestFlakyRender(t *testing.T) {
 	t.Parallel()
 
+	const (
+		loginRuns  = "https://github.com/gravitational/teleport/actions/runs/100/attempts/1 https://github.com/gravitational/teleport/actions/runs/101/attempts/2"
+		logoutRuns = "https://github.com/gravitational/teleport/actions/runs/102/attempts/1"
+	)
 	rs := &athena.Result{
-		Columns: []string{"rn", "classname", "test_name", "execs", "fails", "fail_pct", "flake_score"},
+		Columns: []string{"rn", "classname", "test_name", "execs", "fails", "fail_pct", "flake_score", "failed_run_links"},
 		Rows: []athena.Row{
-			cells("1", "pkg/auth", "TestLogin", "120", "40", "33.33", "0.7634"),
-			cells("2", "pkg/auth", "TestLogout", "100", "10", "10.00", "0.3000"),
+			cells("1", "pkg/auth", "TestLogin", "120", "40", "33.33", "0.7634", loginRuns),
+			cells("2", "pkg/auth", "TestLogout", "100", "10", "10.00", "0.3000", logoutRuns),
 		},
 	}
 
@@ -157,27 +165,32 @@ func TestFlakyRender(t *testing.T) {
 	assert.Equal(t, FlakyName, doc.ID)
 	assert.Contains(t, doc.Headline, "TestLogin")
 
-	// Summary, then the one ranked table.
-	require.Len(t, doc.Sections, 2)
-	table := doc.Sections[1].Table
+	// The report body is only the ranked table.
+	require.Len(t, doc.Sections, 1)
+	assert.Empty(t, doc.Sections[0].Heading)
+	assert.Empty(t, doc.Sections[0].Metrics)
+	table := doc.Sections[0].Table
 	require.NotNil(t, table)
 	assert.Equal(t, 2, table.TotalRows)
 	assert.Equal(t, "TestLogin", table.Rows[0][1].Text)
 	assert.Equal(t, "33.33%", table.Rows[0][5].Text)
+	assert.Equal(t, "FAILED RUNS", table.Columns[6].Name)
+	assert.Equal(t, loginRuns, table.Rows[0][6].Text)
 }
 
 func TestFlakyRenderEmptyResult(t *testing.T) {
 	t.Parallel()
 
 	doc, err := flakyRender(testScope(), &FlakyParams{}, map[string]*athena.Result{
-		flakyQuery: {Columns: []string{"rn", "classname", "test_name", "execs", "fails", "fail_pct", "flake_score"}},
+		flakyQuery: {Columns: []string{"rn", "classname", "test_name", "execs", "fails", "fail_pct", "flake_score", "failed_run_links"}},
 	})
 	require.NoError(t, err)
 
 	assert.Contains(t, doc.Headline, "No flaky tests")
 	require.Len(t, doc.Sections, 1)
-	assert.Nil(t, doc.Sections[0].Table)
-	assert.NotEmpty(t, doc.Sections[0].Notes)
+	require.NotNil(t, doc.Sections[0].Table)
+	assert.Empty(t, doc.Sections[0].Table.Rows)
+	assert.Empty(t, doc.Sections[0].Notes)
 }
 
 func TestFlakyCapNote(t *testing.T) {

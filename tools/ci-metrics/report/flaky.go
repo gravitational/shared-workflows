@@ -265,60 +265,30 @@ func flakyRender(scope Scope, params any, results map[string]*athena.Result) (*D
 
 	if len(rows) == 0 {
 		doc.Headline = "No flaky tests found in the window."
-		doc.Sections = []Section{{
-			Heading: "Summary",
-			Notes: append([]string{
-				"No test both passed and failed over the window with at least " +
-					Int(int64(p.MinExecs)) + " executions.",
-			}, flakyScoreNotes(p)...),
-		}}
-		return doc, nil
+	} else {
+		// Ordered by score, so the first row is the worst test.
+		doc.Headline = Int(int64(distinctFlakyTests(rows))) +
+			" flaky test(s) over the window; worst " + rows[0].TestName
 	}
 
-	// Ordered by score, so the first row is the worst test.
-	worst := rows[0].TestName
-	distinct := distinctFlakyTests(rows)
-
-	doc.Headline = Int(int64(distinct)) + " flaky test(s) over the window; worst " + worst
-
-	doc.Sections = append(doc.Sections,
-		Section{
-			Heading: "Summary",
-			Metrics: []Metric{
-				{Name: "Flaky tests listed", Value: Int(int64(distinct))},
-				{Name: "Worst test", Value: worst},
-			},
-			Notes: flakyScoreNotes(p),
-		},
-		Section{
-			Heading: Window(scope.From, scope.To),
-			Table:   flakyTable(rows),
-			Notes:   flakyCapNote(rows, p.Top),
-		},
-	)
+	doc.Sections = []Section{{
+		Table: flakyTable(rows),
+		Notes: flakyCapNote(rows, p.Top),
+	}}
 
 	return doc, nil
 }
 
 // flakyRow is one scored test.
 type flakyRow struct {
-	Rank       int64
-	Classname  string
-	TestName   string
-	Execs      int64
-	Fails      int64
-	FailPct    float64
-	FlakeScore float64
-}
-
-// flakyScoreNotes explains the score and the exclusions.
-func flakyScoreNotes(p *FlakyParams) []string {
-	return []string{
-		"Score is 4*p*(1-p)*execs/(execs+" + strconv.FormatFloat(p.Smoothing, 'f', -1, 64) +
-			"), approaching 1.0 for a test that fails half the time with a large sample.",
-		"Tests with fewer than " + strconv.Itoa(p.MinExecs) + " executions over the window" +
-			" are excluded, as are tests that always passed or always failed.",
-	}
+	Rank           int64
+	Classname      string
+	TestName       string
+	Execs          int64
+	Fails          int64
+	FailPct        float64
+	FlakeScore     float64
+	FailedRunLinks string
 }
 
 // flakyTable builds the ranked table.
@@ -331,6 +301,7 @@ func flakyTable(rows []flakyRow) *Table {
 			{Name: "EXECS", Align: AlignRight},
 			{Name: "FAILS", Align: AlignRight},
 			{Name: "FAIL%", Align: AlignRight},
+			{Name: "FAILED RUNS", Align: AlignLeft},
 		},
 		Rows:      make([]Row, 0, len(rows)),
 		TotalRows: len(rows),
@@ -344,6 +315,7 @@ func flakyTable(rows []flakyRow) *Table {
 			{Text: Int(r.Execs)},
 			{Text: Int(r.Fails)},
 			{Text: Pct(r.FailPct)},
+			{Text: r.FailedRunLinks},
 		})
 	}
 
@@ -359,7 +331,8 @@ func decodeFlakyRows(rs *athena.Result) ([]flakyRow, error) {
 		Int64("execs", func(r *flakyRow, v int64) { r.Execs = v }).
 		Int64("fails", func(r *flakyRow, v int64) { r.Fails = v }).
 		Float64("fail_pct", func(r *flakyRow, v float64) { r.FailPct = v }).
-		Float64("flake_score", func(r *flakyRow, v float64) { r.FlakeScore = v })
+		Float64("flake_score", func(r *flakyRow, v float64) { r.FlakeScore = v }).
+		Str("failed_run_links", func(r *flakyRow, v string) { r.FailedRunLinks = v })
 
 	out := make([]flakyRow, 0, len(rs.Rows))
 	for row, err := range scanner.Scan() {
