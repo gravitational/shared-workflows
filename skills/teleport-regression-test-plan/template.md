@@ -1,7 +1,8 @@
 # Regression testing: {OLD_TAG} → {NEW_TAG}
 
 PRs that may carry regression risk, grouped by author. Docs-only, tests-only,
-dependency update, and release PRs are excluded.
+dependency update, release PRs, and PRs already shipped before {OLD_TAG} are
+excluded.
 
 - **{KEPT}** PRs to review (out of {TOTAL} total; {FILTERED} filtered as no-risk)
 

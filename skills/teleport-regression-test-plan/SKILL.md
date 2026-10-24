@@ -1,6 +1,6 @@
 ---
 name: teleport-regression-test-plan
-description: Build a regression-testing checklist of PRs merged between two Teleport release tags. Fetches PRs from the gravitational/core monorepo between two tags, filters out PRs that pose no regression risk (docs-only, tests-only, dependency updates, and release PRs), and outputs a GitHub-flavored markdown artifact grouping the remaining PRs by author. Use when preparing for release regression testing or when asked "what changed between tag A and tag B".
+description: Build a regression-testing checklist of PRs merged between two Teleport release tags. Fetches PRs from the gravitational/core monorepo between two tags, filters out PRs that pose no regression risk (docs-only, tests-only, dependency updates, and release PRs), verifies survivors weren't already shipped before the older tag, and outputs a GitHub-flavored markdown artifact grouping the remaining PRs by author. Use when preparing for release regression testing or when asked "what changed between tag A and tag B".
 ---
 
 # Teleport regression test plan
@@ -93,7 +93,75 @@ regression scoping. The author-based rules above are the deliberate exception:
 release, dependency-bump, and docs-maintainer PRs are low risk by nature and
 should be dropped even when uncertain.
 
-## Step 3 — Render grouped markdown
+## Step 3 — Verify survivors weren't already shipped
+
+**Do not skip this step.** A PR showing up as "new" between the two tags by
+commit ancestry does not guarantee its code is actually new — see "Known
+failure mode" below. Run the survivors from Step 2 through the verifier:
+
+```bash
+./scripts/verify-not-shipped.py <OLD_TAG> <NEW_TAG> < /tmp/prs.txt > /tmp/verdicts.txt
+```
+
+(Feed it the *original* `prs.txt` from Step 1, not a pre-filtered version —
+it reads every PR header it finds and ignores ones not in your kept set, so
+there's no need to hand it a trimmed file.) This must run from inside a local
+clone of the repo with both tags fetched (`git fetch origin --tags`); it
+shells out to `git diff`/`git show` directly.
+
+Each line is a verdict for one PR:
+
+- `DROP <num> (zero-diff: ...)` — airtight: every file the PR touches is
+  byte-identical between the two tags. Exclude it from the final plan
+  unconditionally; there is no judgment call here.
+- `FLAG <num> (NN% ... )` — the PR's own added code substantially overlaps
+  with what's already in `OLD_TAG`. **This is a signal to check, not a
+  verdict to act on.** Spot-check it yourself before deciding: pull the PR's
+  merge commit (`gh pr view <num> --json mergeCommit --jq .mergeCommit.oid`),
+  diff it against its parent for the file with the most additions, and grep
+  a few of the more distinctive added lines against `git show
+  <OLD_TAG>:<path>`. If they're there verbatim, drop the PR from the plan
+  and say so in the summary; if they're not, keep it — a high percentage can
+  come from coincidental overlap in large, frequently-touched or generated
+  files (protobuf `*.pb.go`, terraform-provider codegen, etc.), especially
+  for PRs with files dominated by the big multi-file ones.
+- `KEEP <num> (...)` — low overlap, or nothing substantial enough to check.
+  Treat the same as before this step existed.
+
+Update the kept-count and filtered-count in Step 4's summary line to account
+for anything dropped here, on top of what Step 2 already filtered.
+
+### Known failure mode
+
+Teleport's release branches don't always get one commit per PR in a clean,
+single line of history. Two ways this has actually bitten this skill:
+
+1. **A squash commit.** During RC staging, a single commit can fold several
+   PRs' changes into the release line at once, under a brand-new SHA (e.g.
+   `gravitational/core@c85a9f2a0de`, "Release/18.11.5-rc.1 (#2776)", which
+   bundled 16 PRs' worth of changes together before `v18.11.5` was tagged).
+2. **A later, separate re-merge of the same PRs' original commits.** Some
+   time after that squash, the *original* one-commit-per-PR commits for (at
+   least some of) the same PRs landed on the release branch too, as a pure
+   content no-op.
+
+Either way, the result is the same: `git merge-base --is-ancestor
+<original-commit> OLD_TAG` says "not an ancestor" — because literally, by
+SHA, it isn't — even though the code has been in every tag since the squash
+landed. A commit-ancestry diff like `prs-between-tags.sh`'s compare walk has
+no way to see this; it only knows "is this SHA reachable," not "is this code
+already here." The incident that motivated Step 3: a `v18.11.7..v18.11.8-rc.2`
+plan built without it listed 33 PRs - including several security fixes - as
+"new" when their code had shipped as far back as `v18.11.5` or earlier.
+`prs-between-tags.sh` prints a best-effort warning to stderr when it spots a
+commit message bundling an unusual number of `(#NNNN)` PR refs (signal #1
+above), but that heuristic caught only about half of the 33 in the incident
+that prompted it (the ones not part of a detected squash still slipped
+through on ancestry alone) - Step 3's content-based check is what actually
+catches both failure modes, so run it every time, not just when the warning
+fires.
+
+## Step 4 — Render grouped markdown
 
 Format the surviving PRs by following `template.md` in this skill directory.
 Group by author, sort authors alphabetically, list each PR as a checkbox linking

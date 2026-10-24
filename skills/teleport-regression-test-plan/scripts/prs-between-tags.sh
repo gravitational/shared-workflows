@@ -27,6 +27,16 @@
 #       lib/foo/bar.go
 #       lib/foo/bar_test.go
 #
+# Also scans the same commit range for a different signal, printed to
+# stderr: any single commit whose message bundles an unusual number of
+# "(#NNNN)" PR references. That's the fingerprint of a squash/RC-staging
+# commit that folds several PRs' changes into the release line under one new
+# SHA - which is exactly what can make this script list some of those same
+# PRs again later as "new", once their *original* per-PR commits get merged
+# into the release branch separately as a content no-op. See this skill's
+# "Known failure mode" section, and run scripts/verify-not-shipped.py on the
+# output before trusting it - don't rely on this warning alone.
+#
 # Requires an authenticated gh (`gh auth login`) with access to the private
 # gravitational/core repo.
 #
@@ -40,6 +50,23 @@ fi
 OLD_TAG="$1"
 NEW_TAG="$2"
 REPO="${3:-gravitational/core}"
+
+# Squash-commit warning (stderr only, best-effort - a failure here must never
+# break the real output on stdout). A commit message bundling many "(#NNNN)"
+# refs in one go means several PRs' changes landed in one shot, bypassing the
+# usual one-commit-per-PR history; if those PRs' *original* commits later get
+# merged into the release branch separately, this script will list them
+# again here as if they were new. See SKILL.md's "Known failure mode".
+{
+  gh api --paginate "repos/${REPO}/compare/${OLD_TAG}...${NEW_TAG}" \
+      --jq '.commits[] | .sha + "\t" + (.commit.message | gsub("\r?\n"; " "))' 2>/dev/null \
+    | while IFS=$'\t' read -r sha message; do
+        refs=$(grep -o '(#[0-9]\+)' <<< "$message" | wc -l | tr -d ' ')
+        if [[ "$refs" -gt 3 ]]; then
+          echo "warning: commit ${sha:0:12} bundles $refs PR refs in one message - possible squash/RC-staging commit (see SKILL.md 'Known failure mode'); run scripts/verify-not-shipped.py before trusting any of those PRs if they also appear below: ${message:0:160}"
+        fi
+      done
+} >&2 || true
 
 # For each commit in the range, ask GitHub which PR introduced it. The endpoint
 # also returns open PRs that merely contain the commit (it isn't on the default
