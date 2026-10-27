@@ -3,6 +3,7 @@ package bot
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path"
 	"path/filepath"
@@ -74,7 +75,7 @@ func (b *Bot) CheckDocsPathsForMissingRedirects(ctx context.Context, teleportClo
 		docspaths := toDocsPaths(r)
 		_, err1 := os.Stat(filepath.Join(teleportClonePath, docspaths.standalone))
 		_, err2 := os.Stat(filepath.Join(teleportClonePath, docspaths.category))
-		if err1 != nil && err2 != nil {
+		if errors.Is(err1, os.ErrNotExist) && errors.Is(err2, os.ErrNotExist) {
 			missingPaths = append(missingPaths, r)
 		}
 	}
