@@ -60,6 +60,8 @@ var (
 			"deploy/fluxcd/src/platform/*/*helmrelease*.yaml",
 			"deploy/fluxcd/src/platform/*/*/*values.helm.yaml",
 			"deploy/fluxcd/src/platform/*/*/*helmrelease*.yaml",
+			"tenantoperator/beamservice/beam/requirements.txt",
+			"tenantoperator/beamservice/beam/Dockerfile",
 		},
 	}
 
