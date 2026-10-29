@@ -19,6 +19,7 @@ package git
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -143,5 +144,157 @@ func TestObjectSHAAtPath_InvalidRef(t *testing.T) {
 	addCommit(t, repo, "initial")
 
 	_, err := repo.ObjectSHAAtPath("nonexistent-ref", "somefile")
+	assert.Error(t, err)
+}
+
+// addCommitWithBody creates a commit with the given subject and body.
+func addCommitWithBody(t *testing.T, repo *Repo, subject, body string) {
+	t.Helper()
+	f := filepath.Join(repo.dir, strings.ReplaceAll(subject, "/", "_")+".txt")
+	require.NoError(t, os.WriteFile(f, []byte(subject), 0o644))
+	_, err := repo.RunCmd("add", ".")
+	require.NoError(t, err)
+	_, err = repo.RunCmd("commit", "-m", subject, "-m", body)
+	require.NoError(t, err)
+}
+
+func TestCommitPRNumber(t *testing.T) {
+	tests := []struct {
+		subject string
+		want    int
+	}{
+		{subject: "fix something (#101)", want: 101},
+		{subject: "fix something (#101) ", want: 101},
+		{subject: "chore: update deps", want: 0},
+		{subject: "mentions (#101) mid-subject", want: 0},
+		// Backports accumulate refs; the merge number is the trailing one.
+		{subject: "fix something (#101) (#202)", want: 202},
+		{subject: "issue #101", want: 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.subject, func(t *testing.T) {
+			assert.Equal(t, tt.want, Commit{Subject: tt.subject}.PRNumber())
+		})
+	}
+}
+
+func TestCommitsInRange(t *testing.T) {
+	repo := newTestRepo(t)
+	addCommit(t, repo, "initial commit (#99)")
+	_, err := repo.RunCmd("tag", "v1.0.0")
+	require.NoError(t, err)
+	addCommitWithBody(t, repo, "squash merge (#101)", "* first squashed (#11)\n* second squashed (#12)")
+
+	commits, err := repo.CommitsInRange("v1.0.0..HEAD", false)
+	require.NoError(t, err)
+	require.Len(t, commits, 1)
+
+	assert.Equal(t, "squash merge (#101)", commits[0].Subject)
+	assert.Equal(t, 101, commits[0].PRNumber())
+	// Multiline bodies must survive intact: they are the only local record of
+	// the commits a squash merge collapsed.
+	assert.Equal(t, "* first squashed (#11)\n* second squashed (#12)", strings.TrimSpace(commits[0].Body))
+	assert.Len(t, commits[0].SHA, 40)
+	assert.False(t, commits[0].Date.IsZero())
+}
+
+func TestCommitsInRange_FirstParentOnly(t *testing.T) {
+	repo := newTestRepo(t)
+	addCommit(t, repo, "initial commit (#99)")
+	_, err := repo.RunCmd("tag", "v1.0.0")
+	require.NoError(t, err)
+	addCommit(t, repo, "mainline fix (#101)")
+	_, err = repo.RunCmd("checkout", "-b", "topic")
+	require.NoError(t, err)
+	addCommit(t, repo, "topic-only change (#999)")
+	_, err = repo.RunCmd("checkout", "main")
+	require.NoError(t, err)
+	_, err = repo.RunCmd("merge", "--no-ff", "topic", "-m", "Merge topic (#102)")
+	require.NoError(t, err)
+
+	firstParent, err := repo.CommitsInRange("v1.0.0..HEAD", true)
+	require.NoError(t, err)
+	assert.Equal(t, []int{102, 101}, prNumbers(firstParent))
+
+	// Cherry-picks and merged-in work sit off the first-parent chain, so the
+	// released set needs the full traversal to see them.
+	all, err := repo.CommitsInRange("v1.0.0..HEAD", false)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []int{102, 101, 999}, prNumbers(all))
+}
+
+func TestCommitsInRange_Empty(t *testing.T) {
+	repo := newTestRepo(t)
+	addCommit(t, repo, "initial commit (#99)")
+
+	commits, err := repo.CommitsInRange("HEAD..HEAD", false)
+	require.NoError(t, err)
+	assert.Empty(t, commits)
+}
+
+func TestCommitsInRange_InvalidRange(t *testing.T) {
+	repo := newTestRepo(t)
+	addCommit(t, repo, "initial")
+
+	_, err := repo.CommitsInRange("nonexistent-ref..HEAD", false)
+	assert.Error(t, err)
+}
+
+func prNumbers(commits []Commit) []int {
+	numbers := make([]int, 0, len(commits))
+	for _, commit := range commits {
+		numbers = append(numbers, commit.PRNumber())
+	}
+	return numbers
+}
+
+func TestMergeBase(t *testing.T) {
+	repo := newTestRepo(t)
+	addCommit(t, repo, "shared base")
+	base, err := repo.RunCmd("rev-parse", "HEAD")
+	require.NoError(t, err)
+
+	_, err = repo.RunCmd("checkout", "-b", "release")
+	require.NoError(t, err)
+	addCommit(t, repo, "release-only change")
+	_, err = repo.RunCmd("checkout", "main")
+	require.NoError(t, err)
+	addCommit(t, repo, "mainline change")
+
+	got, err := repo.MergeBase("release", "main")
+	require.NoError(t, err)
+	assert.Equal(t, base, got)
+}
+
+func TestMergeBase_AncestorIsItsOwnMergeBase(t *testing.T) {
+	// This is the case the released set relies on to stay empty: when the base
+	// tag is an ancestor of the head branch, the chain range is empty and the
+	// plain commit range is already correct.
+	repo := newTestRepo(t)
+	addCommit(t, repo, "initial commit")
+	_, err := repo.RunCmd("tag", "v1.0.0")
+	require.NoError(t, err)
+	tag, err := repo.RunCmd("rev-parse", "v1.0.0")
+	require.NoError(t, err)
+	addCommit(t, repo, "later commit")
+
+	got, err := repo.MergeBase("v1.0.0", "HEAD")
+	require.NoError(t, err)
+	assert.Equal(t, tag, got)
+
+	commits, err := repo.CommitsInRange(got+"..v1.0.0", false)
+	require.NoError(t, err)
+	assert.Empty(t, commits)
+}
+
+func TestMergeBase_UnrelatedHistories(t *testing.T) {
+	repo := newTestRepo(t)
+	addCommit(t, repo, "initial commit")
+	_, err := repo.RunCmd("checkout", "--orphan", "unrelated")
+	require.NoError(t, err)
+	addCommit(t, repo, "unrelated root")
+
+	_, err = repo.MergeBase("main", "unrelated")
 	assert.Error(t, err)
 }

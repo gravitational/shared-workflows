@@ -157,3 +157,145 @@ func TestPullRequests_Empty(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, prs)
 }
+
+// commitsPage builds a GraphQL commits connection page for a PR.
+func commitsPage(messages []string, hasNextPage bool, endCursor string) map[string]any {
+	nodes := make([]any, 0, len(messages))
+	for _, message := range messages {
+		nodes = append(nodes, map[string]any{
+			"commit": map[string]any{"message": message},
+		})
+	}
+	return map[string]any{
+		"repository": map[string]any{
+			"pullRequest": map[string]any{
+				"commits": map[string]any{
+					"pageInfo": map[string]any{"hasNextPage": hasNextPage, "endCursor": endCursor},
+					"nodes":    nodes,
+				},
+			},
+		},
+	}
+}
+
+func TestPullRequestCommitMessages(t *testing.T) {
+	doer := &fakeGraphQLDoer{
+		fn: func(query string, variables map[string]any, response any) error {
+			assert.Contains(t, query, "message")
+			assert.Equal(t, "gravitational", variables["owner"])
+			assert.Equal(t, commitPageSize, variables["pageSize"])
+
+			switch variables["number"] {
+			case 2013:
+				populateResponse(t, commitsPage([]string{"first fix", "second fix"}, false, ""), response)
+			case 2776:
+				populateResponse(t, commitsPage([]string{"third fix"}, false, ""), response)
+			default:
+				t.Fatalf("unexpected PR number %v", variables["number"])
+			}
+			return nil
+		},
+	}
+
+	cl := &Client{graphql: doer}
+	got, err := cl.PullRequestCommitMessages(context.Background(), "gravitational", "core", []int{2013, 2776})
+	require.NoError(t, err)
+	assert.Equal(t, map[int][]string{
+		2013: {"first fix", "second fix"},
+		2776: {"third fix"},
+	}, got)
+}
+
+func TestPullRequestCommitMessages_Paging(t *testing.T) {
+	var calls int
+	doer := &fakeGraphQLDoer{
+		fn: func(_ string, variables map[string]any, response any) error {
+			calls++
+			switch calls {
+			case 1:
+				assert.Nil(t, variables["after"])
+				populateResponse(t, commitsPage([]string{"page one"}, true, "cursor-1"), response)
+			case 2:
+				// The cursor from the previous page must be passed through, or
+				// paging loops on the first page.
+				require.NotNil(t, variables["after"])
+				assert.Equal(t, "cursor-1", *variables["after"].(*string))
+				populateResponse(t, commitsPage([]string{"page two"}, false, ""), response)
+			default:
+				t.Fatalf("unexpected call %d", calls)
+			}
+			return nil
+		},
+	}
+
+	cl := &Client{graphql: doer}
+	got, err := cl.PullRequestCommitMessages(context.Background(), "gravitational", "core", []int{1})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"page one", "page two"}, got[1])
+	assert.Equal(t, 2, calls)
+}
+
+func TestPullRequestCommitMessages_MissingPR(t *testing.T) {
+	doer := &fakeGraphQLDoer{
+		fn: func(_ string, _ map[string]any, response any) error {
+			populateResponse(t, map[string]any{
+				"repository": map[string]any{"pullRequest": nil},
+			}, response)
+			return &api.GraphQLError{
+				Errors: []api.GraphQLErrorItem{{Type: "NOT_FOUND", Path: []any{"repository", "pullRequest"}}},
+			}
+		},
+	}
+
+	cl := &Client{graphql: doer}
+	got, err := cl.PullRequestCommitMessages(context.Background(), "gravitational", "core", []int{999})
+	require.NoError(t, err)
+	assert.Empty(t, got)
+}
+
+func TestPullRequestCommitMessages_Error(t *testing.T) {
+	doer := &fakeGraphQLDoer{
+		fn: func(_ string, _ map[string]any, _ any) error {
+			return fmt.Errorf("boom")
+		},
+	}
+
+	cl := &Client{graphql: doer}
+	_, err := cl.PullRequestCommitMessages(context.Background(), "gravitational", "core", []int{1})
+	assert.Error(t, err)
+}
+
+func TestPullRequestCommitMessages_Empty(t *testing.T) {
+	doer := &fakeGraphQLDoer{
+		fn: func(_ string, _ map[string]any, _ any) error {
+			t.Fatal("should not call the API with no PR numbers")
+			return nil
+		},
+	}
+
+	cl := &Client{graphql: doer}
+	got, err := cl.PullRequestCommitMessages(context.Background(), "gravitational", "core", nil)
+	require.NoError(t, err)
+	assert.Empty(t, got)
+}
+
+func TestPullRequestCommitMessages_ReturnsWholeMessage(t *testing.T) {
+	// Squashed security commits bundle several changes, listing all but the
+	// first in the body, so the body lines have to survive the round trip.
+	// messageHeadline would lose them, and would truncate the subject too.
+	const message = "Require RoleNode for rpc GenerateHostCert.\n\n" +
+		"Use the leading host FQDN principal when registering a Node in the reverse tunnel router.\n" +
+		"Reserve internal Teleport-controlled cert extensions to prevent overrides via role.options.cert_extensions:"
+
+	doer := &fakeGraphQLDoer{
+		fn: func(_ string, _ map[string]any, response any) error {
+			populateResponse(t, commitsPage([]string{message}, false, ""), response)
+			return nil
+		},
+	}
+
+	cl := &Client{graphql: doer}
+	got, err := cl.PullRequestCommitMessages(context.Background(), "gravitational", "core", []int{2013})
+	require.NoError(t, err)
+	assert.Equal(t, []string{message}, got[2013])
+}
