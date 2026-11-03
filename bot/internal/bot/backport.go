@@ -79,9 +79,14 @@ func (b *Bot) Backport(ctx context.Context) error {
 
 	var rows []row
 
-	g := git
+	g := gitFunc(git)
 	if b.c.Git != nil {
 		g = b.c.Git
+	}
+
+	// The commits being backported are the same for every target branch, so fetch them once here.
+	if err := prepareRepo(ctx, b.c.Environment.Number, len(pull.Commits), g); err != nil {
+		return trace.Wrap(err, "preparing repository")
 	}
 
 	// Loop over all requested backport branches and create backport branch and
@@ -90,15 +95,7 @@ func (b *Bot) Backport(ctx context.Context) error {
 		head := b.backportBranchName(base)
 
 		// Create and push git branch for backport to GitHub.
-		err := b.createBackportBranch(ctx,
-			b.c.Environment.Organization,
-			b.c.Environment.Repository,
-			b.c.Environment.Number,
-			base,
-			pull,
-			head,
-			g,
-		)
+		err := b.createBackportBranch(ctx, base, pull, head, g)
 		if err != nil {
 			log.Printf("Failed to create backport branch:\n%v\n", trace.DebugReport(err))
 			rows = append(rows, row{
@@ -164,7 +161,13 @@ func (b *Bot) Backport(ctx context.Context) error {
 
 	// Leave a comment on the Pull Request with a table that outlines the
 	// requested backports and outcome.
-	err = b.updatePullRequest(ctx,
+	//
+	// Detach from ctx: if we got this far, the branches were already pushed and
+	// all we need to do is post the comment with PR links.
+	commentCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), github.ClientTimeout)
+	defer cancel()
+
+	err = b.updatePullRequest(commentCtx,
 		b.c.Environment.Organization,
 		b.c.Environment.Repository,
 		b.c.Environment.Number,
@@ -186,10 +189,11 @@ func (b *Bot) BackportLocal(ctx context.Context, branch string) error {
 		return trace.Wrap(err)
 	}
 
+	if err := prepareRepo(ctx, b.c.Environment.Number, len(pull.Commits), gitDryRun); err != nil {
+		return trace.Wrap(err, "preparing repository")
+	}
+
 	err = b.createBackportBranch(ctx,
-		b.c.Environment.Organization,
-		b.c.Environment.Repository,
-		b.c.Environment.Number,
 		branch,
 		pull,
 		b.backportBranchName(branch),
@@ -234,42 +238,58 @@ func findBranches(labels []string) []string {
 	return branches
 }
 
-// createBackportBranch will create and push a git branch with all the commits
-// from a Pull Request on it.
-//
-// TODO(russjones): Refactor to use go-git (so similar git library) instead of
-// executing git from disk.
-func (b *Bot) createBackportBranch(ctx context.Context, organization string, repository string, number int, base string, pull github.PullRequest, newHead string, git func(...string) error) error {
-	log.Println("--> Backporting to", base, "<--")
+// prRef is the local ref the commits from a Pull Request are fetched into.
+func prRef(number int) string {
+	return fmt.Sprintf("refs/remotes/origin/pr/%d", number)
+}
 
-	if err := git("config", "--global", "user.name", "github-actions"); err != nil {
+// baseRef is the local ref the tip of a backport's base branch is fetched into.
+func baseRef(base string) string {
+	return "refs/remotes/origin/" + base
+}
+
+// prepareRepo configures git and fetches the commits that are about to be backported.
+func prepareRepo(ctx context.Context, number int, commits int, git gitFunc) error {
+	if err := git(ctx, "config", "--global", "user.name", "github-actions"); err != nil {
 		log.Printf("Failed to set user.name: %v.", err)
 	}
-	if err := git("config", "--global", "user.email", "github-actions@goteleport.com"); err != nil {
+	if err := git(ctx, "config", "--global", "user.email", "github-actions@goteleport.com"); err != nil {
 		log.Printf("Failed to set user.email: %v.", err)
 	}
 
-	// Fetch the refs for the base branch and the Github PR.
-	if err := git("fetch", "origin", base, fmt.Sprintf("pull/%d/head", number)); err != nil {
+	// The teleport repo is large, so we don't want to do any more work than necessary here.
+	// - there are a lot of tags, and we don't need them
+	// - we don't need the entire history, only the commits being cherry-picked and their parent
+	return trace.Wrap(git(ctx,
+		"fetch", "--no-tags", "--depth", strconv.Itoa(commits+1), "origin",
+		fmt.Sprintf("+refs/pull/%d/head:%s", number, prRef(number))))
+}
+
+// createBackportBranch will create and push a git branch with all the commits
+// from a Pull Request on it. [prepareRepo] must have run first.
+//
+// TODO(russjones): Refactor to use go-git (so similar git library) instead of
+// executing git from disk.
+func (b *Bot) createBackportBranch(ctx context.Context, base string, pull github.PullRequest, newHead string, git gitFunc) error {
+	log.Println("--> Backporting to", base, "<--")
+
+	// Only the tip of the base branch is needed.
+	if err := git(ctx, "fetch", "--no-tags", "--depth", "1", "origin",
+		fmt.Sprintf("+refs/heads/%s:%s", base, baseRef(base))); err != nil {
 		return trace.Wrap(err)
 	}
 
-	// Checkout the base branch.
-	if err := git("checkout", base); err != nil {
-		return trace.Wrap(err)
-	}
-
-	// Checkout the new backport branch.
-	if err := git("checkout", "-b", newHead); err != nil {
+	// Point the backport branch at the tip of the base branch.
+	if err := git(ctx, "checkout", "-B", newHead, "--no-track", baseRef(base)); err != nil {
 		return trace.Wrap(err)
 	}
 
 	// Cherry-pick all commits from the PR to the backport branch.
 	for _, commit := range pull.Commits {
-		if err := git("cherry-pick", commit); err != nil {
+		if err := git(ctx, "cherry-pick", commit); err != nil {
 			// If cherry-pick fails with conflict, abort it, otherwise we
 			// won't be able to switch branch for the next backport.
-			if errAbrt := git("cherry-pick", "--abort"); errAbrt != nil {
+			if errAbrt := git(ctx, "cherry-pick", "--abort"); errAbrt != nil {
 				return trace.NewAggregate(err, errAbrt)
 			}
 			return trace.Wrap(err)
@@ -277,7 +297,7 @@ func (b *Bot) createBackportBranch(ctx context.Context, organization string, rep
 	}
 
 	// Push the backport branch to Github.
-	if err := git("push", "origin", newHead); err != nil {
+	if err := git(ctx, "push", "origin", newHead); err != nil {
 		return trace.Wrap(err)
 	}
 
@@ -323,10 +343,12 @@ func (b *Bot) workflowLogsURL(ctx context.Context, organization string, reposito
 	}, nil
 }
 
+type gitFunc func(ctx context.Context, args ...string) error
+
 // git will execute the "git" program on disk.
-func git(args ...string) error {
+func git(ctx context.Context, args ...string) error {
 	log.Println("Running:", "git", strings.Join(args, " "))
-	cmd := exec.Command("git", args...)
+	cmd := exec.CommandContext(ctx, "git", args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return trace.BadParameter("git failed: %s", string(bytes.TrimSpace(out)))
@@ -335,7 +357,7 @@ func git(args ...string) error {
 }
 
 // gitDryRun logs "git" commands in the console.
-func gitDryRun(args ...string) error {
+func gitDryRun(_ context.Context, args ...string) error {
 	log.Println("Running: git", strings.Join(args, " "))
 	return nil
 }
