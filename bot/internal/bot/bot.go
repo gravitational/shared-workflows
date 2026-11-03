@@ -109,7 +109,7 @@ type Config struct {
 	Review *review.Assignments
 
 	// Git is used to run git commands, uses dry run in tests.
-	Git func(...string) error
+	Git gitFunc
 }
 
 // CheckAndSetDefaults checks and sets defaults.
