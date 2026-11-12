@@ -1381,6 +1381,14 @@ func TestSingleApproverAuthors(t *testing.T) {
 	}
 }
 
+func TestNoApprovalRequiredAuthors(t *testing.T) {
+	for repo, authors := range noApprovalRequiredAuthors {
+		for _, author := range authors {
+			require.True(t, isAllowedRobot(author), "%q is not allowed to be a zero approval author in the %q repository (only bots)", author, repo)
+		}
+	}
+}
+
 func TestEmptyConfigCheckAndSetDefaults(t *testing.T) {
 	c := emptyConfig()
 	require.NoError(t, c.CheckAndSetDefaults())

@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"log"
 	"math/rand"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -69,6 +70,21 @@ var (
 	singleApproverAuthors = map[string][]string{
 		"cloud": {Dependabot, RenovateBotPrivate, RenovateBotPublic},
 	}
+
+	// noApprovalRequiredPaths defines repository paths eligible for zero approvals.
+	// Every changed file must match, and the author must be in noApprovalRequiredAuthors.
+	noApprovalRequiredPaths = map[string][]string{
+		"cloud": {
+			"tenantoperator/beamservice/beam/requirements.txt",
+			"tenantoperator/beamservice/beam/Dockerfile",
+		},
+	}
+
+	// noApprovalRequiredAuthors defines repository authors eligible for zero approvals.
+	// BOTS ONLY - DO NOT INCLUDE EMPLOYEE GITHUB HANDLES.
+	noApprovalRequiredAuthors = map[string][]string{
+		"cloud": {Dependabot, RenovateBotPrivate, RenovateBotPublic},
+	}
 )
 
 // SingleApproverPaths returns repository paths that only require a single approver.
@@ -79,6 +95,31 @@ func SingleApproverPaths(repository string) []string {
 // SingleApproverAuthors returns a list of authors that only require a single approver.
 func SingleApproverAuthors(repository string) []string {
 	return singleApproverAuthors[repository]
+}
+
+// NoApprovalRequiredPaths returns repository paths eligible for zero approvals.
+func NoApprovalRequiredPaths(repository string) []string {
+	return noApprovalRequiredPaths[repository]
+}
+
+// NoApprovalRequiredAuthors returns repository authors eligible for zero approvals.
+func NoApprovalRequiredAuthors(repository string) []string {
+	return noApprovalRequiredAuthors[repository]
+}
+
+// NoApprovalRequired reports whether both the author and every changed file
+// qualify for zero approvals in the repository. Paths must match exactly.
+func NoApprovalRequired(e *env.Environment, files []github.PullRequestFile) bool {
+	if len(files) == 0 || !slices.Contains(NoApprovalRequiredAuthors(e.Repository), e.Author) {
+		return false
+	}
+	paths := NoApprovalRequiredPaths(e.Repository)
+	for _, file := range files {
+		if !slices.Contains(paths, file.Name) || (file.PreviousName != "" && !slices.Contains(paths, file.PreviousName)) {
+			return false
+		}
+	}
+	return true
 }
 
 func isAllowedRobot(author string) bool {
@@ -238,6 +279,9 @@ func (r *Assignments) IsInternal(author string) bool {
 
 // Get will return a list of code reviewers for a given author.
 func (r *Assignments) Get(e *env.Environment, changes env.Changes, files []github.PullRequestFile) []string {
+	if !changes.Large && !changes.Release && NoApprovalRequired(e, files) {
+		return nil
+	}
 	var reviewers []string
 
 	// TODO: consider existing review assignments here
@@ -505,6 +549,11 @@ func (r *Assignments) CheckInternal(e *env.Environment, reviews []github.Review,
 		if err := r.checkInternalReleaseReviews(reviews); err != nil {
 			return trace.Wrap(err)
 		}
+		return nil
+	}
+
+	if NoApprovalRequired(e, files) {
+		log.Println("Check: Beam dependency bot PR requires no approvals.")
 		return nil
 	}
 
