@@ -250,16 +250,21 @@ const (
 )
 
 func prSize(files []github.PullRequestFile) sizeLabel {
-	var additions, deletions int
+	var codeDelta, testDelta int
 	for _, f := range files {
 		if skipFileForSizeCheck(f.Name) {
 			continue
 		}
 		added, deleted := changesForSizeCheck(f)
-		additions += added
-		deletions += deleted
+		if isTestFileForSizeCheck(f.Name) {
+			testDelta += added - deleted
+		} else {
+			codeDelta += added - deleted
+		}
 	}
-	delta := additions - deletions
+	// Tests are cheaper to review than the code they cover, and counting them in full discourages writing them.
+	// They still count for something so that a huge test-only change is not waved through.
+	delta := codeDelta + testDelta/testFileSizeDivisor
 	switch {
 	case delta < 100:
 		return small
@@ -270,6 +275,21 @@ func prSize(files []github.PullRequestFile) sizeLabel {
 	default:
 		return xlarge
 	}
+}
+
+// testFileSizeDivisor is the discount applied to the net line count of test files when sizing a PR.
+const testFileSizeDivisor = 2
+
+// isTestFileForSizeCheck reports whether a file only holds tests or test fixtures. Test helpers in regular
+// source files are deliberately not matched, since they can carry real logic.
+func isTestFileForSizeCheck(name string) bool {
+	return strings.HasSuffix(name, "_test.go") ||
+		strings.HasSuffix(name, ".test.ts") ||
+		strings.HasSuffix(name, ".test.tsx") ||
+		strings.HasSuffix(name, ".vitest.ts") ||
+		strings.HasSuffix(name, ".vitest.tsx") ||
+		strings.HasPrefix(name, "testdata/") ||
+		strings.Contains(name, "/testdata/")
 }
 
 func skipFileForSizeCheck(name string) bool {

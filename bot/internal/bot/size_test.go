@@ -280,6 +280,71 @@ func TestSizeExcludesBoilerplate(t *testing.T) {
 	}
 }
 
+func TestSizeDiscountsTestFiles(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		files []github.PullRequestFile
+		want  sizeLabel
+	}{
+		{
+			name:  "tests do not excuse xlarge code",
+			files: []github.PullRequestFile{{Name: "lib/a.go", Additions: 1500}, {Name: "lib/a_test.go", Additions: 1000}},
+			want:  xlarge,
+		},
+		{
+			name:  "test only change counts at half rate",
+			files: []github.PullRequestFile{{Name: "lib/a_test.go", Additions: 2000}},
+			want:  large,
+		},
+		{
+			name:  "large test only change still requires admin",
+			files: []github.PullRequestFile{{Name: "lib/a_test.go", Additions: 3000}},
+			want:  xlarge,
+		},
+		{
+			name:  "code plus half of tests below threshold",
+			files: []github.PullRequestFile{{Name: "lib/a.go", Additions: 1000}, {Name: "lib/a_test.go", Additions: 998}},
+			want:  large,
+		},
+		{
+			name:  "code plus half of tests at threshold",
+			files: []github.PullRequestFile{{Name: "lib/a.go", Additions: 1000}, {Name: "lib/a_test.go", Additions: 1000}},
+			want:  xlarge,
+		},
+		{
+			name:  "test deletions offset code at half rate",
+			files: []github.PullRequestFile{{Name: "lib/a.go", Additions: 1600}, {Name: "lib/a_test.go", Deletions: 200}},
+			want:  xlarge,
+		},
+		{
+			name: "web tests and testdata",
+			files: []github.PullRequestFile{
+				{Name: "web/packages/teleport/src/Foo.test.tsx", Additions: 1000},
+				{Name: "web/packages/teleport/src/foo.test.ts", Additions: 1000},
+				{Name: "lib/srv/testdata/session.txt", Additions: 900},
+			},
+			want: large,
+		},
+		{
+			name: "vitest files",
+			files: []github.PullRequestFile{
+				{Name: "web/packages/teleport/src/Foo.vitest.tsx", Additions: 1000},
+				{Name: "web/packages/teleport/src/foo.vitest.ts", Additions: 1900},
+			},
+			want: large,
+		},
+		{
+			name:  "test helpers outside test files count in full",
+			files: []github.PullRequestFile{{Name: "lib/testhelpers/helpers.go", Additions: 1500}},
+			want:  xlarge,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			require.Equal(t, test.want, prSize(test.files))
+		})
+	}
+}
+
 // sizeTestFile creates a patch replacing the entire old contents with new contents.
 func sizeTestFile(old, new string) github.PullRequestFile {
 	file := github.PullRequestFile{
