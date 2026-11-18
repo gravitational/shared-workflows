@@ -38,6 +38,9 @@ func (b *Bot) Check(ctx context.Context) error {
 	if err != nil {
 		return trace.Wrap(err)
 	}
+	if err := b.selectRFDReviewTeam(ctx); err != nil {
+		return trace.Wrap(err)
+	}
 
 	reviews, err := b.c.GitHub.ListReviews(ctx,
 		b.c.Environment.Organization,

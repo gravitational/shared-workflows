@@ -30,6 +30,7 @@ const (
 	AccessGraphRepo = "access-graph"
 	CloudRepo       = "cloud"
 	CoreRepo        = "core"
+	RFDRepo         = "rfd"
 
 	// Teams
 	CoreTeam     = "Core"
@@ -57,6 +58,9 @@ type Environment struct {
 
 	// Author is the author of the PR.
 	Author string
+
+	// RFDReviewTeam selects a reviewer pool for an RFD PR when a review label is present.
+	RFDReviewTeam string
 
 	// Additions is the number of new lines added in the PR
 	Additions int

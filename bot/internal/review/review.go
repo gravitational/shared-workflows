@@ -264,6 +264,10 @@ func (r *Assignments) Get(e *env.Environment, changes env.Changes, files []githu
 }
 
 func (r *Assignments) repoReviewers(e *env.Environment) map[string]Reviewer {
+	// RFDs are shared by core and cloud, so use the author's reviewer pools.
+	if e.Repository == env.RFDRepo {
+		return r.rfdRepoReviewers(e)
+	}
 	if reviewers, ok := r.c.RepoReviewers[e.Repository]; ok {
 		return reviewers
 	}
@@ -275,6 +279,70 @@ func (r *Assignments) repoReviewers(e *env.Environment) map[string]Reviewer {
 		return r.c.CoreReviewers
 	}
 	return map[string]Reviewer{}
+}
+
+func (r *Assignments) rfdRepoReviewers(e *env.Environment) map[string]Reviewer {
+	_, core := r.c.CoreReviewers[e.Author]
+	_, cloud := r.c.CloudReviewers[e.Author]
+	reviewers := make(map[string]Reviewer)
+	switch {
+	case core && cloud:
+		switch e.RFDReviewTeam {
+		case env.CoreTeam:
+			addRFDReviewers(reviewers, r.c.CoreReviewers)
+		case env.CloudTeam:
+			addRFDReviewers(reviewers, r.c.CloudReviewers)
+		default:
+			// A reviewer who is an owner in either pool remains an owner.
+			addRFDReviewers(reviewers, r.c.CoreReviewers)
+			addRFDReviewers(reviewers, r.c.CloudReviewers)
+		}
+	case core:
+		addRFDReviewers(reviewers, r.c.CoreReviewers)
+	case cloud:
+		addRFDReviewers(reviewers, r.c.CloudReviewers)
+	default:
+		return nil
+	}
+	return reviewers
+}
+
+func (r *Assignments) isRFDReviewer(author string) bool {
+	_, core := r.c.CoreReviewers[author]
+	_, cloud := r.c.CloudReviewers[author]
+	return core || cloud
+}
+
+// ValidateRFDReviewTeam rejects labels that select a team the author is not in.
+func (r *Assignments) ValidateRFDReviewTeam(e *env.Environment) error {
+	if e.Repository != env.RFDRepo || e.RFDReviewTeam == "" {
+		return nil
+	}
+	var reviewers map[string]Reviewer
+	switch e.RFDReviewTeam {
+	case env.CoreTeam:
+		reviewers = r.c.CoreReviewers
+	case env.CloudTeam:
+		reviewers = r.c.CloudReviewers
+	default:
+		return trace.BadParameter("unknown RFD review team %q", e.RFDReviewTeam)
+	}
+	if _, ok := reviewers[e.Author]; !ok {
+		return trace.BadParameter("RFD author %q is not in the %s reviewer pool", e.Author, e.RFDReviewTeam)
+	}
+	return nil
+}
+
+// addRFDReviewers ignores preferences tied to paths in the core and cloud repos.
+func addRFDReviewers(dst, src map[string]Reviewer) {
+	for name, reviewer := range src {
+		if reviewer.PreferredOnly {
+			continue
+		}
+		reviewer.Owner = reviewer.Owner || dst[name].Owner
+		reviewer.PreferredReviewerFor = nil
+		dst[name] = reviewer
+	}
 }
 
 func (r *Assignments) getReleaseReviewers() []string {
@@ -305,7 +373,11 @@ func (r *Assignments) getCodeReviewers(e *env.Environment, files []github.PullRe
 	reviewers := r.repoReviewers(e)
 
 	// Obtain full sets of reviewers.
-	setA, setB := r.getCodeReviewerSets(e)
+	setA, setB := r.codeReviewerSets(e, reviewers)
+	if e.Repository == env.RFDRepo && (len(setA) == 0 || len(setB) == 0) {
+		log.Printf("Assign: RFD reviewer pool has an empty group; assigning admins.")
+		return r.getAdminReviewers(e.Author)
+	}
 
 	// Sort the sets to get predictable order. It doesn't matter in real use
 	// because selection is randomized but helps in tests.
@@ -459,14 +531,18 @@ func (r *Assignments) getAdminReviewers(author string) []string {
 }
 
 func (r *Assignments) getCodeReviewerSets(e *env.Environment) ([]string, []string) {
+	return r.codeReviewerSets(e, r.repoReviewers(e))
+}
+
+func (r *Assignments) codeReviewerSets(e *env.Environment, reviewers map[string]Reviewer) ([]string, []string) {
 	// Internal non-Core contributors get assigned from the admin reviewer set.
 	// Admins will review, triage, and re-assign.
-	if !r.IsInternal(e.Author) {
-		reviewers := r.getAdminReviewers(e.Author)
-		n := len(reviewers) / 2
-		return reviewers[:n], reviewers[n:]
+	if !r.IsInternal(e.Author) || (e.Repository == env.RFDRepo && reviewers == nil) {
+		admins := r.getAdminReviewers(e.Author)
+		n := len(admins) / 2
+		return admins[:n], admins[n:]
 	}
-	return getReviewerSets(e.Author, r.repoReviewers(e), r.c.CodeReviewersOmit)
+	return getReviewerSets(e.Author, reviewers, r.c.CodeReviewersOmit)
 }
 
 // CheckExternal requires two admins have approved.
@@ -486,6 +562,9 @@ func (r *Assignments) CheckExternal(author string, reviews []github.Review) erro
 // all checks.
 func (r *Assignments) CheckInternal(e *env.Environment, reviews []github.Review, changes env.Changes, files []github.PullRequestFile) error {
 	log.Printf("Check: Found internal author %v.", e.Author)
+	if e.Repository == env.RFDRepo && !r.isRFDReviewer(e.Author) {
+		return r.CheckExternal(e.Author, reviews)
+	}
 
 	// Skip checks if admins have approved.
 	if check(r.GetAdminCheckers(e.Author), reviews) {

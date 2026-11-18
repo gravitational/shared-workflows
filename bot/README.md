@@ -45,6 +45,11 @@ Checks if required reviewers have approved the PR.
 
 Team specific reviews require an approval from both sets of reviews. External reviews require approval from admins.
 
+In the `rfd` repository, the author's core or cloud reviewer membership selects the reviewer pool. Authors in both
+pools use both unless the PR has a `review/core` or `review/cloud` label, which selects one pool. Both labels together
+fail the check. A label cannot select a pool the author does not belong to. Authors in neither pool require two admin
+approvals. RFD reviews exclude `preferredOnly` reviewers and ignore `preferredReviewerFor` paths.
+
 ### dismiss
 
 Dismisses all stale workflow runs within a repository. This is done to dismiss stale workflow runs for external
