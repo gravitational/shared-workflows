@@ -345,6 +345,65 @@ func TestSizeDiscountsTestFiles(t *testing.T) {
 	}
 }
 
+func TestSizeReport(t *testing.T) {
+	header := sizeTestFile("", apacheSizeHeader)
+	header.Name = "lib/auth/new.go"
+	headerLines := header.Additions
+
+	report := measureSize([]github.PullRequestFile{
+		{Name: "lib/auth/auth.go", Additions: 900, Deletions: 100},
+		{Name: "lib/auth/sub/auth_test.go", Additions: 601, Deletions: 0},
+		header,
+		{Name: "lib/services/role.go", Additions: 50, Deletions: 400},
+		{Name: "api/gen/proto/go/foo.pb.go", Additions: 5000, Deletions: 1000},
+		{Name: "web/packages/teleport/src/Foo.vitest.tsx", Additions: 200, Deletions: 0},
+		{Name: "Makefile", Additions: 3, Deletions: 1},
+	})
+
+	require.Equal(t, sizeGroup{
+		files:    7,
+		code:     sizeCounts{added: 953, deleted: 501},
+		tests:    sizeCounts{added: 801, deleted: 0},
+		excluded: sizeCounts{added: 5000, deleted: 1000},
+	}, report.total)
+	require.Equal(t, 852, report.total.counted())
+	require.Equal(t, large, report.label)
+	require.Equal(t, 1, report.excludedFiles)
+	require.Equal(t, headerLines, report.ignoredLines)
+	require.Equal(t, sizeGroup{
+		files: 3,
+		code:  sizeCounts{added: 900, deleted: 100},
+		tests: sizeCounts{added: 601, deleted: 0},
+	}, *report.dirs["lib/auth"])
+
+	lines := strings.Split(report.String(), "\n")
+	require.Equal(t, "PR size is size/lg: 852 counted lines in 7 files, admin approval is required at 1500.", lines[0])
+
+	var dirs []string
+	for _, line := range lines[5:] {
+		if strings.HasPrefix(line, "  |") {
+			dirs = append(dirs, strings.Fields(line)[1])
+		}
+	}
+	require.Equal(t,
+		[]string{"DIRECTORY", "lib/auth", "lib/services", "web/packages", "(root)", "api/gen", "TOTAL"}, dirs)
+	require.Equal(t, []string{"|", "TOTAL", "|", "7", "|", "+953", "-501", "|", "+801", "-0", "|", "+5000", "-1000", "|", "852", "|"},
+		strings.Fields(lines[len(lines)-2]))
+}
+
+func TestSizeReportCapsDirectories(t *testing.T) {
+	var files []github.PullRequestFile
+	for i := range sizeReportMaxDirs + 5 {
+		files = append(files, github.PullRequestFile{Name: fmt.Sprintf("lib/pkg%02d/a.go", i), Additions: 100 - i})
+	}
+
+	lines := strings.Split(measureSize(files).String(), "\n")
+	// Five summary lines, four borders, the header, the capped rows, the remainder row and the total.
+	require.Len(t, lines, 5+4+1+sizeReportMaxDirs+1+1)
+	require.Equal(t, []string{"|", "(5", "more)", "|", "5", "|", "+390", "-0", "|", "+0", "-0", "|", "+0", "-0", "|", "390", "|"},
+		strings.Fields(lines[len(lines)-4]))
+}
+
 // sizeTestFile creates a patch replacing the entire old contents with new contents.
 func sizeTestFile(old, new string) github.PullRequestFile {
 	file := github.PullRequestFile{

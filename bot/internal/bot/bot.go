@@ -250,27 +250,19 @@ const (
 )
 
 func prSize(files []github.PullRequestFile) sizeLabel {
-	var codeDelta, testDelta int
-	for _, f := range files {
-		if skipFileForSizeCheck(f.Name) {
-			continue
-		}
-		added, deleted := changesForSizeCheck(f)
-		if isTestFileForSizeCheck(f.Name) {
-			testDelta += added - deleted
-		} else {
-			codeDelta += added - deleted
-		}
-	}
-	// Tests are cheaper to review than the code they cover, and counting them in full discourages writing them.
-	// They still count for something so that a huge test-only change is not waved through.
-	delta := codeDelta + testDelta/testFileSizeDivisor
+	return measureSize(files).label
+}
+
+// xlargeSizeThreshold is the number of counted lines at which a PR requires admin approval.
+const xlargeSizeThreshold = 1500
+
+func sizeLabelFor(delta int) sizeLabel {
 	switch {
 	case delta < 100:
 		return small
 	case delta < 600:
 		return medium
-	case delta < 1500:
+	case delta < xlargeSizeThreshold:
 		return large
 	default:
 		return xlarge
