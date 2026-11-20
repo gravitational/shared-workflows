@@ -63,7 +63,9 @@ func (b *Bot) labels(ctx context.Context, files []github.PullRequestFile) ([]str
 
 	// don't add a size label to cloud deploy PRs since they are always xl
 	if !b.c.Environment.IsCloudDeployBranch() {
-		labels = append(labels, string(prSize(files)))
+		size := measureSize(files)
+		log.Printf("Label: %v", size)
+		labels = append(labels, string(size.label))
 	}
 
 	c := classifyChanges(b.c, files)

@@ -77,6 +77,7 @@ func (b *Bot) Check(ctx context.Context) error {
 
 	changes := classifyChanges(b.c, files)
 	log.Printf("Check: required approvals: %d", changes.ApproverCount)
+	log.Printf("Check: %v", measureSize(files))
 
 	if changes.Large {
 		comment := fmt.Sprintf("@%v - this PR will require admin approval to merge due to its size. "+
