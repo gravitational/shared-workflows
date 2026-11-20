@@ -484,6 +484,147 @@ func TestGetCodeReviewerSets(t *testing.T) {
 	}
 }
 
+func TestRFDReviewers(t *testing.T) {
+	r, err := New(&Config{
+		Rand: &randStatic{},
+		CoreReviewers: map[string]Reviewer{
+			"core-owner":     {Owner: true, PreferredReviewerFor: []string{"rfd/"}},
+			"core-peer":      {},
+			"both":           {Owner: true},
+			"shared":         {},
+			"core-preferred": {Owner: true, PreferredOnly: true, PreferredReviewerFor: []string{"rfd/"}},
+		},
+		CloudReviewers: map[string]Reviewer{
+			"cloud-owner":     {Owner: true},
+			"cloud-peer":      {},
+			"both":            {},
+			"shared":          {Owner: true},
+			"cloud-preferred": {PreferredOnly: true, PreferredReviewerFor: []string{"rfd/"}},
+		},
+		CodeReviewersOmit: map[string]bool{},
+		DocsReviewers:     map[string]Reviewer{},
+		DocsReviewersOmit: map[string]bool{},
+		Admins:            []string{"admin-a", "admin-b"},
+	})
+	require.NoError(t, err)
+	changes := env.Changes{Code: true, ApproverCount: env.DefaultApproverCount}
+
+	t.Run("pool by author", func(t *testing.T) {
+		for _, test := range []struct {
+			name   string
+			author string
+			owners []string
+			peers  []string
+		}{
+			{
+				name: "core author", author: "core-peer",
+				owners: []string{"core-owner", "both"}, peers: []string{"shared"},
+			},
+			{
+				name: "preferred only core author", author: "core-preferred",
+				owners: []string{"core-owner", "both"}, peers: []string{"core-peer", "shared"},
+			},
+			{
+				name: "cloud author", author: "cloud-peer",
+				owners: []string{"cloud-owner", "shared"}, peers: []string{"both"},
+			},
+			{
+				name: "author in both pools", author: "both",
+				owners: []string{"core-owner", "cloud-owner", "shared"}, peers: []string{"core-peer", "cloud-peer"},
+			},
+			{
+				name: "author in neither pool", author: "other",
+				owners: []string{"admin-a"}, peers: []string{"admin-b"},
+			},
+		} {
+			t.Run(test.name, func(t *testing.T) {
+				e := &env.Environment{Repository: env.RFDRepo, Author: test.author}
+				owners, peers := r.getCodeReviewerSets(e)
+				require.ElementsMatch(t, test.owners, owners)
+				require.ElementsMatch(t, test.peers, peers)
+			})
+		}
+	})
+
+	t.Run("ignores preferred reviewer settings", func(t *testing.T) {
+		// core-owner has a matching path preference, but the RFD pool ignores it.
+		// core-preferred has a matching path preference and is excluded entirely.
+		require.ElementsMatch(t, []string{"both", "shared"}, r.Get(
+			&env.Environment{Repository: env.RFDRepo, Author: "core-peer"}, changes,
+			[]github.PullRequestFile{{Name: "rfd/0402-example.md"}}))
+	})
+
+	t.Run("assignment for unlisted author", func(t *testing.T) {
+		require.ElementsMatch(t, []string{"admin-a", "admin-b"}, r.Get(
+			&env.Environment{Repository: env.RFDRepo, Author: "other"}, changes, nil))
+	})
+
+	t.Run("assignment with empty RFD reviewer group", func(t *testing.T) {
+		smallPool, err := New(&Config{
+			CoreReviewers: map[string]Reviewer{
+				"author":          {},
+				"preferred-owner": {Owner: true, PreferredOnly: true},
+				"peer":            {},
+			},
+			CloudReviewers:    map[string]Reviewer{},
+			CodeReviewersOmit: map[string]bool{},
+			DocsReviewers:     map[string]Reviewer{},
+			DocsReviewersOmit: map[string]bool{},
+			Admins:            []string{"admin-a", "admin-b"},
+		})
+		require.NoError(t, err)
+		require.ElementsMatch(t, []string{"admin-a", "admin-b"}, smallPool.Get(
+			&env.Environment{Repository: env.RFDRepo, Author: "author"}, changes, nil))
+	})
+
+	t.Run("approvals by author", func(t *testing.T) {
+		for _, test := range []struct {
+			name    string
+			author  string
+			reviews []github.Review
+			wantErr bool
+		}{
+			{
+				name: "cloud reviewers approve cloud author", author: "cloud-peer",
+				reviews: []github.Review{{Author: "cloud-owner", State: Approved}, {Author: "shared", State: Approved}},
+			},
+			{
+				name: "core reviewers cannot approve cloud author", author: "cloud-peer", wantErr: true,
+				reviews: []github.Review{{Author: "core-owner", State: Approved}, {Author: "core-peer", State: Approved}},
+			},
+			{
+				name: "preferred only reviewer cannot approve cloud author", author: "cloud-peer", wantErr: true,
+				reviews: []github.Review{{Author: "cloud-owner", State: Approved}, {Author: "cloud-preferred", State: Approved}},
+			},
+			{
+				name: "either pool can approve dual member", author: "both",
+				reviews: []github.Review{{Author: "core-owner", State: Approved}, {Author: "core-peer", State: Approved}},
+			},
+			{
+				name: "cloud reviewers can approve dual member", author: "both",
+				reviews: []github.Review{{Author: "cloud-owner", State: Approved}, {Author: "cloud-peer", State: Approved}},
+			},
+			{
+				name: "other author requires two admins", author: "other", wantErr: true,
+				reviews: []github.Review{{Author: "admin-a", State: Approved}},
+			},
+			{
+				name: "two admins approve other author", author: "other",
+				reviews: []github.Review{{Author: "admin-a", State: Approved}, {Author: "admin-b", State: Approved}},
+			},
+		} {
+			t.Run(test.name, func(t *testing.T) {
+				err := r.CheckInternal(&env.Environment{Repository: env.RFDRepo, Author: test.author}, test.reviews, changes, nil)
+				if test.wantErr {
+					require.Error(t, err)
+				} else {
+					require.NoError(t, err)
+				}
+			})
+		}
+	})
+}
+
 // TestOmitReviewersCanApprove checks the scenario in which non-admin approver is on the `Config.CodeReviewersOmit` list.
 // In this case we won't be asking for their review (checked elsewhere), but we do want to honor their review is present (this test).
 func TestOmitReviewersCanApprove(t *testing.T) {

@@ -30,6 +30,7 @@ const (
 	AccessGraphRepo = "access-graph"
 	CloudRepo       = "cloud"
 	CoreRepo        = "core"
+	RFDRepo         = "rfd"
 
 	// Teams
 	CoreTeam     = "Core"
