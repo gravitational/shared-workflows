@@ -105,19 +105,30 @@ runs:
         }
 
         # Create install dir
-        maybe_sudo mkdir -p -m 755 "${INSTALL_DIR}"
+        # On Windows, inputs like `${{ runner.temp }}/foo` arrive as mixed
+        # Windows paths (e.g. `C:\a\_temp/foo`). Normalize to a POSIX path for
+        # use with the Git Bash tools below. GITHUB_PATH still gets the original
+        # value, since the runner expects a native path there.
+        INSTALL_DIR_SH="${INSTALL_DIR}"
+        if [[ "${RUNNER_OS}" == "Windows" ]]; then
+          INSTALL_DIR_SH="$(cygpath -u "${INSTALL_DIR}")"
+        fi
+
+        maybe_sudo mkdir -p -m 755 "${INSTALL_DIR_SH}"
 
         BIN_NAME="${TOOL_NAME}"
         [[ "${RUNNER_OS}" == "Windows" ]] && BIN_NAME="${BIN_NAME}.exe"
 
         # Extract binary
-        # The tar `-C` flag may not be used with an absolute path, because tar interprets
-        # `:` in the path name as a network address. Windows uses this to separate
-        # drive/partition letter from file path, so this does not work on Windows. The
-        # easiest workaround is just `pushd`/`popd`.
+        # tar treats `:` in path arguments as a remote host separator, which breaks
+        # on Windows drive letters (both for the archive and for `-C`). Avoid
+        # passing any absolute path to tar: extract in the download dir using
+        # relative paths, then move the binary into place.
         pushd "${DOWNLOAD_DIR}" >/dev/null
-        maybe_sudo tar -xzf "$(basename "${ARCHIVE_PATH}")" -C "${INSTALL_DIR}" "${BIN_NAME}"
+        tar -xzf "$(basename "${ARCHIVE_PATH}")" "${BIN_NAME}"
         popd >/dev/null || (echo "failed to leave the download path" >&2; exit 1)
+        chmod 755 "${DOWNLOAD_DIR}/${BIN_NAME}"
+        maybe_sudo mv -f "${DOWNLOAD_DIR}/${BIN_NAME}" "${INSTALL_DIR_SH}/${BIN_NAME}"
 
         # Add to PATH
         echo "${INSTALL_DIR}" >> "${GITHUB_PATH}"
