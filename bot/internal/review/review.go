@@ -287,16 +287,9 @@ func (r *Assignments) rfdRepoReviewers(e *env.Environment) map[string]Reviewer {
 	reviewers := make(map[string]Reviewer)
 	switch {
 	case core && cloud:
-		switch e.RFDReviewTeam {
-		case env.CoreTeam:
-			addRFDReviewers(reviewers, r.c.CoreReviewers)
-		case env.CloudTeam:
-			addRFDReviewers(reviewers, r.c.CloudReviewers)
-		default:
-			// A reviewer who is an owner in either pool remains an owner.
-			addRFDReviewers(reviewers, r.c.CoreReviewers)
-			addRFDReviewers(reviewers, r.c.CloudReviewers)
-		}
+		// A reviewer who is an owner in either pool remains an owner.
+		addRFDReviewers(reviewers, r.c.CoreReviewers)
+		addRFDReviewers(reviewers, r.c.CloudReviewers)
 	case core:
 		addRFDReviewers(reviewers, r.c.CoreReviewers)
 	case cloud:
@@ -311,26 +304,6 @@ func (r *Assignments) isRFDReviewer(author string) bool {
 	_, core := r.c.CoreReviewers[author]
 	_, cloud := r.c.CloudReviewers[author]
 	return core || cloud
-}
-
-// ValidateRFDReviewTeam rejects labels that select a team the author is not in.
-func (r *Assignments) ValidateRFDReviewTeam(e *env.Environment) error {
-	if e.Repository != env.RFDRepo || e.RFDReviewTeam == "" {
-		return nil
-	}
-	var reviewers map[string]Reviewer
-	switch e.RFDReviewTeam {
-	case env.CoreTeam:
-		reviewers = r.c.CoreReviewers
-	case env.CloudTeam:
-		reviewers = r.c.CloudReviewers
-	default:
-		return trace.BadParameter("unknown RFD review team %q", e.RFDReviewTeam)
-	}
-	if _, ok := reviewers[e.Author]; !ok {
-		return trace.BadParameter("RFD author %q is not in the %s reviewer pool", e.Author, e.RFDReviewTeam)
-	}
-	return nil
 }
 
 // addRFDReviewers ignores preferences tied to paths in the core and cloud repos.

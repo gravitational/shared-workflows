@@ -33,9 +33,6 @@ import (
 // set of reviewers determined by: content of the PR, if the author is internal
 // or external, and team they are on.
 func (b *Bot) Assign(ctx context.Context) error {
-	if err := b.selectRFDReviewTeam(ctx); err != nil {
-		return trace.Wrap(err)
-	}
 	files, err := b.c.GitHub.ListFiles(ctx,
 		b.c.Environment.Organization,
 		b.c.Environment.Repository,

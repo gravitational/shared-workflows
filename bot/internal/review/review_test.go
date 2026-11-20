@@ -546,35 +546,6 @@ func TestRFDReviewers(t *testing.T) {
 		}
 	})
 
-	t.Run("pool by label", func(t *testing.T) {
-		for _, test := range []struct {
-			team   string
-			owners []string
-			peers  []string
-		}{
-			{team: env.CoreTeam, owners: []string{"core-owner"}, peers: []string{"core-peer", "shared"}},
-			{team: env.CloudTeam, owners: []string{"cloud-owner", "shared"}, peers: []string{"cloud-peer"}},
-		} {
-			t.Run(test.team, func(t *testing.T) {
-				e := &env.Environment{Repository: env.RFDRepo, Author: "both", RFDReviewTeam: test.team}
-				require.NoError(t, r.ValidateRFDReviewTeam(e))
-				owners, peers := r.getCodeReviewerSets(e)
-				require.ElementsMatch(t, test.owners, owners)
-				require.ElementsMatch(t, test.peers, peers)
-			})
-		}
-	})
-
-	t.Run("selected team approvals", func(t *testing.T) {
-		selected := &env.Environment{Repository: env.RFDRepo, Author: "both", RFDReviewTeam: env.CloudTeam}
-		require.Error(t, r.CheckInternal(selected, []github.Review{
-			{Author: "core-owner", State: Approved}, {Author: "core-peer", State: Approved},
-		}, changes, nil))
-		require.NoError(t, r.CheckInternal(selected, []github.Review{
-			{Author: "cloud-owner", State: Approved}, {Author: "cloud-peer", State: Approved},
-		}, changes, nil))
-	})
-
 	t.Run("ignores preferred reviewer settings", func(t *testing.T) {
 		// core-owner has a matching path preference, but the RFD pool ignores it.
 		// core-preferred has a matching path preference and is excluded entirely.
@@ -628,6 +599,10 @@ func TestRFDReviewers(t *testing.T) {
 			{
 				name: "either pool can approve dual member", author: "both",
 				reviews: []github.Review{{Author: "core-owner", State: Approved}, {Author: "core-peer", State: Approved}},
+			},
+			{
+				name: "cloud reviewers can approve dual member", author: "both",
+				reviews: []github.Review{{Author: "cloud-owner", State: Approved}, {Author: "cloud-peer", State: Approved}},
 			},
 			{
 				name: "other author requires two admins", author: "other", wantErr: true,
