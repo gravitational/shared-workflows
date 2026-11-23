@@ -186,6 +186,27 @@ func TestValidateNewRFD(t *testing.T) {
 			},
 			errorMessage: `Found branch named "rfd/1-test-123", expected branch to be named "rfd/0001-test-123"`,
 		},
+		{
+			desc:   "sub-rfd",
+			branch: "rfd/0229j-scoped-access-requests",
+			files: []github.PullRequestFile{
+				{
+					Name:   "rfd/0229j-scoped-access-requests.md",
+					Status: github.StatusAdded,
+				},
+			},
+		},
+		{
+			desc:   "unpadded-sub-rfd",
+			branch: "rfd/229j-scoped-access-requests",
+			files: []github.PullRequestFile{
+				{
+					Name:   "rfd/229j-scoped-access-requests.md",
+					Status: github.StatusAdded,
+				},
+			},
+			errorMessage: `Found branch named "rfd/229j-scoped-access-requests", expected branch to be named "rfd/0229j-scoped-access-requests"`,
+		},
 	}
 
 	for _, test := range tests {
