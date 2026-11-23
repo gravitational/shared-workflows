@@ -250,26 +250,38 @@ const (
 )
 
 func prSize(files []github.PullRequestFile) sizeLabel {
-	var additions, deletions int
-	for _, f := range files {
-		if skipFileForSizeCheck(f.Name) {
-			continue
-		}
-		added, deleted := changesForSizeCheck(f)
-		additions += added
-		deletions += deleted
-	}
-	delta := additions - deletions
+	return measureSize(files).label
+}
+
+// xlargeSizeThreshold is the number of counted lines at which a PR requires admin approval.
+const xlargeSizeThreshold = 1500
+
+func sizeLabelFor(delta int) sizeLabel {
 	switch {
 	case delta < 100:
 		return small
 	case delta < 600:
 		return medium
-	case delta < 1500:
+	case delta < xlargeSizeThreshold:
 		return large
 	default:
 		return xlarge
 	}
+}
+
+// testFileSizeDivisor is the discount applied to the net line count of test files when sizing a PR.
+const testFileSizeDivisor = 2
+
+// isTestFileForSizeCheck reports whether a file only holds tests or test fixtures. Test helpers in regular
+// source files are deliberately not matched, since they can carry real logic.
+func isTestFileForSizeCheck(name string) bool {
+	return strings.HasSuffix(name, "_test.go") ||
+		strings.HasSuffix(name, ".test.ts") ||
+		strings.HasSuffix(name, ".test.tsx") ||
+		strings.HasSuffix(name, ".vitest.ts") ||
+		strings.HasSuffix(name, ".vitest.tsx") ||
+		strings.HasPrefix(name, "testdata/") ||
+		strings.Contains(name, "/testdata/")
 }
 
 func skipFileForSizeCheck(name string) bool {
