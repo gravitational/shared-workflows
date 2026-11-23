@@ -56,7 +56,7 @@ func (b *Bot) ValidateNewRFD(ctx context.Context) error {
 		return trace.Wrap(err)
 	}
 
-	branchRegexp := regexp.MustCompile(`^rfd\/(\d+)-`)
+	branchRegexp := regexp.MustCompile(`^rfd\/(\d+)[a-z]?-`)
 	matches := branchRegexp.FindStringSubmatch(b.c.Environment.UnsafeHead)
 	isRFDBranch := len(matches) == 2
 
