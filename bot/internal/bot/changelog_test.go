@@ -37,6 +37,25 @@ func TestChangelog(t *testing.T) {
 		err := b.CheckChangelog(ctx)
 		require.True(t, err == nil)
 	})
+
+	t.Run("pass-enterprise-only", func(t *testing.T) {
+		b, ctx := buildTestingFixtures()
+		b.c.GitHub.(*fakeGithub).pull.UnsafeBody = "Changelog-enterprise: some change"
+
+		err := b.CheckChangelog(ctx)
+		require.NoError(t, err)
+	})
+
+	t.Run("fail-invalid-enterprise-beside-valid-public", func(t *testing.T) {
+		b, ctx := buildTestingFixtures()
+		b.c.GitHub.(*fakeGithub).pull.UnsafeBody = strings.Join([]string{
+			"changelog: good change",
+			"Changelog-enterprise: [bad](https://example.com)",
+		}, "\n")
+
+		err := b.CheckChangelog(ctx)
+		require.Error(t, err)
+	})
 }
 
 func TestGetChangelogEntry(t *testing.T) {
@@ -86,6 +105,11 @@ func TestGetChangelogEntry(t *testing.T) {
 		{
 			desc:     "empty-if-no-entry",
 			body:     "some typical PR entry",
+			expected: nil,
+		},
+		{
+			desc:     "public-extractor-ignores-enterprise-only",
+			body:     "Changelog-enterprise: some change",
 			expected: nil,
 		},
 	}

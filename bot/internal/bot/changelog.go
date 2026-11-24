@@ -29,9 +29,16 @@ import (
 
 const NoChangelogLabel string = "no-changelog"
 const ChangelogPrefix string = "changelog: "
-const ChangelogRegex string = "(?mi)^changelog: .*"
+const ChangelogEnterprisePrefix string = "changelog-enterprise: "
+
+// changelogLineRegex matches one public or enterprise changelog line.
+// Group 1 is the marker and group 2 is the entry text. The marker length
+// varies, so the entry is the capture rather than a fixed-length trim.
+const changelogLineRegex string = "(?mi)^(changelog(?:-enterprise)?): (.*)"
 
 // Checks if the PR contains a changelog entry in the PR body, or a "no-changelog" label.
+// A Changelog-enterprise line counts as an entry for this check. Backports still
+// copy only public changelog lines.
 //
 // A few tests are performed on the extracted changelog entry to ensure it conforms to a
 // common standard.
@@ -50,9 +57,9 @@ func (b *Bot) CheckChangelog(ctx context.Context) error {
 		return nil
 	}
 
-	changelogEntries := b.getChangelogEntries(pull.UnsafeBody)
+	changelogEntries := b.changelogEntries(pull.UnsafeBody, true)
 	if len(changelogEntries) == 0 {
-		return trace.BadParameter("Changelog entry not found in the PR body. Please add a %q label to the PR, or changelog lines starting with `%s` followed by the changelog entries for the PR.", NoChangelogLabel, ChangelogPrefix)
+		return trace.BadParameter("Changelog entry not found in the PR body. Please add a %q label to the PR, or changelog lines starting with `%s` or `%s` followed by the changelog entries for the PR.", NoChangelogLabel, ChangelogPrefix, ChangelogEnterprisePrefix)
 	}
 
 	for _, changelogEntry := range changelogEntries {
@@ -66,17 +73,27 @@ func (b *Bot) CheckChangelog(ctx context.Context) error {
 }
 
 func (b *Bot) getChangelogEntries(prBody string) []string {
-	changelogRegex := regexp.MustCompile(ChangelogRegex)
+	return b.changelogEntries(prBody, false)
+}
 
-	changelogMatches := changelogRegex.FindAllString(prBody, -1)
-	for i, changelogMatch := range changelogMatches {
-		changelogMatches[i] = changelogMatch[len(ChangelogPrefix):] // Case insensitive prefix removal
+func (b *Bot) changelogEntries(prBody string, includeEnterprise bool) []string {
+	changelogRegex := regexp.MustCompile(changelogLineRegex)
+	matches := changelogRegex.FindAllStringSubmatch(prBody, -1)
+	var entries []string
+	for _, match := range matches {
+		if len(match) < 3 {
+			continue
+		}
+		if !includeEnterprise && !strings.EqualFold(match[1], "changelog") {
+			continue
+		}
+		entries = append(entries, match[2])
 	}
-
-	if len(changelogMatches) > 0 {
-		log.Printf("Found changelog entries %v", changelogMatches)
+	if len(entries) == 0 {
+		return nil
 	}
-	return changelogMatches
+	log.Printf("Found changelog entries %v", entries)
+	return entries
 }
 
 // Checks for common issues with the changelog entry.
