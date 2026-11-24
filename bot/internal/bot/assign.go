@@ -23,6 +23,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gravitational/shared-workflows/bot/internal/env"
 	"github.com/gravitational/shared-workflows/bot/internal/github"
 	"github.com/gravitational/trace"
 )
@@ -44,6 +45,11 @@ func (b *Bot) Assign(ctx context.Context) error {
 	reviewers, err := b.getReviewers(ctx, files)
 	if err != nil {
 		return trace.Wrap(err)
+	}
+
+	if len(reviewers) == 0 {
+		log.Printf("Assign: enough reviewers already requested.")
+		return nil
 	}
 
 	log.Printf("Assign: Requesting reviews from: %v.", reviewers)
@@ -73,7 +79,21 @@ func (b *Bot) getReviewers(ctx context.Context, files []github.PullRequestFile) 
 	}
 
 	changes := classifyChanges(b.c, files)
-	return b.c.Review.Get(b.c.Environment, changes, files), nil
+	wanted := b.c.Review.Get(b.c.Environment, changes, files)
+
+	existing, err := b.c.GitHub.ListReviewers(ctx,
+		b.c.Environment.Organization,
+		b.c.Environment.Repository,
+		b.c.Environment.Number)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	required := changes.ApproverCount
+	if required <= 0 {
+		required = env.DefaultApproverCount
+	}
+	return limitAdditionalReviewers(wanted, existing, b.c.Environment.Author, required), nil
 }
 
 func (b *Bot) backportReviewers(ctx context.Context) ([]string, error) {
@@ -168,6 +188,41 @@ func (b *Bot) findOriginalPR(ctx context.Context, organization string, repositor
 
 	log.Printf("Assign: Found original PR #%v.", original)
 	return n, nil
+}
+
+// limitAdditionalReviewers trims a freshly chosen reviewer list so manually
+// requested reviewers count toward the required number. With nobody requested
+// yet, the full list is kept (preferred reviewers included). Otherwise only
+// enough new reviewers are added to reach required.
+func limitAdditionalReviewers(wanted, existing []string, author string, required int) []string {
+	have := map[string]struct{}{}
+	for _, name := range existing {
+		if name == "" || name == author || strings.Contains(name, "[bot]") {
+			continue
+		}
+		have[name] = struct{}{}
+	}
+	if len(have) == 0 {
+		return wanted
+	}
+	if len(have) >= required {
+		return nil
+	}
+	need := required - len(have)
+	var fresh []string
+	for _, name := range wanted {
+		if name == "" || name == author {
+			continue
+		}
+		if _, ok := have[name]; ok {
+			continue
+		}
+		fresh = append(fresh, name)
+		if len(fresh) == need {
+			break
+		}
+	}
+	return fresh
 }
 
 func dedup(author string, reviewers []string) []string {
